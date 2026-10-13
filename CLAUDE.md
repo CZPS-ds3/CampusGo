@@ -5,14 +5,18 @@
 
 ## Project Overview
 
-**Campus & City Quest** (Project No. DHBW-INT-2027-01) is a gamified, mobile-responsive web application that helps incoming international students at DHBW Heilbronn explore the campus and the city (Pokémon GO style).
+**Campus & City Quest** (Project No. DHBW-INT-2027-01) is a gamified, mobile-responsive web application that helps incoming international students at DHBW Heilbronn explore the campus (Pokémon GO style).
 
 Key features:
-- Checkpoint collection using a three-tier interaction hierarchy: DHBW Student ID card UID readers (primary), NFC tags (secondary), QR codes (universal fallback).
-- Interactive map (Google Maps API) and a searchable item database for supermarkets (Rewe, Lidl, etc.) and everyday essentials.
-- Live leaderboards: solo, duo, team, and nationality/country.
+- **Live-location verification** (browser Geolocation API): a student must be inside a checkpoint's radius to unlock its info page and quiz. No NFC, card readers or extra hardware.
+- Flow per visit: arrival verified -> read-first info page (no time limit) -> student presses Start -> 5 questions with a server-side 5-minute timer -> pass at >= 80% (4 of 5).
+- The student must stay at the place: no accepted in-radius location sample for > 30 s cancels the attempt (retry after a 2-minute cooldown). Samples need accuracy <= 50 m and plausible movement.
+- Points: 10 per correct answer, +10 for 5/5, speed bonus `remaining_seconds / 300 * 20`, attempt multiplier 1.0 / 0.6 / 0.3; only the first pass of a location scores.
+- Live leaderboards (individual, duo, nationality) are a Should item.
 
-Out of scope: native iOS/Android apps; modifying official university databases (student ID UIDs are mapped in our own independent database).
+Out of scope: city locators (Rewe, Lidl, clothing stores) and Google Maps; native iOS/Android apps; NFC tags / student-card readers; modifying official university databases.
+
+Full plan: `docs/project_handbook.md`. Setup: `requirements.md`.
 
 Team: Catalina, Yuri, Ryan, Yi Heng (Project Manager), Akil.
 
@@ -22,60 +26,62 @@ Team: Catalina, Yuri, Ryan, Yi Heng (Project Manager), Akil.
 ai-logs/<member>/     Per-member AI session logs (catalina, yuri, ryan, yi_heng, akil)
 .gitlab/              Issue and merge request templates
 CLAUDE.md             This file
+requirements.md       What to install (npm only)
+package.json          npm scripts and dev dependencies (ESLint, Prettier, Vitest)
 docs/git-workflow.md  Git branching strategy and workflow
 project_chater.md     Project charter
+docs/project_handbook.md  Full project plan
 ```
 
 Application code is added under `src/` and tests under `tests/` once development starts.
 
 ## Build / Run Commands
 
-The project uses Node.js (LTS, v20 or newer) and npm.
+The project uses Node.js (LTS, v20 or newer) and **npm only** (no yarn/pnpm). See `requirements.md`.
 
 | Task | Command |
 |------|---------|
 | Install dependencies | `npm ci` |
-| Start dev server | `npm run dev` |
-| Production build | `npm run build` |
-| Preview production build | `npm run preview` |
+| Lint (ESLint) | `npm run lint` |
+| Lint and auto-fix | `npm run lint:fix` |
+| Check formatting (Prettier) | `npm run format:check` |
+| Format | `npm run format` |
+| Run tests (Vitest) | `npm test` |
+| **All checks** | `npm run check` |
+
+Start/build scripts (`dev`, `build`) are added to `package.json` once the application stack is chosen (WBS 2.2); do not invent them before then.
 
 Rules:
-- Use `npm ci` (not `npm install`) for a clean install; only use `npm install <pkg>` when deliberately adding a dependency, and commit `package-lock.json`.
+- Use `npm ci` for a clean install; use `npm install <pkg>` only when deliberately adding a dependency, and commit `package-lock.json`.
 - Never commit `node_modules/`, build output, or `.env` files.
-- Secrets (e.g. the Google Maps API key) live in `.env` locally and are documented by name only in `.env.example`. Never hard-code or print them.
+- Secrets (database URL, session secret) live in `.env` locally and are documented by name only in `.env.example`. Never hard-code or print them.
+- `pylint` is a Python tool (pip, not npm). It is only relevant if Python code is ever added; see `requirements.md` section 8.
 
 ## Linting / Testing
 
-| Task | Command |
-|------|---------|
-| Lint | `npm run lint` |
-| Auto-fix lint issues | `npm run lint -- --fix` |
-| Format check | `npm run format:check` |
-| Format | `npm run format` |
-| Run all tests | `npm test` |
-| Run one test file | `npm test -- <path-to-test-file>` |
-
-Before proposing a commit or Merge Request, run `npm run lint` and `npm test` and make sure both pass. If a check fails, fix the cause; do not disable the rule or delete the test. State clearly in your reply if you were unable to run a check.
+Before proposing a commit or Merge Request, run `npm run check` (ESLint + Prettier + Vitest) and make sure it passes. If a check fails, fix the cause; do not disable the rule or delete the test. State clearly in your reply if you were unable to run a check. Add tests for new logic (especially the quiz rules: radius and accuracy checks, 30-s leave rule, 5-minute limit, 80% pass, scoring).
 
 ## Code Style Guidelines
 
-- **Language**: TypeScript with `strict` enabled. Avoid `any`; use `unknown` and narrow instead.
-- **Formatting**: Prettier defaults with 2-space indentation, single quotes, semicolons, and a trailing newline.
-- **Naming**: `camelCase` for variables and functions, `PascalCase` for types and components, `UPPER_SNAKE_CASE` for constants, `kebab-case` for file names.
+- **Language**: JavaScript (ES modules, `"type": "module"`). Use `const`/`let`, strict equality, no unused variables (enforced by ESLint).
+- **Formatting**: Prettier (see `.prettierrc`): 2-space indentation, single quotes, semicolons, trailing commas, 100 columns.
+- **Naming**: `camelCase` for variables and functions, `PascalCase` for classes and components, `UPPER_SNAKE_CASE` for constants, `kebab-case` for file names.
 - **Structure**: Small, single-purpose functions and components. Prefer composition over inheritance. No dead code or commented-out code.
 - **Comments**: Explain *why*, not *what*. Public functions get a short doc comment.
-- **Error handling**: Never swallow errors silently. Validate all external input (QR payloads, NFC/card UIDs, API responses, form data).
-- **Privacy**: Student ID card UIDs are personal data. Store them only in the project database, never log them, and never include real UIDs in tests, fixtures, or commits.
+- **Error handling**: Never swallow errors silently. Validate all external input (location samples, answers, API responses, form data).
+- **Privacy**: Location is personal data. Require consent, store only "inside radius yes/no + timestamp", never store or log raw coordinates, and never include real student locations in tests, fixtures, or commits. All timing and location decisions are made on the server, never trusted from the client.
 - **UI**: Mobile-first and responsive; interactive elements must be accessible (labels, contrast, keyboard focus).
 - **Dependencies**: Do not add a new dependency without stating why in the MR description.
 - **Scope**: Change only what the task requires. Do not refactor unrelated code.
 
 ## Git Workflow (summary — see docs/git-workflow.md)
 
-- Branch strategy: `main` <- `develop` <- `feature/*`, `bugfix/*`, `docs/*`, `refactor/*`.
-- Never push directly to `main` or `develop`. Always work on a branch created from `develop` and open a Merge Request into `develop`.
-- Branch names include your name: `type/[your_name]/[short-description]`, e.g. `feature/catalina/auth-page`.
-- Commit messages follow Conventional Commits, e.g. `feat: add login page`, `fix: resolve crash`.
+- Branch strategy: `main` <- `preproduction` <- `wip/[name]/feature/*` and `wip/[name]/bugfix/*` (`wip` is a folder prefix, not a branch).
+- **Nobody merges a feature branch into `main`.** Only the project lead merges `preproduction` into `main` at a milestone.
+- Never push directly to `main` or `preproduction`. Work on a branch created from `preproduction` and open a Merge Request into `preproduction`.
+- Branch names: `wip/[your_name]/feature/[task]` or `wip/[your_name]/bugfix/[feature]-[issue]`, e.g. `wip/catalina/feature/quiz-screen`. Names: catalina, ryan, yuri, akil, yi_heng.
+- Issue/MR titles start with a tag: `FEATURE:`, `BUG-FIX:` (e.g. `BUG-FIX: Fixing feature 1 issue of GPS jitter cancelling the quiz`), `DOCS:`, `REFACTOR:`.
+- Commit messages follow Conventional Commits, e.g. `feat: add quiz timer`, `fix: resolve crash`.
 - Never run destructive commands (`git push --force`, `git reset --hard`, deleting branches) unless the user explicitly asks.
 
 ## AI Interaction Logging Rule

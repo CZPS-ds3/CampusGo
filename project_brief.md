@@ -1,3 +1,5 @@
+> **Note (13.10.2026):** This is the original pitch. The agreed scope has since changed (campus-only; live-location verification instead of QR/NFC; read-first info pages and timed quizzes; city locators and Google Maps removed). The current plan is in `docs/project_handbook.md`.
+
 Project Pitch: "Campus & City Quest" (Working Title)
 An interactive, gamified onboarding web application for incoming international students at DHBW Heilbronn.
 

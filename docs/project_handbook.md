@@ -7,10 +7,10 @@
 | **Lecturer** | Prof. Dr. Aliona von der Trenck |
 | **Project lead** | Yi Heng Lim |
 | **Team** | Catalina, Yuri, Ryan, Yi Heng, Akil |
-| **Version / date** | 1.0 — 13.10.2026 (planning presentation); final planning submission 19.10.2026, 12:15 |
-| **Approach** | Hybrid: classic planning (WBS, schedule, budget) with agile delivery in sprints during implementation |
+| **Version / date** | 3.0 — 13.10.2026 (planning presentation); final planning submission 19.10.2026, 12:15 |
+| **Approach** | Hybrid: classic planning (WBS, schedule, budget) with iterative delivery in the implementation phase |
 
-> **Status of the numbers.** Effort, budget, rates and dates below are *planning assumptions*, not measured facts. Effort estimates are the team's starting baseline and must be confirmed in a Planning Poker session (see §5). Items marked **TBC** need confirmation by the lecturer/customer. They will be validated against tracked hours (§9).
+> **Status of the numbers.** Scope, work packages, schedule and the 145 h total come from the team's agreed plan. The quiz/scoring numbers (radius, accuracy, cooldown, point values), per-person hour splits, the budget and its rates, and role-to-name assignments are planning assumptions made when writing this handbook. Confirm them in a team session and replace them if the team disagrees. Items marked **TBC** need confirmation by the lecturer/client. Actual hours are tracked in GitLab (§9) and compared with these estimates.
 
 ---
 
@@ -18,198 +18,213 @@
 
 | | |
 |---|---|
-| **WHY — Purpose** | Incoming international students at DHBW Heilbronn struggle in their first weeks to find campus facilities (canteen, library, card top-up stations, water coolers) and city essentials (Rewe, Lidl, thrift stores, specific groceries). Static PDF guides are unengaging. |
-| **WHAT — Deliverables** | A mobile-responsive, gamified web app (Pokémon GO style): checkpoint collection via a three-tier interaction (DHBW ID card UID reader → NFC tag → QR code fallback), interactive map (Google Maps API), searchable item database, live leaderboards (solo, duo, team, nationality), plus documentation and handover. |
-| **WHO — Target audience** | Incoming international students (users); DHBW Heilbronn international office/customer (**TBC**); lecturer (assessment). |
-| **HOW WELL — Quality criteria** | See the measurable criteria in §1.3, e.g. ≥ 80% of pilot students complete all campus checkpoints; QR fallback works on 100% of tested devices; leaderboards update within 5 s. |
+| **WHY — Purpose** | Incoming international students struggle to learn the campus (canteen, library, card top-up area, check-up area, …) in their first weeks; static PDF guides are unengaging. A game-like onboarding speeds up adaptation, reduces culture shock and builds community. |
+| **WHAT — Deliverables** | A mobile-responsive web app with secure login and **live-location verification** at 5 campus checkpoints: arriving at a place unlocks its information page; a timed quiz (5-minute timer, ≥ 80% to pass) awards points; leaving the place cancels the attempt. Plus a content package (5 locations, info texts, 5–8 questions each), documentation and handover. |
+| **WHO — Target audience** | Incoming international students (users); DHBW international office (client); lecturer (assessment). |
+| **HOW WELL — Quality criteria** | ≥ 90% of incoming students complete all campus checkpoints within 30 days of semester start; place info ≤ 3 s after arrival is verified; first question ≤ 1.5 s after pressing Start; ≥ 50 simultaneous sessions; no points without being at the place. See §1.3. |
 
 ---
 
-## 1. Objectives to Scope (Must / Should / Could)
+## 1. Objectives to Scope (Must / Should / Could / Won't)
 
 ### 1.1 Prioritised scope (MoSCoW)
 
-| ID | Objective / feature | Priority | Rationale |
+| ID | Objective / feature | Measurable criterion | Priority |
 |---|---|---|---|
-| M1 | Mobile-responsive web app with user accounts (solo / duo / team) | **Must** | Basis for everything |
-| M2 | QR-code checkpoint check-in | **Must** | Foolproof fallback that works on every phone |
-| M3 | Campus checkpoint set (canteen, library, card top-up, check-up area, water coolers) with progress tracking | **Must** | Core of "Campus Facility Mastery" |
-| M4 | Interactive map (Google Maps API) with campus and city points | **Must** | Core of the navigation goal |
-| M5 | Solo leaderboard (live) | **Must** | Minimum gamification |
-| M6 | Independent project database; no write access to university systems | **Must** | Charter constraint, privacy |
-| S1 | NFC-tag check-in | Should | Better UX; limited browser support (see R3) |
-| S2 | DHBW student ID-card UID reader at ≥ 1 major spot | Should | Charter's primary tier, but depends on university permission and GDPR clearance (R2). **TBC with customer** |
-| S3 | Duo and team leaderboards | Should | Community building |
-| S4 | Nationality/country leaderboard | Should | Community building |
-| S5 | Searchable item database (rice, eggs, vegetables, protein bars …) with Rewe/Lidl locations | Should | City & grocery locator |
-| C1 | Badges / achievements | Could | Motivation |
-| C2 | Multi-language UI (EN/DE + others) | Could | Inclusiveness |
-| C3 | Offline-capable (PWA) | Could | Convenience |
-| C4 | Admin page to manage checkpoints | Could | Maintainability after handover |
-| C5 | Thrift-store layer on the map | Could | Nice to have |
-| W1 | Native iOS/Android apps | **Won't** | Charter non-objective |
-| W2 | Modifying official university student databases | **Won't** | Charter non-objective (UIDs mapped in our own DB) |
-| W3 | Live prices/stock data from supermarkets | **Won't** | Not available/controllable; static item locations only |
-| W4 | Payment or card top-up functionality | **Won't** | Only the *location* of top-up stations is shown |
+| M1 | **Core web app:** mobile-responsive web application with secure user authentication | Supports ≥ 50 simultaneous student sessions | **Must** |
+| M2 | **Location-verified checkpoints:** 5 geofenced campus checkpoints (canteen, library, card top-up area, check-up area, plus a 5th location — **TBC**) using the phone's live location | Arrival verified at all 5 locations in on-site test (radius calibrated per location; default 75 m, reported accuracy ≤ 50 m) | **Must** |
+| M3 | **Read-first info + quiz flow:** arrival unlocks the place information (no time limit); the student starts the quiz when ready | Info ≤ 3 s after arrival is verified (GPS fix time excluded); first question ≤ 1.5 s after pressing Start | **Must** |
+| M4 | **Anti-cheat rules:** quiz only possible at the location; attempt is cancelled when the student is away > 30 s; 5-minute quiz timer measured on the server; **pass = ≥ 80% correct** (≥ 4 of 5) | Automated tests (§1.3); no points ever awarded outside the radius | **Must** |
+| M5 | **Scoring:** points depend on first try, speed and number of correct answers (§1.4) | Scoring unit tests match the table in §1.4 | **Must** |
+| M6 | **Campus completion target** | ≥ 90% of incoming international students complete all campus checkpoints within 30 days of semester start (database logs) | **Must** |
+| M7 | **Privacy:** consent screen for location; only "inside radius yes/no + timestamp" is stored, no raw coordinates; independent project database | Privacy checklist passed; no coordinates in the database or logs | **Must** |
+| S1 | **Extended campus coverage:** more checkpoints (vending machines, department wings) | ≥ 10 locations | Should |
+| S2 | **Competitive leaderboards:** individual, duo and nationality rankings | Updated instantly after a passed quiz | Should |
+| C1 | Weekly automated challenge-streak reminders to student accounts | – | Could |
+| C2 | Sudden events: random time-based events giving more chances to compete | – | Could |
+| W1 | City-wide supermarket (Rewe, Lidl) and clothing-store locators | Explicitly removed from scope for now | **Won't** |
+| W2 | Native mobile apps (Apple App Store / Google Play) | Mobile-responsive web app only | **Won't** |
+| W3 | Modifying official university student databases | Not needed — no university data is used | **Won't** |
+| W4 | NFC tags, student-card UID reading and physical reader stations | Replaced by live-location verification | **Won't** |
 
-In a bottleneck we steer **Must before Should before Could**. If all Must goals are not fully met, the project has failed; Should goals may be partly met.
+When there is a bottleneck we steer **Must before Should before Could**. If a Must goal is not fully met, the project has failed; Should goals may be met partly.
 
 ### 1.2 Non-objectives (out of scope)
-W1–W4 above. They are communicated to the customer to avoid unspoken expectations.
+W1–W4. They are communicated to the client to avoid unspoken expectations. Because W1 removes the city features, the Google Maps integration from the original pitch is **not** part of this plan (a plain location check does not need a map service).
 
-### 1.3 Measurable objectives (SMART)
+### 1.3 How each Must objective is verified
 
-| Sub-objective | Measurable result | Check method | Priority |
-|---|---|---|---|
-| Campus facility mastery | ≥ 80% of pilot students complete all campus checkpoints within their first month of use (pilot size agreed with customer) | Checkpoint log in the database | Must |
-| Multi-tier interaction | QR check-in works on 100% of tested devices (≥ 6 devices, iOS and Android); NFC works on all NFC-capable Android devices tested; ID-card reader live at ≥ 1 spot **if permitted** | Test protocol (WP 4.3) | Must (QR) / Should (NFC, card) |
-| City & grocery locator | Map shows ≥ 10 city POIs; item search returns the correct store for ≥ 20 predefined grocery items | Acceptance test | Must (map) / Should (items) |
-| Gamification & leaderboards | Leaderboard updates within 5 s of a check-in; categories solo, duo, team, nationality available | Functional test | Must (solo) / Should (rest) |
-| Usability | ≥ 80% of pilot users rate the app "good" (2.0) or better | Feedback form | Should |
-| Process | Planned vs. actual hours deviation reported per milestone | Time-tracking report | Must |
+| Objective | Check method | When |
+|---|---|---|
+| M1 ≥ 50 sessions | Automated load test (50 virtual sessions) | WBS 5.1 |
+| M2 five checkpoints | On-site walk-through with real phones (Android Chrome, iOS Safari) at each location; radius calibrated and recorded | WBS 4.1 / 5.1 |
+| M3 timings | Timestamps measured over ≥ 20 attempts (arrival verified → info visible; Start → first question) | WBS 5.1 |
+| M4 anti-cheat | Automated tests: outside radius → rejected; accuracy > 50 m → not accepted; away 29 s → continues; away 31 s → cancelled; answer at 299 s accepted, at 301 s rejected; 3/5 fails, 4/5 passes; implausible jump → rejected | WBS 3.3 / 5.1 |
+| M5 scoring | Unit tests with the examples in §1.4 | WBS 3.1 |
+| M6 ≥ 90% within 30 days | Database logs. **The project (13.10.–16.11.) is shorter than 30 days**, so inside the project it is verified through the pilot: ≥ 9 of 10 volunteers pass all 5 checkpoints in the pilot window. The full 30-day measurement is a post-project target for the client. *(proposed — confirm with lecturer/client)* | WBS 5.2 and after handover |
+| M7 privacy | Checklist: consent screen, database inspected for coordinates, log inspection, privacy notice | WBS 5.1 |
 
-> The charter's original wording "100% device compatibility" was sharpened to "100% of tested devices", because Web NFC is not available in iOS browsers. This is exactly why the QR tier exists.
+### 1.4 Quiz, scoring and anti-cheat rules (proposed defaults — confirm)
 
-### 1.4 Completeness check: objectives ↔ work packages
+**Visit flow**
 
-| Objective | Covered by WPs |
+1. The student opens the app, accepts the location consent and goes to a checkpoint.
+2. Arrival is verified (live location inside the radius with sufficient accuracy) → the **place information** unlocks. There is **no time limit** for reading.
+3. The student presses **Start quiz** when ready → **5 questions** are drawn at random from the location's question bank (5–8 questions) → a **5-minute timer** starts (server clock).
+4. **Pass = at least 80% correct** (4 of 5). The result screen shows pass/fail and points.
+5. After a fail or cancellation the student may retry after a **2-minute cooldown**, while still at the place.
+
+**Staying at the place (strict)**
+- While the page is open the app sends a location heartbeat about every 10 s (browser Geolocation API, high accuracy; Screen Wake Lock keeps the screen on).
+- The server accepts a sample only if it is inside the radius, the reported accuracy is ≤ 50 m, the timestamp is fresh and the movement since the last sample is physically plausible.
+- No accepted sample for **more than 30 s** (or location permission revoked, or the page is backgrounded) → the attempt is **cancelled**. A visible warning counts down ("Return to the place within 30 s").
+- Answers are rejected unless the latest accepted sample is inside the radius and the attempt is within the 5-minute window.
+
+**Points per passed attempt**
+
+| Component | Rule |
 |---|---|
-| M1 accounts, responsive UI | 2.3, 3.2, 3.9, 3.10 |
-| M2 / S1 / S2 check-in tiers | 2.4, 3.3, 3.4, 3.5 |
-| M3 checkpoints | 2.5, 3.3 |
-| M4 map | 3.6 |
-| M5 / S3 / S4 leaderboards | 2.2, 3.8 |
-| S5 item search | 3.7 |
-| M6 privacy / own DB | 2.4, 3.2, 3.5 |
-| Quality and acceptance | 4.1–4.4, 5.3 |
-| Process (time tracking, reporting) | 1.2, 1.4 |
+| Correct answers | 10 points per correct answer (max 50) |
+| Perfect score | +10 if 5/5 correct |
+| Speed bonus | `remaining_seconds / 300 × 20`, i.e. 0–20 points |
+| Attempt multiplier | 1st attempt × 1.0 · 2nd attempt × 0.6 · 3rd and later × 0.3 |
+| Failed / cancelled attempt | 0 points |
+| Repeat of an already passed location | No points (practice only) |
 
-Every objective is covered by at least one work package.
+Examples: 5/5 correct, 60 s used (240 s left), first attempt → (50 + 10 + 16) × 1.0 = **76**. 4/5 correct, 200 s left, second attempt → (40 + 0 + 13) × 0.6 = **32** (rounded). Maximum for one location ≈ 80. Leaderboard tie-break: earlier completion time.
+
+**Limits we accept and document:** a web app cannot reliably detect GPS spoofing; indoor GPS (library, canteen) can be inaccurate; some phones pause location when the browser is in the background. Mitigations are in §7.
+
+### 1.5 Goal ↔ work-package completeness check
+
+| Objective | Covered by |
+|---|---|
+| M1 web app, authentication, 50 sessions | 2.1, 2.2, 3.1, 3.2, 5.1 |
+| M2 geofenced checkpoints | 3.3, 4.1, 5.2 |
+| M3 info + quiz flow | 2.1, 3.1, 3.2, 4.2 |
+| M4 anti-cheat rules | 3.1, 3.3, 5.1 |
+| M5 scoring | 3.1, 5.1 |
+| M6 completion target | 4.1, 4.2, 5.2 |
+| M7 privacy | 2.2, 3.1, 3.3, 5.1 |
+| S1 more checkpoints | 4.1 (only if time allows) |
+| S2 leaderboards | 2.1, 3.1, 3.2 |
 
 ---
 
-## 2. Work Packages (WBS)
+## 2. Work Packages and WBS
 
-Structure is **mixed**: level 1 follows project phases, level 2 follows deliverables. Project management is the first branch. Titles start with a verb; every package has one owner and is 3–40 h.
+### 2.1 The seven work packages
+
+| WP | Title | Description | Hours |
+|---|---|---|---|
+| WP1 | Project management & governance | Project setup, risk tracking, milestone scheduling, time tracking in GitLab | 12 |
+| WP2 | UI/UX & system architecture design | Wireframes (info page, quiz, timer, leave warning, results), user flows, database schema | 16 |
+| WP3 | Backend & database development | Server logic, user accounts, visit/attempt state machine, quiz and scoring rules, point tracking, API endpoints, leaderboards | 30 |
+| WP4 | Location verification & anti-cheat | Browser geolocation (`watchPosition`), heartbeat, accuracy and plausibility checks, 30-s leave rule, consent screen, per-location radius support | 25 |
+| WP5 | Frontend web development | Mobile-responsive UI, login, info page, quiz screen with timer, leave-warning countdown, result screen, live leaderboards | 35 |
+| WP6 | Campus content & trivia population | Catalogue 5 campus locations (coordinates, radius), read-first info text per location, 5–8 trivia questions per location | 15 |
+| WP7 | Quality assurance & pilot testing | End-to-end integration tests on real phones, bug fixes, performance monitoring, pilot with 10 volunteers | 12 |
+| | **Total** | | **145** |
+
+### 2.2 WBS (hierarchical, project management first)
 
 ```
 0 Campus & City Quest
-├─ 1 Project management
-├─ 2 Concept & design
-├─ 3 Implementation
-├─ 4 Testing & quality assurance
-└─ 5 Deployment & handover
+├─ 1.0 Project management                 (WP1)
+│   ├─ 1.1 Set up and plan the project
+│   ├─ 1.2 Track time and review progress
+│   └─ 1.3 Maintain documentation and GitLab wiki
+├─ 2.0 Concept & design                   (WP2)
+│   ├─ 2.1 Design UI/UX wireframes and user journey
+│   └─ 2.2 Model the database and architecture
+├─ 3.0 System development
+│   ├─ 3.1 Build backend server and REST API                    (WP3)
+│   ├─ 3.2 Build frontend mobile web app                        (WP5)
+│   └─ 3.3 Build live-location verification and anti-cheat      (WP4)
+├─ 4.0 Campus content                     (WP6)
+│   ├─ 4.1 Map and calibrate campus locations
+│   └─ 4.2 Write info texts and the trivia question bank
+└─ 5.0 Testing & deployment               (WP7)
+    ├─ 5.1 Integrate the system and run code reviews
+    └─ 5.2 Run pilot trial and hand over
 ```
 
-| WBS | Work package | Deliverable | Owner | Predecessors |
-|---|---|---|---|---|
-| 1.1 | Set up project organisation and tools | GitLab project, boards, labels, wiki, branch rules | Yi Heng | – |
-| 1.2 | Create and maintain project handbook | This handbook (versioned) | Yi Heng | 1.1 |
-| 1.3 | Hold weekly meetings and write minutes | Minutes in wiki (rotating) | All (rotating) | 1.1 |
-| 1.4 | Track time and report status | Time report, status slides for lecturer | Yi Heng | 1.1 |
-| 1.5 | Prepare final presentation | Slides incl. target cross, "Use of AI Tools" | Catalina | 4.2 |
-| 1.6 | Compile final report | Report PDF incl. traceability, time analysis, AI section | Akil | 4.3 |
-| 1.7 | Close project and hand over | Closing review, archived docs | Yi Heng | 5.3 |
-| 1.8 | Handle risk contingencies | Buffer work from risk list (pool) | All (pool) | – |
-| 2.1 | Collect and prioritise requirements | Requirements list with acceptance criteria (customer-approved) | Catalina | 1.1 |
-| 2.2 | Design game mechanics and scoring | Rules for points, teams, leaderboards | Catalina | 2.1 |
-| 2.3 | Design UX wireframes | Clickable wireframes (mobile first) | Catalina | 2.1 |
-| 2.4 | Design architecture and data model | Architecture sketch, ER model, privacy concept | Ryan | 2.1 |
-| 2.5 | Define checkpoint and POI list | Campus + city checkpoint list with coordinates | Akil | 2.1 |
-| 3.1 | Set up repository, CI and dev environment | Repo baseline, lint/test pipeline | Yuri | 1.1 |
-| 3.2 | Implement accounts and team handling | Sign-up/login, solo/duo/team profiles | Ryan | 2.4, 3.1 |
-| 3.3 | Implement QR check-in | QR scan flow, checkpoint validation | Yuri | 2.5, 3.2 |
-| 3.4 | Implement NFC-tag check-in | NFC read flow with QR fallback | Yuri | 3.3 |
-| 3.5 | Implement ID-card UID check-in | Reader integration, UID→user mapping in own DB | Ryan | 2.4, 3.2 |
-| 3.6 | Integrate Google Maps | Map with checkpoints and POIs | Akil | 2.5, 3.1 |
-| 3.7 | Build item database and search | Item/store data, search UI | Akil | 2.5, 3.2 |
-| 3.8 | Implement leaderboards | Solo/duo/team/nationality rankings | Ryan | 2.2, 3.3 |
-| 3.9 | Build responsive UI — navigation, profile, map screens | Frontend part 1 | Catalina | 2.3, 3.1 |
-| 3.10 | Build responsive UI — check-in, leaderboard, search screens | Frontend part 2 | Yuri | 2.3, 3.1 |
-| 4.1 | Write test plan and acceptance criteria | Test plan, device list | Yi Heng | 2.1 |
-| 4.2 | Write and run automated tests | Unit/integration tests | Ryan | 3.2 |
-| 4.3 | Run field test with pilot students | Test protocol, feedback forms | Yi Heng | 3.3, 3.6, 3.8 |
-| 4.4 | Fix defects found in testing | Fixed issues, regression run | Yuri | 4.2, 4.3 |
-| 5.1 | Deploy application | Running web app, backup routine | Yuri | 4.4 |
-| 5.2 | Write user guide and technical documentation | User guide, README, setup docs | Akil | 3.x |
-| 5.3 | Obtain customer acceptance | Signed acceptance / minutes | Yi Heng | 5.1, 5.2 |
+### 2.3 Work-package list (WBS code, owner, dependencies)
 
-WBS codes are unique. Each package is tracked as a GitLab issue labelled with its WBS code.
+Titles start with a verb; every package has one owner and is between 3 and 40 h.
 
-**Work-package template** (used as GitLab issue template): title (with verb), owner, WBS code, predecessors/successors, objective and inputs, activities and deliverables, start/duration/end, effort and resources, status (identified → planned → assigned → open → in progress → done → accepted).
+| WBS | Work package | Deliverable | Owner | Predecessors | Hours |
+|---|---|---|---|---|---|
+| 1.1 | Set up and plan the project | GitLab project, boards, labels, wiki, branch rules, handbook | Yi Heng | – | 5 |
+| 1.2 | Track time and review progress | Weekly time report, status slides for lecturer | Yi Heng | 1.1 | 4 |
+| 1.3 | Maintain documentation and wiki | Minutes, decisions, architecture notes in wiki | Akil | 1.1 | 3 |
+| 2.1 | Design UI/UX wireframes and user journey | Clickable mobile wireframes, user-flow map | Catalina | 1.1 | 10 |
+| 2.2 | Model the database and architecture | ER model, API outline, privacy concept, location-sample protocol | Ryan | 1.1 | 6 |
+| 3.1 | Build backend server and REST API | Auth, accounts, visit/attempt state machine, quiz rules (80% pass, 5-min timer), scoring, leaderboards | Ryan | 2.2 | 30 |
+| 3.2 | Build frontend mobile web app | Login, info page, quiz screen, timer, leave warning, results, leaderboards | Catalina | 2.1, 3.1 (API contract) | 35 |
+| 3.3 | Build live-location verification and anti-cheat | Geolocation client, heartbeat, server-side radius/accuracy/plausibility checks, 30-s leave rule, consent screen | Yuri | 2.2 | 25 |
+| 4.1 | Map and calibrate campus locations | 5 locations with coordinates and tested radius (on-site, real phones) | Akil | 1.1 | 5 |
+| 4.2 | Write info texts and question bank | 5 info texts, 5–8 reviewed questions per location | Akil (with Yi Heng) | 4.1 | 10 |
+| 5.1 | Integrate system and run code reviews | Integrated system on pre-production, test results, review log | Akil | 3.1, 3.2, 3.3, 4.2 | 7 |
+| 5.2 | Run pilot trial and hand over | Pilot report (10 volunteers), handover package | Yi Heng | 5.1 | 5 |
+| | **Total** | | | | **145** |
+
+**Work-package template** (GitLab issue): title with verb and tag (`FEATURE:`/`BUG-FIX:`/…), owner, WBS code, predecessors, objective and inputs, activities and deliverables, start/duration/end, estimate and spent time, status (identified → planned → assigned → in progress → done → accepted).
 
 ---
 
 ## 3. Schedule (Dependencies and Milestones)
 
-### 3.1 Phases and milestones
+### 3.1 Dates and milestones
+
+**Project start: 13.10.2026 · Project end: 16.11.2026**
 
 | # | Milestone | Date | Result (checkable) |
 |---|---|---|---|
-| M1 | Planning presentation | 13.10.2026 | Presentation held (13:15–16:30 slot) |
-| M2 | Planning submitted, tools in use | 19.10.2026, 12:15 | Handbook/report submitted; GitLab tools selected and in use |
-| M3 | Requirements and design approved | 30.10.2026 | Requirements, wireframes and architecture reviewed and accepted by customer |
-| M4 | MVP: all Must features working | 13.11.2026 | M1–M6 demonstrable on a test server |
-| M5 | Final presentation | 18.11.2026 (move to 16.11. tbd by lecturer) | 15–20 min + 10 min Q&A; starts with target cross, ends with "Use of AI Tools" |
-| M6 | Release and pilot test finished | 27.11.2026 | Deployed app, test protocol, Should features done or consciously dropped |
-| M7 | Final report and handover | 07.12.2026 | Report submitted, customer acceptance, project closed |
+| M1 | UI/UX wireframes and technical architecture approved | 20.10.2026 | Wireframes + ER model + architecture accepted by client and lecturer |
+| M2 | Core web app, database and location-verification prototype functional | 02.11.2026 | Entering a test geofence unlocks the info page on a phone; leaving > 30 s cancels a test attempt |
+| M3 | 5 campus locations populated with info and trivia; integration testing complete | 10.11.2026 | 5 calibrated locations, ≥ 25 questions loaded, test report passed |
+| M4 | Pilot testing complete, time-tracking reports final, ready for final presentation | 16.11.2026 | Pilot report (10 volunteers), time report |
 
-Release gates: at M3, M4 and M6 the team decides go / repeat / stop based on the checkable result.
+**Course deadlines (fixed by the lecturer):** planning presentation 13.10.2026 (13:15–16:30); planning submission 19.10.2026, 12:15 (tool selection and first use of GitLab by this date); final presentation 18.11.2026 (16.11. tbd) with 15–20 min + 10 min Q&A; final report 07.12.2026. Preparing the final presentation and report is part of the course deliverables and **is not included in the 145 h**.
+
+Go / repeat / stop decisions are taken at M1–M4.
 
 ### 3.2 Gantt chart
 
 ```mermaid
 gantt
-    title Campus & City Quest — schedule (planning baseline)
+    title Campus & City Quest — schedule
     dateFormat  YYYY-MM-DD
     axisFormat  %d.%m.
     section 1 Project management
-    1.1 Set up organisation & tools      :a11, 2026-10-12, 5d
-    1.2 Project handbook                 :a12, 2026-10-12, 8d
-    1.3/1.4 Meetings, tracking, status   :a13, 2026-10-19, 2026-12-07
-    1.5 Final presentation               :a15, 2026-11-09, 9d
-    1.6 Final report                     :a16, 2026-11-23, 2026-12-07
-    1.7 Closing                          :a17, 2026-12-03, 3d
+    1.1 Set up and plan             :a11, 2026-10-13, 7d
+    1.2 Track time, review          :a12, 2026-10-19, 2026-11-16
+    1.3 Documentation and wiki      :a13, 2026-10-13, 2026-11-16
     section 2 Concept & design
-    2.1 Requirements                     :a21, 2026-10-14, 6d
-    2.5 Checkpoint list                  :a25, 2026-10-14, 8d
-    2.2 Game mechanics                   :a22, after a21, 5d
-    2.3 UX wireframes                    :a23, after a21, 7d
-    2.4 Architecture & data model        :a24, after a21, 6d
-    M3 Design approved                   :milestone, m3, 2026-10-30, 0d
-    section 3 Implementation
-    3.1 Repo & CI                        :a31, 2026-10-19, 5d
-    3.2 Accounts & teams                 :a32, 2026-10-30, 6d
-    3.3 QR check-in                      :a33, 2026-11-02, 6d
-    3.4 NFC check-in                     :a34, 2026-11-09, 4d
-    3.5 ID-card UID check-in             :a35, 2026-11-03, 8d
-    3.6 Google Maps                      :a36, 2026-11-02, 7d
-    3.7 Item DB & search                 :a37, 2026-11-03, 6d
-    3.8 Leaderboards                     :a38, 2026-11-06, 5d
-    3.9/3.10 Responsive UI               :a39, 2026-11-02, 10d
-    M4 MVP                               :milestone, m4, 2026-11-13, 0d
-    section 4 Testing
-    4.1 Test plan                        :a41, 2026-10-30, 4d
-    4.2 Automated tests                  :a42, 2026-11-05, 8d
-    4.3 Field test with pilots           :a43, 2026-11-18, 6d
-    4.4 Fix defects                      :a44, 2026-11-18, 8d
-    section 5 Handover
-    5.1 Deploy                           :a51, 2026-11-23, 5d
-    5.2 Documentation                    :a52, 2026-11-16, 11d
-    5.3 Customer acceptance              :a53, 2026-12-01, 2d
-    M5 Final presentation                :milestone, m5, 2026-11-18, 0d
-    M6 Release & pilot done              :milestone, m6, 2026-11-27, 0d
-    M7 Report & handover                 :milestone, m7, 2026-12-07, 0d
+    2.1 UI/UX wireframes            :a21, 2026-10-14, 2026-10-20
+    2.2 Database and architecture   :a22, 2026-10-14, 2026-10-20
+    M1 Design approved              :milestone, m1, 2026-10-20, 0d
+    section 3 Development
+    3.1 Backend and API             :a31, 2026-10-21, 2026-11-06
+    3.2 Frontend web app            :a32, 2026-10-21, 2026-11-09
+    3.3 Location verification       :a33, 2026-10-21, 2026-11-06
+    M2 Prototype functional         :milestone, m2, 2026-11-02, 0d
+    section 4 Campus content
+    4.1 Map and calibrate locations :a41, 2026-10-21, 2026-10-28
+    4.2 Info texts and questions    :a42, 2026-10-29, 2026-11-05
+    section 5 Testing
+    5.1 Integration, reviews        :a51, 2026-11-02, 2026-11-10
+    M3 Content and integration done :milestone, m3, 2026-11-10, 0d
+    5.2 Pilot and handover          :a52, 2026-11-10, 2026-11-16
+    M4 Pilot complete               :milestone, m4, 2026-11-16, 0d
 ```
 
 ### 3.3 Dependencies and critical path
-
-Longest dependent chain (by planned duration):
-**2.1 Requirements → 2.4 Architecture → 3.2 Accounts → 3.3 QR check-in → 3.8 Leaderboards → 4.3 Field test → 4.4 Fixes → 5.1 Deploy → 5.3 Acceptance.**
-A delay on any of these delays the project end. Packages with float: 2.2, 2.3, 3.6, 3.7, 3.4, 5.2.
+Longest dependent chain: **1.1 Set up → 2.2 Database/architecture → 3.1 Backend → 5.1 Integration → 5.2 Pilot and handover.** A delay in any of these delays the project end. Location verification (3.3) runs in parallel but must be ready for 5.1 and its on-site calibration (4.1) depends on access to the campus locations; delays there are the main schedule risk (R1, R8). Float exists for 2.1, 4.1, 4.2.
 
 ### 3.4 Calendarisation
-The plan counts working days. Lectures, exams and company phases reduce real capacity. The plan assumes **about 8–12 project hours per person per week from mid-October to 07.12.2026 (to be confirmed by each member)**. Exam weeks are entered in the team calendar and checked at every weekly meeting.
+The plan counts working hours: 145 h over about 5 weeks is about 6 h per person per week. Lectures, exams and company phases reduce capacity; each member enters unavailable days in the team calendar, reviewed at the weekly sync.
 
 ---
 
@@ -217,126 +232,93 @@ The plan counts working days. Lectures, exams and company phases reduce real cap
 
 ```mermaid
 flowchart TD
-    C["Customer / client (TBC)<br/>requirements, acceptance"] --- PL
+    C["Client: International Office<br/>requirements, milestone acceptance"] --- PL
     L["Lecturer<br/>Prof. Dr. A. von der Trenck<br/>supervision, assessment"] --- PL
-    PL["Project lead<br/>Yi Heng — plan, status, escalation, QA"]
-    PL --> P["Catalina<br/>Product, UX & frontend"]
-    PL --> R["Ryan<br/>Backend, data & security"]
-    PL --> Y["Yuri<br/>Check-in tech (QR/NFC), frontend, DevOps"]
-    PL --> A["Akil<br/>Maps, data & documentation"]
+    PL["Project Lead — Yi Heng<br/>coordination, schedule, risks, reporting"]
+    PL --> UX["UI/UX & Frontend Developer — Catalina"]
+    PL --> BE["Backend & Database Engineer — Ryan"]
+    PL --> LO["Location & Integration Specialist — Yuri"]
+    PL --> QA["QA & Documentation Lead — Akil"]
 ```
 
-*The role split is the team's proposal and is confirmed at the kick-off meeting. In a small team every member also acts as Project Team Member and reviewer for others.*
+*Role-to-name assignment is the team's proposal; confirm at the kick-off. Every member also acts as developer and as peer reviewer.*
 
 ### 4.1 Roles — tasks, authority, responsibility (ABV)
 
 | Role | Person | Tasks | Authority | Responsibility |
 |---|---|---|---|---|
-| Project lead & QA | Yi Heng | Plan, status reports, time-tracking report, test plan, field test, customer/lecturer contact | Prioritises backlog within agreed scope; approves merges to `main` | Schedule, scope, quality gates, escalation |
-| Product & UX | Catalina | Requirements, game rules, wireframes, frontend part 1, final presentation | Decides UX/game-design details | Usability, requirements completeness |
-| Backend & security | Ryan | Architecture, data model, accounts, ID-card UID, leaderboards, automated tests | Decides backend technology within agreed stack | Data protection, API quality |
-| Check-in tech & DevOps | Yuri | Repo/CI, QR and NFC check-in, frontend part 2, defect fixing, deployment | Maintains CI and deployment | Build stability, deployment, backups |
-| Maps & data | Akil | Checkpoint/POI list, Google Maps, item database, documentation, final report | Decides data content of checkpoints/items | Data accuracy, documentation |
-| Customer | TBC | Provides requirements, accepts milestones | Final acceptance decision | Clear and timely feedback |
-| Lecturer | Prof. von der Trenck | Supervises, assesses | Grades | Feedback in status meetings |
+| Project Lead | Yi Heng | Overall coordination, schedule adherence, milestone reporting to lecturer/client, risk mitigation, time-tracking report, release merges to `main` | Prioritises backlog within agreed scope; merges `preproduction` → `main` | Schedule, scope, escalation |
+| UI/UX & Frontend Developer | Catalina | Wireframes, mobile-responsive UI, info page, quiz screen and timer, results, leaderboards | UX and UI design decisions | Usability, frontend quality |
+| Backend & Database Engineer | Ryan | Server logic, database, authentication, API, attempt state machine, scoring, privacy by design | Backend technology within the agreed stack | Data protection, API quality |
+| Location & Integration Specialist | Yuri | Geolocation client, heartbeat, radius/accuracy/plausibility checks, 30-s leave rule, consent screen, integration with backend/frontend | Location-verification design | Reliability and anti-cheat quality of the location check |
+| QA & Documentation Lead | Akil | GitLab wiki, meeting minutes, four-eyes code reviews, test checklists, location calibration, campus content | Can block a merge that fails the checklist | Test coverage, documentation |
+| Client | International Office (contact **TBC**) | Requirements, milestone acceptance | Final acceptance | Clear, timely feedback |
+| Lecturer | Prof. von der Trenck | Supervision, assessment | Grades | Feedback in status meetings |
 
-**Role-conflict rule:** whoever does the work does not review it. Every merge request needs one approval from another team member (see [git-workflow.md](git-workflow.md)). QA owner Yi Heng does not review their own documents.
+**Role-conflict rule:** whoever does the work does not review it. Every merge request needs one approval from another team member ([git-workflow.md](git-workflow.md)).
 
 ### 4.2 RACI matrix
 
 R = responsible, A = accountable, C = consulted, I = informed
 
-| Task | Yi Heng | Catalina | Ryan | Yuri | Akil | Customer | Lecturer |
+| Task | Yi Heng | Catalina | Ryan | Yuri | Akil | Client | Lecturer |
 |---|---|---|---|---|---|---|---|
 | Project plan & handbook | A/R | C | C | C | C | C | C |
-| Requirements | A | R | C | C | C | A (approves) | I |
-| Design & architecture | A | R (UX) | R (tech) | C | C | I | – |
-| Implementation | A | R | R | R | R | I | – |
-| Testing & QA | A/R | C | R | R | C | C | – |
+| UI/UX design | A | R | C | C | C | C | I |
+| Architecture & database | A | C | R | C | C | I | I |
+| Backend & frontend | A | R (frontend) | R (backend) | C | C | I | – |
+| Location verification & anti-cheat | A | C | C | R | C | I | – |
+| Campus content & calibration | A | C | I | C | R | C | – |
+| Testing, code reviews, pilot | A | C | C | C | R | I | – |
 | Status reports | R | C | C | C | C | I | I |
 | Milestone acceptance | R | I | I | I | I | A | I |
-| Final presentation & report | A | R | C | C | R | I | I |
 
 ---
 
 ## 5. Effort Estimation (Hours per Work Package and Role)
 
-**Method.** Planning Poker with the Fibonacci-inspired card set (1, 2, 3, 5, 8, 13, 20, 40 h), two rounds maximum, estimates in net working hours (people × hours). Packages > 40 h are split, < 3 h are merged. No buffers inside the packages — buffer is WP 1.8 (from the risk list). For uncertain packages (3.4, 3.5) a three-point estimate is added: **E = (O + 4M + P) / 6**.
+**Method.** Fibonacci-based Planning Poker (cards 1, 2, 3, 5, 8, 13, 20, 40 h), two rounds maximum, estimates in net working hours. Packages > 40 h are split, < 3 h merged. No buffers inside packages. For uncertain packages (3.3 location verification) a three-point estimate **E = (O + 4M + P) / 6** may be added.
 
-> The values below are the initial team baseline; the Planning Poker session result replaces them if it differs. Time-tracking (§9) is used to validate them.
+### 5.1 Hours per work package and role
 
-| WBS | Work package | Hours | Role/owner |
-|---|---|---|---|
-| 1.1 | Set up organisation and tools | 5 | Yi Heng |
-| 1.2 | Handbook | 16 | Yi Heng |
-| 1.3 | Meetings and minutes | 20 | All (rotating, 4 h each) |
-| 1.4 | Time tracking and status | 12 | Yi Heng |
-| 1.5 | Final presentation | 20 | Catalina |
-| 1.6 | Final report | 20 | Akil |
-| 1.7 | Closing and handover | 8 | Yi Heng |
-| 1.8 | Risk contingency pool | 30 | All (6 h each) |
-| 2.1 | Requirements | 12 | Catalina |
-| 2.2 | Game mechanics | 13 | Catalina |
-| 2.3 | UX wireframes | 20 | Catalina |
-| 2.4 | Architecture and data model | 13 | Ryan |
-| 2.5 | Checkpoint and POI list | 8 | Akil |
-| 3.1 | Repo, CI, environment | 8 | Yuri |
-| 3.2 | Accounts and teams | 20 | Ryan |
-| 3.3 | QR check-in | 13 | Yuri |
-| 3.4 | NFC check-in | 13 | Yuri |
-| 3.5 | ID-card UID check-in | 20 | Ryan |
-| 3.6 | Google Maps | 20 | Akil |
-| 3.7 | Item DB and search | 20 | Akil |
-| 3.8 | Leaderboards | 20 | Ryan |
-| 3.9 | Responsive UI part 1 | 20 | Catalina |
-| 3.10 | Responsive UI part 2 | 20 | Yuri |
-| 4.1 | Test plan | 8 | Yi Heng |
-| 4.2 | Automated tests | 25 | Ryan |
-| 4.3 | Field test | 16 | Yi Heng |
-| 4.4 | Defect fixing | 20 | Yuri |
-| 5.1 | Deployment | 8 | Yuri |
-| 5.2 | Documentation | 12 | Akil |
-| 5.3 | Customer acceptance | 4 | Yi Heng |
-| | **Total** | **464** | |
+| WP | Title | Yi Heng (Lead) | Catalina (UX/FE) | Ryan (BE/DB) | Yuri (Location) | Akil (QA/Docs) | **Total** |
+|---|---|---|---|---|---|---|---|
+| WP1 | Project management | 8 | – | – | – | 4 | **12** |
+| WP2 | UI/UX & architecture design | 5 | 7 | 4 | – | – | **16** |
+| WP3 | Backend & database | 5 | – | 18 | – | 7 | **30** |
+| WP4 | Location verification & anti-cheat | – | – | 5 | 20 | – | **25** |
+| WP5 | Frontend web app | – | 20 | 3 | 7 | 5 | **35** |
+| WP6 | Campus content & trivia | 5 | 4 | – | – | 6 | **15** |
+| WP7 | QA & pilot testing | 4 | – | 2 | 2 | 4 | **12** |
+| | **Total** | **27** | **31** | **32** | **29** | **26** | **145** |
 
-### 5.1 Hours per person (including the shared pools 1.3 and 1.8: 10 h per person)
-
-| Person | Own WPs | Pools | Total |
-|---|---|---|---|
-| Yi Heng | 69 | 10 | **79** |
-| Catalina | 85 | 10 | **95** |
-| Ryan | 98 | 10 | **108** |
-| Yuri | 82 | 10 | **92** |
-| Akil | 80 | 10 | **90** |
-| **Sum** | 414 | 50 | **464** |
+*The per-role split is the team baseline; replace it with the Planning Poker result if it differs.*
 
 ### 5.2 Distribution by category (basis for the time-tracking report)
 
-| Category | WBS | Hours | Share |
+| Category | WP | Hours | Share |
 |---|---|---|---|
-| Organisation | 1.x | 131 | 28% |
-| Conception | 2.x | 66 | 14% |
-| Implementation (incl. testing, deployment) | 3.x–5.x | 267 | 58% |
-| **Total** | | **464** | 100% |
+| Organisation | WP1 | 12 | 8% |
+| Conception | WP2 | 16 | 11% |
+| Implementation (incl. content, testing, pilot) | WP3–WP7 | 117 | 81% |
+| **Total** | | **145** | 100% |
 
-Hours spent on the planning phase itself (up to 19.10.2026) are tracked separately and do not count towards this total.
+> **Planning warning:** 145 h for a backend + frontend + location verification + content + pilot project is tight, and WP6 (15 h for 5 info texts and 25–40 questions plus on-site calibration) is the most likely to overrun. The risk list (R7) and the 10% reserve (§8) account for this. If tracked hours exceed the estimate by more than 20% at M2, the project lead proposes cutting Should items first.
 
 ---
 
 ## 6. Communication Plan
 
-| With | What | How often | Channel | Responsible |
+| With | What | How | Who | Frequency |
 |---|---|---|---|---|
-| Team | Progress, blockers, next steps | Weekly (fixed slot, 30–45 min) | In-person/video meeting | Yi Heng |
-| Team | Tasks, merge requests, documentation | Ongoing | GitLab issues/boards/MRs | WP owners |
-| Team | Quick coordination | Daily as needed | Team chat (WhatsApp or similar — **choose at kick-off**) | All |
-| Customer | Status, clarifying requirements | Every 2 weeks | E-mail/call | Yi Heng |
-| Customer | Milestone acceptance (M3, M4, M6, M7) | At each milestone | Meeting + minutes | Yi Heng |
-| Lecturer | Project status, **time-tracking review**, 10–15 min | Integration-seminar dates (announced a few days ahead) | In person | Yi Heng |
-| All | Minutes and decisions | After every meeting | GitLab wiki | Rotating |
-| Customer | Final report ("AGs receive your reports") | M7 | PDF / GitLab | Yi Heng |
+| Team | Progress, blockers, next steps | Weekly sync, **every Monday, 1 h**, Discord or in person | Project lead | Weekly |
+| Team | Tasks, merge requests, decisions | GitLab issues, boards, MRs | Work-package owners | Ongoing |
+| Client (International Office) | Status updates, clarifying requirements | Call or e-mail | Project lead | Bi-weekly |
+| Client | Formal milestone acceptance (M1–M4) | Review meeting with **signed minutes** | Project lead | At each milestone |
+| Lecturer | Project status incl. time-tracking review | In person, 10–15 min | Project lead | Integration-seminar dates |
+| All | Meeting minutes | GitLab wiki, **immediately after each session** | Akil (rotating if needed) | After each meeting |
 
-Escalation path: team member → project lead → lecturer/customer.
+Escalation path: team member → project lead → lecturer/client.
 
 ---
 
@@ -344,52 +326,51 @@ Escalation path: team member → project lead → lecturer/customer.
 
 ### 7.1 Quality plan
 
-| Type | Measure |
+| Type | Measures |
 |---|---|
-| **Constructive (prevent)** | Coding guidelines and AI rules in [CLAUDE.md](../CLAUDE.md); Conventional Commits; issue/MR templates; protected `main`/`develop`; definition of done per WP; proven technologies over new ones; pair work on NFC/ID-card parts |
-| **Analytical (find)** | Four-eyes review: at least 1 approval from another member per MR; lint + automated tests before merge; acceptance tests against §1.3; field test with pilot students (WP 4.3); checklist before each milestone; feedback loops with customer every 2 weeks |
+| **Constructive (prevent)** | Strict coding guidelines ([CLAUDE.md](../CLAUDE.md)); ESLint + Prettier via `npm run check`; Conventional Commits; acceptance criteria per work package (§1.3); protected `main` and `preproduction`; proven browser APIs; server-authoritative timing and location checks; privacy by design (no coordinates stored) |
+| **Analytical (find)** | Four-eyes code reviews (1 approval from another member per MR); automated tests (`npm test`) for geofence maths, accuracy/plausibility checks, leave rule, state machine, 80% pass rule and scoring; real-phone checks (Android Chrome, iOS Safari); on-site calibration at every location; load test for 50 sessions; timing measurements; **pilot test with 10 student volunteers**; checklist before each milestone |
 
-**Definition of done (per WP):** deliverable exists in the repository/wiki, reviewed by a second person, tests pass, time booked in GitLab, issue closed, AI use logged in `ai-logs/<name>/`.
+**Definition of done (per work package):** deliverable exists in repository/wiki, reviewed by a second person, `npm run check` passes, time booked in GitLab, issue closed, AI use logged in `ai-logs/<name>/`.
 
 ### 7.2 Risk list
 
-Scale: low / medium / high for probability (P) and severity (S). Priority combines both.
+Scale: low / medium / high for probability (P) and severity (S).
 
-| # | Risk | Cause | Effect | P | S | Priority | Strategy and measure | Owner |
-|---|---|---|---|---|---|---|---|---|
-| R1 | Team member unavailable | Exams, illness, company phases | Packages delayed | med | high | **high** | Reduce: weekly capacity check, pair ownership for critical WPs, pool 1.8 | Yi Heng |
-| R2 | ID-card UID access not granted / GDPR concerns | Card UIDs are personal data; university approval needed | Primary tier unavailable | high | high | **high** | Avoid dependency: ID card is *Should*; QR/NFC already cover the Must goals; clarify permission in week 1; store pseudonymised UIDs only in own DB | Ryan |
-| R3 | NFC unsupported on many phones | Web NFC not available in iOS browsers | Tier 2 fails for many users | high | med | **high** | Reduce: QR as always-available fallback (M2); test device list in 4.1 | Yuri |
-| R4 | Unfamiliar technology | No prior experience | Estimates too low | high | med | **high** | Reduce: spikes/prototypes early, pair work, time-tracking vs. estimates | Yuri |
-| R5 | Scope creep | New wishes from customer mid-project | Must goals at risk | med | high | **high** | Avoid: MoSCoW and non-objectives signed off; change requests go through project lead | Yi Heng |
-| R6 | Low pilot participation | Few students available in the test window | KPI "80% completion" not provable | med | med | med | Reduce: recruit early via customer; accept smaller pilot, document sample size | Catalina |
-| R7 | Google Maps key leaked or quota/costs exceeded | Key in repo, many requests | Unexpected cost, service cut-off | low | high | med | Reduce: key in `.env` only, referrer restriction, quota alert, budget line | Akil |
-| R8 | Code or data loss | No backup routine | Work lost | low | high | med | Reduce: GitLab as single source of truth, protected branches, DB backup in 5.1 | Yuri |
-| R9 | Customer slow to reply | Other priorities | Unclear requirements | med | med | med | Reduce: bi-weekly fixed call, decisions logged in minutes | Yi Heng |
-| R10 | GitLab access delayed | User assignment via Tessa Steinigke | Tool start delayed | low | med | low | Accept; request users now; use local Git meanwhile | Yi Heng |
+| # | Risk | P | S | Priority | Mitigation (strategy) | Owner |
+|---|---|---|---|---|---|---|
+| R1 | GPS inaccurate or drifting indoors (library, canteen), or location permission denied | high | high | **high** | Per-location radius calibrated on site with real phones; accuracy threshold; clear error messages and retry; pilot test (reduce) | Yuri |
+| R2 | Low student adoption or engagement | med | med | med | Partner with student buddies for onboarding; promote live leaderboards (reduce) | Catalina |
+| R3 | Scope creep from extra features | high | high | **high** | Strictly adhere to Must/Should boundaries; reject unplanned additions; change requests via project lead (avoid) | Yi Heng |
+| R4 | Location data privacy / missing consent | med | high | **high** | Consent screen; store only "inside radius yes/no + timestamp", no coordinates; short retention; privacy notice; clarify with DHBW data-protection officer in week 1 (avoid/reduce) | Ryan |
+| R5 | Team member unavailable (exams, illness) | med | high | **high** | Weekly capacity check; every WP has a reviewer who can step in (reduce) | Yi Heng |
+| R6 | GPS spoofing / cheating | med | med | med | Plausibility checks (speed, jumps), server-side timing, randomised questions, 30-s leave rule; residual risk accepted and noted in the report (reduce/accept) | Ryan |
+| R7 | Effort underestimated (145 h is tight; WP6 content) | high | med | **high** | Track hours weekly vs. estimate; 10% reserve; drop Should items first (reduce/accept) | Yi Heng |
+| R8 | Browser pauses location in background / battery or iOS limits | med | high | **high** | Screen Wake Lock; foreground requirement explained in the UI; test on iOS Safari and Android Chrome early (reduce) | Yuri |
+| R9 | Honest students cancelled by GPS jitter (30-s rule too strict) | med | med | med | 30-s grace, accuracy-aware checks, 2-minute retry, tune in pilot (reduce) | Yuri |
+| R10 | Pilot cannot prove the 30-day KPI inside the project | high | low | med | Use agreed pilot proxy (§1.3); hand over measurement plan (accept) | Yi Heng |
+| R11 | Code or data loss | low | high | med | GitLab as single source; protected branches; DB backup before pilot (reduce) | Ryan |
 
-Risks are reviewed in every weekly meeting; effectiveness of measures is checked at each milestone; lessons learned go into the final report.
+Risks are reviewed at every Monday sync; effectiveness of mitigations is checked at each milestone; lessons learned go into the final report.
 
 ---
 
-## 8. Budget (fictional, with stated assumptions)
+## 8. Budget (fictional, assumptions stated)
 
-No real budget exists. The planning uses plausible assumptions:
+No real budget exists, so the planning uses plausible assumptions. No hardware is needed (students use their own phones).
 
 | Item | Calculation / assumption | Amount (€) |
 |---|---|---|
-| Personnel | 464 h × €30/h (assumed internal rate) | 13,920 |
-| Software and licences | GitLab provided by DHBW; open-source stack | 0 |
-| Google Maps API | Assumed within free usage quota; €50 safety allowance | 50 |
-| Hardware | 3 USB NFC/card readers × €40 + 50 NFC tags ≈ €40 | 160 |
-| Printing (QR codes, signs) | Assumption | 30 |
+| Personnel | 145 h × €30/h (assumed internal rate) | 4,350 |
 | Hosting | ≈ €10/month × 4 months | 40 |
-| Travel | None (campus-based) | 0 |
-| **Subtotal** | | **14,200** |
-| Risk reserve | 10% of subtotal | 1,420 |
-| **Total budget** | | **15,620** |
+| Software, licences, TLS | GitLab provided by DHBW; open-source stack; free TLS certificate (assumed) | 0 |
+| Hardware | None (phones of students/team are used for testing) | 0 |
+| Travel | Campus-based | 0 |
+| **Subtotal** | | **4,390** |
+| Risk reserve | 10% of subtotal | 439 |
+| **Total budget** | | **4,829** |
 
-Revenue: none expected (non-profit student service). Follow-up costs after the project: hosting and Google Maps usage (est. ≈ €10–20/month, **TBC**) and content maintenance of checkpoints/items.
+Revenue: none expected (non-profit student service). Follow-up costs after the project: hosting and updating location and question content (**TBC**).
 
 ---
 
@@ -399,42 +380,43 @@ Revenue: none expected (non-profit student service). Follow-up costs after the p
 
 | Area | Tool | Purpose | Owner |
 |---|---|---|---|
-| Project management | DHBW WI GitLab (issues, boards, milestones) — https://wi-git.heilbronn.dhbw.de/ | Backlog, work packages, status | Yi Heng |
-| Documentation | GitLab wiki + repository (`docs/`) | Handbook, minutes, decisions | Akil |
-| Development | GitLab repository (`main` ← `develop` ← `feature/*`) | Code, versions, reviews | Yuri |
-| Communication | Team chat (to be chosen at kick-off), video calls | Quick exchange | All |
-| Time tracking | GitLab time tracking (`/estimate`, `/spend`) | Hours per person and task | Everyone |
-| Design | Figma or similar (free) | Wireframes | Catalina |
-| Maps | Google Maps Platform | Map and POIs | Akil |
+| Project management & backlog | DHBW WI GitLab Issues and Kanban boards — https://wi-git.heilbronn.dhbw.de/ | Backlog, work packages, status | Yi Heng |
+| Documentation & wiki | GitLab wiki + repository (`docs/`) | Handbook, meeting minutes, architectural decisions | Akil |
+| Version control & development | GitLab repository (`main` ← `preproduction` ← `wip/[name]/feature\|bugfix/…`), see [git-workflow.md](git-workflow.md) | Code, versions, reviews | Ryan |
+| Dev tooling | npm only: ESLint, Prettier, Vitest — see [requirements.md](../requirements.md) | Lint, format, test | Everyone |
+| Location | Browser Geolocation API + Screen Wake Lock (HTTPS required; `localhost` allowed in development) | Live-location verification | Yuri |
+| Test devices | Real Android and iOS phones | On-site calibration and tests | Akil |
+| Communication | Discord (team), e-mail/call (client) | Syncs, quick questions | All |
+| Design | Figma or similar (to be agreed) | Wireframes | Catalina |
+| Time tracking | GitLab built-in time tracking (`/estimate`, `/spend`) — no Excel for raw logs | Hours per person and task | Everyone |
 | AI assistance | Claude Code (rules in CLAUDE.md), logs in `ai-logs/` | Support, always disclosed | Everyone |
 
-User assignment on the DHBW GitLab is coordinated with Tessa Steinigke. Tool selection and initial use are required by **19.10.2026**. Alternatives only after agreement with the lecturer/customer.
+User assignment on the DHBW GitLab is coordinated with Tessa Steinigke. Tool selection and first use are required by **19.10.2026**.
 
 ### 9.2 Time tracking and "billing" of hours
-- Every issue gets an estimate (`/estimate`, from §5) and every working session is booked with `/spend` (hours rather than minutes).
+- Every issue gets an estimate (`/estimate`, from §5) and every working session is booked with `/spend` (hours rather than minutes), by person and task.
 - Research, coordination, meetings and documentation count as project time.
-- Each issue carries a category label: `cat::conception`, `cat::implementation`, `cat::organisation`.
-- Monthly export gives the distribution across the three categories overall and per person (Excel may be used for the evaluation only).
-- The tracking results are discussed at every status meeting with the lecturer and compared with the estimates in §5.
+- Each issue has a label `cat::conception`, `cat::implementation` or `cat::organisation`.
+- The report shows the aggregated distribution over the three categories overall and per person. Excel may be used for evaluation only.
+- The tracked-vs-estimated comparison is reviewed in every status meeting with the lecturer. Hours spent on the planning phase itself are tracked separately.
 
 ---
 
 ## 10. Use of AI Tools
 
-*Transparency principle: AI is allowed but must be disclosed and critically reflected. This section is placed at the end of both presentation and report, as required.*
+*Transparency principle: AI is allowed but must be disclosed and critically reflected. This section also closes the presentation and the report.*
 
 | Work step | AI system | How it was used | Treatment |
 |---|---|---|---|
-| Repository setup | Claude Code (Anthropic) | Generated drafts of `CLAUDE.md`, `docs/git-workflow.md`, `.gitignore`, issue/MR templates and a setup script | Adapted by the team (team to confirm); AI-drafted text not used unreviewed |
-| Charter formatting | Claude Code | Reformatted the project charter into Markdown tables | Content from the team's own charter; formatting only |
-| Handbook drafting | Claude Code | Drafted the structure and a first version of WBS, schedule, effort, risk and budget tables from the course slides | **First draft only** — team must review, adjust and own all numbers (effort, rates, dates) |
-| Effort estimation | — | Initial values were AI-proposed; they are replaced by the team's Planning Poker result where different | Planning Poker (humans, optionally AI as extra participant — must be stated) |
+| Repository setup | Claude Code (Anthropic) | Drafted `CLAUDE.md`, the Git workflow guide, `.gitignore`, issue/MR templates, setup script, npm tooling files (`package.json`, ESLint/Prettier config) and `requirements.md` | Adapted by the team (team to confirm); lint/format/test commands were run and passed |
+| Charter and handbook | Claude Code | Formatted the charter; restructured the team's own plan into this handbook; added dependency analysis, RACI, budget assumptions, hour splits per role; reworked the design after the team replaced NFC readers with live-location verification (quiz and scoring rules, anti-cheat, risks) | **First draft** — scope and numbers originate from the team's plan; AI-added numbers (radius, accuracy, cooldown, points, per-role hours, budget) are marked as assumptions and must be reviewed by the team |
+| Effort estimation | — | Planning Poker is to be done by the humans (optionally with AI as an extra participant — must then be stated) | Replaces AI-proposed splits |
 
-**Evidence:** AI session logs per member in `ai-logs/<name>/` (date, objective, prompts used, decisions made); screenshots in the report appendix.
+**Evidence:** AI session logs per member in `ai-logs/<name>/` (date, objective, prompts, decisions); screenshots in the report appendix.
 
-**Reflection (to be completed by the team after review):**
-- *Helpful:* fast structure aligned to the course checklist, consistent tables, reduced formatting effort.
-- *Limits:* the AI cannot know the team's real capacity, customer, rates or university rules (e.g. ID-card UID permission); all such values are assumptions and must be verified. The AI may misstate facts, so every claim in this handbook is checked by a team member.
+**Reflection (team to complete after review):**
+- *Helpful:* fast structure aligned to the course checklist, consistent tables, spotting inconsistencies (e.g. the project is shorter than the 30-day KPI window; browser location limits).
+- *Limits:* the AI cannot know real capacity, campus conditions (indoor GPS quality), university data-protection rules, rates or client wishes; those are assumptions to verify. Every claim must be checked by a team member.
 
 ---
 

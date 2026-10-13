@@ -1,4 +1,5 @@
 ## Summary
+<!-- Title: BUG-FIX: Fixing feature N issue of ... -->
 <!-- What is going wrong? -->
 
 ## Steps to Reproduce
@@ -13,14 +14,14 @@
 ## Environment
 - Device / OS:
 - Browser and version:
-- Interaction method (ID card / NFC / QR / none):
+- Location permission granted? (yes / no) and approximate place:
 
 ## Screenshots / Logs
-<!-- Do not paste real student ID UIDs or secrets. -->
+<!-- Do not paste real location data of students or secrets. -->
 
 ## Checklist
-- [ ] Branch created from `develop` as `bugfix/[your_name]/[issue-number]-[desc]`
-- [ ] MR targets `develop` and has 1 peer approval
+- [ ] Branch created from `preproduction` as `wip/[your_name]/bugfix/[feature]-[issue]`
+- [ ] MR targets `preproduction` and has 1 peer approval
 - [ ] AI session (if any) logged in `ai-logs/[your_name]/`
 
 /label ~bug
