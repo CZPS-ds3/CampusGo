@@ -20,7 +20,7 @@
 <!-- Do not paste real location data of students or secrets. -->
 
 ## Checklist
-- [ ] Branch created from `preproduction` as `wip/[your_name]/bugfix/[feature]-[issue]`
+- [ ] Work done on `wip/[your_name]/bugfix` (merged with latest `preproduction`)
 - [ ] MR targets `preproduction` and has 1 peer approval
 - [ ] AI session (if any) logged in `ai-logs/[your_name]/`
 

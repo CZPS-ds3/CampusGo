@@ -90,8 +90,8 @@ Effort: 145 h total. Gantt chart and critical path: [docs/project_handbook.md §
 ## 4. How We Work with Git (summary)
 
 ```
-main  ←  preproduction  ←  wip/[your_name]/feature/[feature_name]
-                           wip/[your_name]/bugfix/[feature]-[issue]
+main  ←  preproduction  ←  wip/[your_name]/feature
+                           wip/[your_name]/bugfix
 ```
 
 In GitLab the branches look like folders — everyone has `feature` and `bugfix` side by side:
@@ -100,16 +100,17 @@ In GitLab the branches look like folders — everyone has `feature` and `bugfix`
 main
 preproduction
 wip/
-  catalina/  feature/…  bugfix/…
-  ryan/      feature/…  bugfix/…
-  yuri/      feature/…  bugfix/…
-  akil/      feature/…  bugfix/…
-  yi_heng/   feature/…  bugfix/…
+  catalina/  feature  bugfix
+  ryan/      feature  bugfix
+  yuri/      feature  bugfix
+  akil/      feature  bugfix
+  yi_heng/   feature  bugfix
 ```
 
 - `main` and `preproduction` are **protected** — never push to them directly.
 - **Nobody merges a feature branch into `main`.** Feature/bugfix branches are merged into **`preproduction`** by Merge Request; the project lead merges `preproduction` → `main` at milestones.
-- Branch names start with `wip/` and include your name: `wip/catalina/feature/quiz-screen`, `wip/yuri/bugfix/feature-1-gps-jitter`, `wip/akil/feature/docs-user-guide`.
+- Everyone owns two permanent branches: `wip/[your_name]/feature` (new work) and `wip/[your_name]/bugfix` (fixes), e.g. `wip/catalina/feature`, `wip/yuri/bugfix`. Never delete them and never push to someone else's.
+- The task is named in your commit messages and in the MR title, because the branch name is fixed.
 - Title issues/MRs with a tag: `FEATURE: …`, `BUG-FIX: Fixing feature 1 issue of …`, `DOCS: …`, `REFACTOR: …`.
 - **1 approval from another member** is required — never merge your own MR unreviewed.
 - Commit with **Conventional Commits**: `feat: add quiz timer`, `fix: resolve crash`.
@@ -121,7 +122,8 @@ git clone git@wi-git.heilbronn.dhbw.de:yih.lim.26/campus-city-quest.git
 cd campus-city-quest
 git checkout preproduction && git pull origin preproduction
 npm ci
-git checkout -b wip/[your_name]/feature/[feature_name]
+git checkout wip/[your_name]/feature        # your own branch already exists
+git merge origin/preproduction               # get the latest team code
 ```
 
 Full guide with all commands, conflict handling and the do/don't checklist: **[docs/git-workflow.md](docs/git-workflow.md)**.
@@ -184,13 +186,13 @@ Shows which branch you are on, changed files, and what is staged. **When unsure,
 ```bash
 git branch                                   # list local branches (* = current)
 git branch -a                                # also list branches on GitLab
-git branch -d wip/[your_name]/feature/[feature_name]   # delete a merged local branch
+git branch -d some-old-local-branch         # delete a merged local branch (never your wip/... branches)
 ```
 
 #### `git checkout` — switch branches (or create one with `-b`)
 ```bash
 git checkout preproduction                                  # switch to an existing branch
-git checkout -b wip/[your_name]/feature/[feature_name]          # create a new branch and switch to it
+git checkout -b my-experiment                               # create a new branch and switch to it (for experiments only)
 ```
 `git switch <branch>` / `git switch -c <branch>` do the same thing in newer Git.
 
@@ -228,7 +230,7 @@ git diff --staged            # staged changes (what the next commit will contain
 
 #### `git push` — send your commits to GitLab
 ```bash
-git push -u origin wip/[your_name]/feature/[feature_name]   # first push of a new branch
+git push -u origin my-experiment                        # first push of a new branch
 git push                                                # every later push on that branch
 ```
 You can only push your own branch. `main` and `preproduction` are protected.
@@ -242,7 +244,7 @@ git pull origin preproduction
 
 #### `git merge` — bring another branch into yours
 ```bash
-git checkout wip/[your_name]/feature/[feature_name]
+git checkout wip/[your_name]/feature
 git merge origin/preproduction       # get the team's latest work into your branch
 ```
 Merging **your branch into `preproduction`** is done through a **Merge Request on GitLab**, not on your computer. If Git reports a conflict, see [docs/git-workflow.md §4](docs/git-workflow.md).
@@ -274,13 +276,13 @@ git stash pop                # get your changes back
 git checkout preproduction
 git pull origin preproduction                        # 1. get the latest team code
 npm ci                                               #    install dependencies
-git checkout -b wip/[your_name]/feature/[feature_name]   # 2. new branch for your task
+git checkout wip/[your_name]/feature                     # 2. switch to your own branch (it already exists)
 # ... edit files ...
 git status                                           # 3. what did I change?
 git add path/to/file                                 #    stage it
 git commit -m "feat: add quiz timer"                 #    save it
 npm run check                                        # 4. lint + format + tests must pass
-git push -u origin wip/[your_name]/feature/[feature_name]   # 5. send it to GitLab
+git push origin wip/[your_name]/feature                  # 5. send it to GitLab
 # 6. open a Merge Request on GitLab -> target: preproduction -> ask a teammate to review
 ```
 
@@ -288,7 +290,7 @@ git push -u origin wip/[your_name]/feature/[feature_name]   # 5. send it to GitL
 
 | Mistake | Fix |
 |---|---|
-| Working directly on `main` or `preproduction` | Always `git checkout -b wip/[your_name]/feature/...` first; check with `git status` |
+| Working directly on `main` or `preproduction` | Always `git checkout wip/[your_name]/feature` first; check with `git status` |
 | "rejected — protected branch" when pushing | You tried to push to `main`/`preproduction`; push your own branch instead |
 | Forgetting to pull before starting | `git pull origin preproduction` at the start of every work session |
 | Huge commits with many unrelated changes | Commit small and often; one logical change per commit |

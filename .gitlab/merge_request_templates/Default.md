@@ -7,7 +7,8 @@
 - [ ] Checked manually on mobile viewport
 
 ## Checklist
-- [ ] Branch was created from `preproduction` and this MR targets `preproduction` (never `main`)
+- [ ] Source is my own `wip/[your_name]/feature` or `…/bugfix` branch, merged with latest `preproduction`; target is `preproduction` (never `main`)
+- [ ] "Delete source branch" is **unticked** (personal branches stay)
 - [ ] Commits follow Conventional Commits (`feat: ...`, `fix: ...`)
 - [ ] No secrets, `.env` files, or real student location data included
 - [ ] AI session (if any) logged in `ai-logs/[your_name]/`

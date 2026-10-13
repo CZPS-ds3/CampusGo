@@ -382,7 +382,7 @@ Revenue: none expected (non-profit student service). Follow-up costs after the p
 |---|---|---|---|
 | Project management & backlog | DHBW WI GitLab Issues and Kanban boards — https://wi-git.heilbronn.dhbw.de/ | Backlog, work packages, status | Yi Heng |
 | Documentation & wiki | GitLab wiki + repository (`docs/`) | Handbook, meeting minutes, architectural decisions | Akil |
-| Version control & development | GitLab repository (`main` ← `preproduction` ← `wip/[name]/feature\|bugfix/…`), see [git-workflow.md](git-workflow.md) | Code, versions, reviews | Ryan |
+| Version control & development | GitLab repository (`main` ← `preproduction` ← `wip/[name]/feature` and `wip/[name]/bugfix`\|bugfix/…`), see [git-workflow.md](git-workflow.md) | Code, versions, reviews | Ryan |
 | Dev tooling | npm only: ESLint, Prettier, Vitest — see [requirements.md](../requirements.md) | Lint, format, test | Everyone |
 | Location | Browser Geolocation API + Screen Wake Lock (HTTPS required; `localhost` allowed in development) | Live-location verification | Yuri |
 | Test devices | Real Android and iOS phones | On-site calibration and tests | Akil |

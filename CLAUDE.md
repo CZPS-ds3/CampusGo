@@ -76,10 +76,10 @@ Before proposing a commit or Merge Request, run `npm run check` (ESLint + Pretti
 
 ## Git Workflow (summary — see docs/git-workflow.md)
 
-- Branch strategy: `main` <- `preproduction` <- `wip/[name]/feature/*` and `wip/[name]/bugfix/*` (`wip` is a folder prefix, not a branch).
+- Branch strategy: `main` <- `preproduction` <- `wip/[name]/feature` and `wip/[name]/bugfix` (each person owns these two permanent branches; `wip` and `[name]` are folder prefixes).
 - **Nobody merges a feature branch into `main`.** Only the project lead merges `preproduction` into `main` at a milestone.
-- Never push directly to `main` or `preproduction`. Work on a branch created from `preproduction` and open a Merge Request into `preproduction`.
-- Branch names: `wip/[your_name]/feature/[task]` or `wip/[your_name]/bugfix/[feature]-[issue]`, e.g. `wip/catalina/feature/quiz-screen`. Names: catalina, ryan, yuri, akil, yi_heng.
+- Never push directly to `main` or `preproduction`. Open a Merge Request from the user's own branch into `preproduction`, with "Delete source branch" unticked.
+- Work only on the user's own `wip/[your_name]/feature` or `wip/[your_name]/bugfix` branch; never delete these branches and never push to another member's branch. The task is named in commit messages and the MR title. Names: catalina, ryan, yuri, akil, yi_heng.
 - Issue/MR titles start with a tag: `FEATURE:`, `BUG-FIX:` (e.g. `BUG-FIX: Fixing feature 1 issue of GPS jitter cancelling the quiz`), `DOCS:`, `REFACTOR:`.
 - Commit messages follow Conventional Commits, e.g. `feat: add quiz timer`, `fix: resolve crash`.
 - Never run destructive commands (`git push --force`, `git reset --hard`, deleting branches) unless the user explicitly asks.
