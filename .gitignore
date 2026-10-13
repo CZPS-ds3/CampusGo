@@ -1,0 +1,90 @@
+# ---------- Environment & secrets ----------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# ---------- Operating system artifacts ----------
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+*~
+.directory
+
+# ---------- IDE / editor ----------
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.iml
+*.sublime-project
+*.sublime-workspace
+.project
+.classpath
+.settings/
+.vs/
+*.swp
+*.swo
+
+# ---------- Node / JavaScript / TypeScript ----------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm/
+.eslintcache
+.stylelintcache
+*.tsbuildinfo
+
+# ---------- Build output ----------
+dist/
+build/
+out/
+.next/
+.nuxt/
+.svelte-kit/
+.vite/
+.cache/
+.parcel-cache/
+.turbo/
+
+# ---------- Testing & coverage ----------
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+
+# ---------- Python (tooling/scripts) ----------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# ---------- Logs & temp ----------
+*.log
+logs/
+tmp/
+temp/
+*.tmp
+*.bak
+
+# ---------- Databases (local) ----------
+*.sqlite
+*.sqlite3
+*.db
+
+# ---------- Archives ----------
+*.zip
+*.tar.gz
+*.rar
