@@ -53,6 +53,15 @@ cp .env.example .env     # Windows PowerShell: Copy-Item .env.example .env
 
 Fill in the values you need locally. **Never commit `.env`.**
 
+## 5a. Accounts and services you need
+
+| Need | Why | Who decides |
+|---|---|---|
+| An SMTP server or a mail provider (free tier is enough for the pilot) | Sends the login OTP e-mails (BR01) | Ryan / Yuri, WBS 3.1 |
+| A relational database (engine chosen in WBS 2.2) | Students, attempts, questions, scoring tables (BR11) | Ryan, WBS 2.2 |
+| A web host with HTTPS | Browser geolocation requires HTTPS on real phones | Team, WBS 5.2 |
+| Android and iOS phones | On-site location tests | Everyone |
+
 ## 6. Recommended VS Code extensions
 
 - ESLint (`dbaeumer.vscode-eslint`)

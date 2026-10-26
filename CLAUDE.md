@@ -5,18 +5,21 @@
 
 ## Project Overview
 
-**Campus & City Quest** (Project No. DHBW-INT-2027-01) is a gamified, mobile-responsive web application that helps incoming international students at DHBW Heilbronn explore the campus (Pokémon GO style).
+**Campus & City Quest** (Project No. DHBW-INT-2027-01) is a gamified, mobile-responsive web application that helps incoming international students at DHBW Heilbronn explore the campus (Pokémon GO style) by verifying their location at 8 checkpoints and taking short quizzes.
 
-Key features:
-- **Live-location verification** (browser Geolocation API): a student must be inside a checkpoint's radius to unlock its info page and quiz. No NFC, card readers or extra hardware.
-- Flow per visit: arrival verified -> read-first info page (no time limit) -> student presses Start -> 5 questions with a server-side 5-minute timer -> pass at >= 80% (4 of 5).
-- The student must stay at the place: no accepted in-radius location sample for > 30 s cancels the attempt (retry after a 2-minute cooldown). Samples need accuracy <= 50 m and plausible movement.
-- Points: 10 per correct answer, +10 for 5/5, speed bonus `remaining_seconds / 300 * 20`, attempt multiplier 1.0 / 0.6 / 0.3; only the first pass of a location scores.
-- Live leaderboards (individual, duo, nationality) are a Should item.
+**Source of truth:** `docs/business-rules.md` (BR01-BR25 + resolutions R-nn + scoring examples + acceptance checks). Entities and constraints: `docs/data-model.md`. Location: `docs/geofencing.md`. Questions: `docs/question-bank.md`. Rule-to-test matrix: `docs/traceability.md`. Plan: `docs/project_handbook.md`. If code, tests or other docs contradict `docs/business-rules.md`, the business rules win; to change a rule, edit that file first (with the team's approval).
 
-Out of scope: city locators (Rewe, Lidl, clothing stores) and Google Maps; native iOS/Android apps; NFC tags / student-card readers; modifying official university databases.
-
-Full plan: `docs/project_handbook.md`. Setup: `requirements.md`.
+Key rules in short (read the file before implementing):
+- **Login (BR01-03):** OTP by e-mail only, no passwords. The e-mail must end with `heilbronn.dhbw.de`. Login responds generically ("If the account exists, an email containing the OTP has been sent."). One active session per student; sessions expire after inactivity. OTP codes and session tokens are stored only as hashes.
+- **Teams (BR05, BR06):** 1-5 members, one team per user, invitations by e-mail (accept/reject, 24 h expiry). Team leaderboard = ceil(average of members' total points), only teams with >= 2 members, visible only to users in a team.
+- **Checkpoints (BR07-08):** 8 pilot checkpoints (Mensa, Library, CAS Cafe, Campus Garden, Care.box and Shop.box, Building B, Building C, Containers). Only active ones unlock quizzes.
+- **Location (BR12):** verified by the server when an attempt starts (browser Geolocation API). Poor accuracy or denied permission = check again, without consuming an attempt or starting the timer. Leaving the geofence afterwards does NOT end the attempt. There is no 30-second leave rule.
+- **Quiz (BR09-10, 13-15, 20-23, 25):** random 3 or 5 distinct questions, 4 options each, 1 minute per question (one deadline per attempt, server clock), no retry, right answer revealed after a wrong answer, pass at 4/5 or 2/3, a passed checkpoint is final, every attempt is a new record, question set and state survive refresh/reconnect.
+- **Scoring (BR14, 16-21):** normal 1,000, hard 2,000, time bonus 1 per whole remaining second, full clear 200, attempt multipliers 100/85/70/55/40/0 % applied after bonuses, hard-question option only on attempt 1 of the 4 large checkpoints, fractions rounded up. **Points, bonuses and multipliers are read from database tables (BR11), never hard-coded.**
+- **Server authority (BR22):** answers and submissions are accepted only while the attempt is active and before it expires, judged on the server clock. Never trust the client for time, location or correctness.
+- **Leaderboards (BR04, 24):** solo (total points) and team; equal scores share a rank, earlier achiever listed first.
+- Not in scope: city locators, Google Maps, native apps, NFC/student cards, duo/nationality leaderboards, an admin UI.
+- The read-first info page (before the quiz) is a Should item.
 
 Team: Catalina, Yuri, Ryan, Yi Heng (Project Manager), Akil.
 
@@ -30,7 +33,13 @@ requirements.md       What to install (npm only)
 package.json          npm scripts and dev dependencies (ESLint, Prettier, Vitest)
 docs/git-workflow.md  Git branching strategy and workflow
 project_chater.md     Project charter
-docs/project_handbook.md  Full project plan
+project_brief.md      Project brief
+docs/business-rules.md   Business rules BR01-BR25 (SOURCE OF TRUTH)
+docs/data-model.md       Entities, constraints, seed data
+docs/geofencing.md       Location verification architecture
+docs/question-bank.md    Quiz questions
+docs/traceability.md     Rule -> work package -> test matrix
+docs/project_handbook.md Full project plan
 ```
 
 Application code is added under `src/` and tests under `tests/` once development starts.
@@ -54,12 +63,12 @@ Start/build scripts (`dev`, `build`) are added to `package.json` once the applic
 Rules:
 - Use `npm ci` for a clean install; use `npm install <pkg>` only when deliberately adding a dependency, and commit `package-lock.json`.
 - Never commit `node_modules/`, build output, or `.env` files.
-- Secrets (database URL, session secret) live in `.env` locally and are documented by name only in `.env.example`. Never hard-code or print them.
+- Secrets (database URL, session secret, SMTP credentials) live in `.env` locally and are documented by name only in `.env.example`. Never hard-code or print them.
 - `pylint` is a Python tool (pip, not npm). It is only relevant if Python code is ever added; see `requirements.md` section 8.
 
 ## Linting / Testing
 
-Before proposing a commit or Merge Request, run `npm run check` (ESLint + Prettier + Vitest) and make sure it passes. If a check fails, fix the cause; do not disable the rule or delete the test. State clearly in your reply if you were unable to run a check. Add tests for new logic (especially the quiz rules: radius and accuracy checks, 30-s leave rule, 5-minute limit, 80% pass, scoring).
+Before proposing a commit or Merge Request, run `npm run check` (ESLint + Prettier + Vitest) and make sure it passes. If a check fails, fix the cause; do not disable the rule or delete the test. State clearly in your reply if you were unable to run a check. Add tests for new logic and **name the business rule in each test** (e.g. `BR19 attempt 2 applies 85% after bonuses`). The 15 worked scoring examples and the 25 acceptance checks in `docs/business-rules.md` must exist as automated tests. Money-like arithmetic is integer arithmetic (no floating point for points).
 
 ## Code Style Guidelines
 
@@ -69,7 +78,7 @@ Before proposing a commit or Merge Request, run `npm run check` (ESLint + Pretti
 - **Structure**: Small, single-purpose functions and components. Prefer composition over inheritance. No dead code or commented-out code.
 - **Comments**: Explain *why*, not *what*. Public functions get a short doc comment.
 - **Error handling**: Never swallow errors silently. Validate all external input (location samples, answers, API responses, form data).
-- **Privacy**: Location is personal data. Require consent, store only "inside radius yes/no + timestamp", never store or log raw coordinates, and never include real student locations in tests, fixtures, or commits. All timing and location decisions are made on the server, never trusted from the client.
+- **Privacy**: E-mail, names, pictures and location are personal data. Require consent for location, store only "inside radius yes/no + timestamp", never store or log raw coordinates, never log OTP codes or tokens, never show e-mail addresses or last names to other users, and never include real student data or locations in tests, fixtures, or commits. All timing and location decisions are made on the server.
 - **UI**: Mobile-first and responsive; interactive elements must be accessible (labels, contrast, keyboard focus).
 - **Dependencies**: Do not add a new dependency without stating why in the MR description.
 - **Scope**: Change only what the task requires. Do not refactor unrelated code.
@@ -80,8 +89,9 @@ Before proposing a commit or Merge Request, run `npm run check` (ESLint + Pretti
 - **Nobody merges a feature branch into `main`.** Only the project lead merges `preproduction` into `main` at a milestone.
 - Never push directly to `main` or `preproduction`. Open a Merge Request from the user's own branch into `preproduction`, with "Delete source branch" unticked.
 - Work only on the user's own `wip/[your_name]/feature` or `wip/[your_name]/bugfix` branch; never delete these branches and never push to another member's branch. The task is named in commit messages and the MR title. Names: catalina, ryan, yuri, akil, yi_heng.
-- Issue/MR titles start with a tag: `FEATURE:`, `BUG-FIX:` (e.g. `BUG-FIX: Fixing feature 1 issue of GPS jitter cancelling the quiz`), `DOCS:`, `REFACTOR:`.
+- Issue/MR titles start with a tag: `FEATURE:`, `BUG-FIX:` (e.g. `BUG-FIX: Fixing feature 1 issue of OTP code rejected after a resend`), `DOCS:`, `REFACTOR:`.
 - Commit messages follow Conventional Commits, e.g. `feat: add quiz timer`, `fix: resolve crash`.
+- Name the business rules (BR..) in issue and MR descriptions.
 - Never run destructive commands (`git push --force`, `git reset --hard`, deleting branches) unless the user explicitly asks.
 
 ## AI Interaction Logging Rule

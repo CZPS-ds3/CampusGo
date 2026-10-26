@@ -38,8 +38,8 @@ Because the branch does not name the task, the **MR title must**. Start it with 
 
 | Tag | Example title |
 |---|---|
-| `FEATURE:` | `FEATURE: Show first question within 1.5 s of pressing Start` |
-| `BUG-FIX:` | `BUG-FIX: Fixing feature 1 issue of GPS jitter cancelling the quiz` |
+| `FEATURE:` | `FEATURE: Build team invitation accept and reject (BR06)` |
+| `BUG-FIX:` | `BUG-FIX: Fixing feature 1 issue of OTP code rejected after a resend` |
 | `DOCS:` | `DOCS: Add user guide for checkpoint setup` |
 | `REFACTOR:` | `REFACTOR: Simplify user queries` |
 

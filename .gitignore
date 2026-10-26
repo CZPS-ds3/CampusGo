@@ -88,3 +88,6 @@ temp/
 *.zip
 *.tar.gz
 *.rar
+
+# Arena tournament scratch files
+.arena/

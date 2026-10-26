@@ -1,6 +1,6 @@
 # Campus & City Quest
 
-> A gamified, mobile-friendly onboarding web app for incoming international students at **DHBW Heilbronn** — visit campus places, answer trivia, climb the leaderboard.
+> A gamified, mobile-friendly onboarding web app for incoming international students at **DHBW Heilbronn** — verify your location at campus places, answer quiz questions, earn points, climb the leaderboard.
 
 **Project no.** DHBW-INT-2027-01 · **Course:** Business Processes and their Implementation (Project Planning, Incomings 2026) · **Lecturer:** Prof. Dr. Aliona von der Trenck
 
@@ -12,13 +12,17 @@ Every team member reads these before working:
 
 | # | Document | What it is |
 |---|---|---|
-| 1 | **This README** | The briefing: what we build, why, who, when |
-| 2 | [requirements.md](requirements.md) | What to install (npm only) and which commands to run |
-| 3 | [Git Basics](#5-git-basics--learn-git-in-10-minutes) (below) + [docs/git-workflow.md](docs/git-workflow.md) | **New to Git? Start with the Git Basics.** Then the mandatory branching strategy and workflow |
-| 4 | [CLAUDE.md](CLAUDE.md) | Rules for AI assistants (and for us when using them) incl. AI logging |
-| 5 | [docs/project_handbook.md](docs/project_handbook.md) | Full project plan: scope, WBS, schedule, roles, effort, risks, budget, tools |
-| 6 | [project_chater.md](project_chater.md) | Project charter (one-page agreement) |
-| 7 | [project_brief.md](project_brief.md) | Original pitch (scope has since changed — see handbook) |
+| 1 | **This README** | The briefing: what we build, the rules in short, who, when |
+| 2 | [docs/business-rules.md](docs/business-rules.md) | **Source of truth:** the 25 business rules (BR01–BR25), resolved ambiguities, scoring formula with 15 worked examples, state machine, 25 acceptance checks |
+| 3 | [docs/data-model.md](docs/data-model.md) | The 13 entities (ER diagram), constraints, seed data, proposed additions |
+| 4 | [docs/geofencing.md](docs/geofencing.md) | How location verification works |
+| 5 | [docs/question-bank.md](docs/question-bank.md) | Where we write and review the quiz questions (76 needed) |
+| 6 | [docs/traceability.md](docs/traceability.md) | Rule → work package → entity → test matrix |
+| 7 | [requirements.md](requirements.md) | What to install (npm only) and which commands to run |
+| 8 | [Git Basics](#5-git-basics--learn-git-in-10-minutes) (below) + [docs/git-workflow.md](docs/git-workflow.md) | **New to Git? Start with the Git Basics.** Then the mandatory branching strategy |
+| 9 | [CLAUDE.md](CLAUDE.md) | Rules for AI assistants (and for us when using them) incl. AI logging |
+| 10 | [docs/project_handbook.md](docs/project_handbook.md) | The project plan: scope, WBS, schedule, roles, effort, risks, budget, tools |
+| 11 | [project_brief.md](project_brief.md) · [project_chater.md](project_chater.md) | Project brief and charter |
 
 > **AI assistants:** read `CLAUDE.md` and `docs/git-workflow.md` before processing any prompt.
 
@@ -27,30 +31,64 @@ Every team member reads these before working:
 ## 1. The Briefing
 
 ### The problem
-Incoming international students face a steep learning curve in their first weeks: they struggle to find campus facilities (canteen, library, card top-up area, check-up area, …). Static PDF guides are unengaging and rarely read.
+Incoming international students face a steep learning curve in their first weeks: they struggle to find campus facilities. Static PDF guides are unengaging and rarely read.
 
 ### The solution
-A mobile-responsive **web app** (no app-store download, no extra hardware — just the student's phone) that uses **live location** to make sure students really visit the places:
+A mobile-responsive **web app** (no app-store download, no extra hardware — just the student's phone). Students visit **8 pilot checkpoints** on campus, prove with **live location** that they are there, answer a short quiz about the place and earn points.
 
-1. The student opens the app, accepts the location consent and walks to one of **5 campus checkpoints**.
-2. When arrival is verified, the **place information** unlocks (≤ 3 s). Reading has **no time limit**.
-3. When ready, the student presses **Start quiz**: 5 questions about the place, **5-minute timer**, **≥ 80% correct to pass**.
-4. The student must **stay at the place**: leaving for more than **30 seconds** cancels the attempt (retry after a 2-minute cooldown).
-5. Points reward **first try, speed and number of correct answers**; **live leaderboards** (individual, duo, nationality) show the ranking.
+**Flow**
+
+1. **Log in** with a one-time password (OTP) sent to the school e-mail (must end with `heilbronn.dhbw.de`). First-time users enter first/last name (optional picture and nickname). Optionally join or create a **team** (1–5 members) by invitation.
+2. **Go to a checkpoint.** The app verifies the location when you start an attempt. Poor GPS accuracy or denied permission? Just check again — it costs no attempt and starts no timer.
+3. **Take the quiz:** 5 questions (Mensa, Library, Building B, Building C) or 3 questions (Containers, CAS Cafe, Care.box and Shop.box, Campus Garden); **1 minute per question**; a wrong answer shows the right one on the spot; no retries.
+4. **Pass** with 4 of 5 or 2 of 3 correct. If you fail or time runs out you can try again; a checkpoint is done for good once passed.
+5. **Earn points** (below) and see the **solo** and **team leaderboards**.
+
+### The 8 checkpoints
+
+| Checkpoint | Questions per attempt | Hard-question option (attempt 1) | Pass at |
+|---|---|---|---|
+| Mensa | 5 | yes | 4/5 |
+| Library | 5 | yes | 4/5 |
+| Building B | 5 | yes | 4/5 |
+| Building C | 5 | yes | 4/5 |
+| Containers | 3 | no | 2/3 |
+| CAS Cafe | 3 | no | 2/3 |
+| Care.box and Shop.box | 3 | no | 2/3 |
+| Campus Garden | 3 | no | 2/3 |
+
+### Scoring in short (details and examples: [business-rules.md](docs/business-rules.md) §3)
+
+| Item | Points |
+|---|---|
+| Normal question correct | 1,000 |
+| Hard question correct | 2,000 (wrong = 0, only the Full Clear bonus is lost) |
+| Time Bonus | 1 per whole second left (only on a passed attempt) |
+| Full Clear Bonus | 200 when every question is correct |
+| Attempt multiplier (applied **after** bonuses) | attempt 1: 100% · 2: 85% · 3: 70% · 4: 55% · 5: 40% · 6 and later: 0% |
+| Rounding | Fractions are rounded up (BR04) |
+
+`points = (correct-answer points + time bonus + full clear) × multiplier`. Hard question: on attempt 1 only, if questions 1–4 are correct you may swap question 5 for a hard one. Points are credited only when the attempt ends. All point values live in database tables, not in code (BR11).
+
+### Leaderboards
+
+- **Solo:** total points per student. **Team:** average of the members' totals (only teams with ≥ 2 members; only visible to students in a team).
+- Equal scores share a rank number; the student/team that reached the score earlier is listed first (BR24).
 
 ### Goals (measurable)
+
 | Goal | Target |
 |---|---|
-| Core web app | Mobile-responsive, secure login, ≥ 50 simultaneous sessions |
-| Location checkpoints | 5 geofenced campus places verified by live location |
-| Quizzes | Info ≤ 3 s after arrival; first question ≤ 1.5 s after Start; 5-minute timer; pass at ≥ 80%; no points away from the place |
-| Campus completion | ≥ 90% of incoming international students complete all campus checkpoints within 30 days (verified in the project via a pilot with 10 volunteers) |
+| Rules | All 25 business rules implemented, each traceable to a test |
+| Scoring | The 15 worked examples in business-rules §3.3 pass exactly |
+| Performance | ≥ 50 simultaneous sessions; first question ≤ 1.5 s after the quiz starts |
+| Campus completion | ≥ 90% of incoming international students complete all campus checkpoints within 30 days (verified in the project by a pilot with 10 volunteers) |
 
 ### Scope (MoSCoW summary)
-- **Must:** web app + authentication, 5 live-location checkpoints, read-first info + quiz (5-minute timer, ≥ 80% pass, 30-s leave rule), scoring, privacy (consent, no coordinates stored).
-- **Should:** 10+ checkpoints (vending machines, department wings), individual/duo/nationality leaderboards.
+- **Must:** everything in BR01–BR25 — login and sessions, sign-up, teams and invitations, 8 checkpoints, location verification, quiz engine, scoring, leaderboards, content in the database, privacy.
+- **Should:** read-first info page per checkpoint.
 - **Could:** weekly streak reminders, random time-based events.
-- **Won't:** supermarket and clothing-store locators (removed for now), native iOS/Android apps, NFC tags / student-card readers (replaced by live location), changes to official university databases.
+- **Won't:** supermarket/clothing-store locators, native apps, NFC/student-card readers, duo and nationality leaderboards, admin UI, leaving/removing team members.
 
 Details: [docs/project_handbook.md §1](docs/project_handbook.md).
 
@@ -63,7 +101,7 @@ Details: [docs/project_handbook.md §1](docs/project_handbook.md).
 | **Yi Heng** | Project Lead |
 | **Catalina** | UI/UX & Frontend Developer |
 | **Ryan** | Backend & Database Engineer |
-| **Yuri** | Location & Integration Specialist |
+| **Yuri** | Location & Integration Specialist (login, e-mail, location) |
 | **Akil** | QA & Documentation Lead |
 
 Client: DHBW International Office (contact to be confirmed). Escalation: team member → project lead → lecturer.
@@ -76,14 +114,14 @@ Client: DHBW International Office (contact to be confirmed). Escalation: team me
 
 | Milestone | Date |
 |---|---|
-| M1 UI/UX wireframes and architecture approved | 20.10.2026 |
-| M2 Core web app, database and location-verification prototype functional | 02.11.2026 |
-| M3 5 locations populated with trivia; integration testing complete | 10.11.2026 |
+| M1 UI/UX wireframes, ER model and architecture approved | 20.10.2026 |
+| M2 OTP login, 8 checkpoints and location check working | 02.11.2026 |
+| M3 Full quiz, scoring and leaderboards; 76 questions loaded; integration tests done | 10.11.2026 |
 | M4 Pilot complete; time-tracking reports final | 16.11.2026 |
 
-Course deadlines: planning submission **19.10.2026, 12:15** · final presentation 18.11.2026 (16.11. tbd) · final report 07.12.2026.
+Course deadlines: planning submission 19.10.2026, 12:15 · final presentation 18.11.2026 (16.11. tbd) · final report 07.12.2026.
 
-Effort: 145 h total. Gantt chart and critical path: [docs/project_handbook.md §3](docs/project_handbook.md).
+Effort: **230 h** total (about 46 h per person). Gantt chart and critical path: [docs/project_handbook.md §3](docs/project_handbook.md).
 
 ---
 
@@ -331,8 +369,13 @@ campus-city-quest/
 ├── eslint.config.js, .prettierrc, .env.example
 ├── CLAUDE.md               rules for AI assistants + AI logging
 ├── project_chater.md       project charter
-├── project_brief.md        original pitch
+├── project_brief.md        project brief (+ archived original pitch)
 ├── docs/
+│   ├── business-rules.md   BR01-BR25, scoring, state machine (source of truth)
+│   ├── data-model.md       13 entities, constraints, seed data
+│   ├── geofencing.md       location verification architecture
+│   ├── question-bank.md    quiz questions to write and review
+│   ├── traceability.md     rule -> work package -> test matrix
 │   ├── git-workflow.md     branching strategy and workflow
 │   └── project_handbook.md full project plan
 ├── ai-logs/                one folder per member (catalina, yuri, ryan, yi_heng, akil)
@@ -351,7 +394,8 @@ campus-city-quest/
 | Time tracking | GitLab `/estimate` and `/spend` on every issue |
 | Team chat | Discord |
 | Dev tooling | npm: ESLint, Prettier, Vitest |
-| Location | Browser Geolocation API + Wake Lock (HTTPS; real Android/iOS test phones) |
+| Location | Browser Geolocation API (HTTPS; real Android/iOS test phones) |
+| E-mail | SMTP server or provider for OTP e-mails |
 | AI | Claude Code and others — always disclosed and logged |
 
 **Tech stack:** the web framework/database are decided in WBS 2.2 (architecture). Until then only the tooling above is installed.
@@ -363,8 +407,8 @@ campus-city-quest/
 1. **Track your time** in GitLab (hours, not minutes) for every task — research, meetings and documentation count. Use one label per issue: `cat::conception`, `cat::implementation` or `cat::organisation`. Hours are reviewed with the lecturer.
 2. **Log every AI session** in `ai-logs/[your_name]/YYYY-MM-DD-[topic].md` (date, objective, prompts used, decisions made — format in [CLAUDE.md](CLAUDE.md)). AI use is allowed but must be disclosed and critically reflected; the final presentation and report each end with a section **"Use of AI Tools"**.
 3. **Never commit secrets:** no `.env`, no passwords, no API keys.
-4. **Protect personal data:** location is personal data — ask for consent, store only "inside the radius yes/no + time", never log or commit raw coordinates.
-5. **Keep to the plan:** work on issues linked to a work package (WBS code); scope changes go through the project lead.
+4. **Protect personal data:** e-mail, names, pictures and location are personal data — ask for location consent, store only "inside the radius yes/no + time", never log or commit raw coordinates, never store OTP codes or session tokens in plain text.
+5. **Keep to the plan and the rules:** work on issues linked to a work package (WBS code) and name the business rules (BR..) you implement; never hard-code points, multipliers or bonuses (they live in the database, BR11); scope or rule changes go through the project lead and are written into `docs/business-rules.md` first.
 6. **Use npm only** and run `npm run check` before every push.
 
 ---

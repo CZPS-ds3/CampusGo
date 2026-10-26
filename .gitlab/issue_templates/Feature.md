@@ -5,6 +5,9 @@
 ## User Story
 As a [type of user], I want [goal] so that [benefit].
 
+## Business rules covered
+BR__ (see docs/business-rules.md and docs/traceability.md)
+
 ## Acceptance Criteria
 - [ ] 
 - [ ] 
