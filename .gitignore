@@ -91,3 +91,9 @@ temp/
 
 # Arena tournament scratch files
 .arena/
+
+# ---------- Test and build output ----------
+playwright-report/
+test-results/
+blob-report/
+frontend/dist/

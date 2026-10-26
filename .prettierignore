@@ -4,3 +4,8 @@ build/
 coverage/
 package-lock.json
 *.md
+.arena/
+design/prototype/
+playwright-report/
+test-results/
+uploads/
