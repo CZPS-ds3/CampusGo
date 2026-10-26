@@ -14,7 +14,7 @@ import { storeProfilePicture } from './services/pictures.js';
 import { createQuizService } from './services/quiz.js';
 import { GENERIC_INVITE_MESSAGE, createTeamService } from './services/teams.js';
 
-const name = z.string().trim().min(1).max(60);
+const name = z.string().trim().min(1).max(50);
 const email = z.string().max(320);
 const id = z.coerce.number().int().positive();
 const schemas = {
@@ -24,7 +24,7 @@ const schemas = {
     otp: z.string().max(12),
     firstName: name.optional(),
     lastName: name.optional(),
-    nickname: z.string().trim().max(30).optional(),
+    nickname: z.string().trim().max(20).optional(),
   }),
   location: z.object({
     latitude: z.number().min(-90).max(90),
@@ -33,7 +33,7 @@ const schemas = {
   }),
   startAttempt: z.object({ checkpointId: id }),
   answer: z.object({ optionId: id, questionNumber: z.number().int().min(1).max(5).optional() }),
-  team: z.object({ name: z.string().trim().min(2).max(40) }),
+  team: z.object({ name: z.string().trim().min(2).max(30) }),
   invite: z.object({ email }),
 };
 

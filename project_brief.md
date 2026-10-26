@@ -5,7 +5,7 @@
 > The current, binding description of behaviour is in [docs/business-rules.md](docs/business-rules.md). This brief is the short version for newcomers. The original pitch is kept at the bottom for history.
 
 ## 1. Idea
-An interactive, gamified onboarding web app for incoming international students at DHBW Heilbronn, inspired by Pokémon GO. Instead of reading a static PDF guide, students explore the campus: they go to **8 checkpoints**, prove with their **live location** that they are there, answer a short quiz about the place and earn points. They can compete alone or in teams.
+An interactive, gamified onboarding web app for incoming international students at DHBW Heilbronn, played like a location-based game. Instead of reading a static PDF guide, students explore the campus: they go to **8 checkpoints**, prove with their **live location** that they are there, answer a short quiz about the place and earn points. They can compete alone or in teams.
 
 ## 2. How it works
 1. **Log in** with a one-time password sent to the school e-mail (it must end with `heilbronn.dhbw.de`). New users enter first and last name; a profile picture and nickname are optional. The login always answers: "If the account exists, an email containing the OTP has been sent."
@@ -40,7 +40,7 @@ Project Pitch: "Campus & City Quest" (Working Title)
 An interactive, gamified onboarding web application for incoming international students at DHBW Heilbronn.
 
 1. The Core Concept
-Inspired by Pokémon GO, our web application turns settling into Heilbronn and DHBW into an interactive adventure. Instead of just reading a static PDF guide, incoming international students will explore the campus and the city in a gamified way, helping them master daily life, find essential resources, and bond with their peers right from day one.
+Our web application, played like a location-based game, turns settling into Heilbronn and DHBW into an interactive adventure. Instead of just reading a static PDF guide, incoming international students will explore the campus and the city in a gamified way, helping them master daily life, find essential resources, and bond with their peers right from day one.
 
 2. Key Features
 Campus Exploration & QR Quests:

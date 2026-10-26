@@ -558,7 +558,15 @@ export function createQuizService({ pool, config, clock }) {
     };
   }
 
+  /** R-63: location rows are only kept for a short time (default 7 days). */
+  async function purgeOldLocationChecks() {
+    await pool.query('DELETE FROM location_checks WHERE checked_at < ?', [
+      at(clock.now() - config.locationRetentionDays * 24 * 3600 * 1000),
+    ]);
+  }
+
   return {
+    purgeOldLocationChecks,
     listCheckpoints,
     locationCheck,
     startAttempt,

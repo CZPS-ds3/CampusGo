@@ -436,6 +436,22 @@ describe('BR17 BR18 BR19 BR20 BR21 scoring through the API', () => {
     });
   });
 
+  it('BR11 a changed table value changes the points without a code change', async () => {
+    await ctx.pool.query('UPDATE difficulty SET points_awarded = 500 WHERE difficulty = ?', [
+      'NORMAL',
+    ]);
+    await ctx.pool.query('UPDATE scoring_multiplier SET percentage = 50 WHERE attempt_number = 1');
+    const { agent } = await ctx.login('tables');
+    const attempt = await ctx.startAttempt(agent, 'Containers');
+    const last = await ctx.answerPattern(agent, attempt, [true, true, true]);
+    // (3 x 500 + 180 time + 200 full clear) x 50% = 940
+    expect(last.body.result).toMatchObject({
+      basePoints: 1500,
+      multiplierPercent: 50,
+      pointsEarned: 940,
+    });
+  });
+
   it('BR16 every attempt is a new record and points are credited only when the attempt ends', async () => {
     const { agent } = await ctx.login('records');
     const attempt = await ctx.startAttempt(agent, 'Library');

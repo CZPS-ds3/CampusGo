@@ -35,3 +35,22 @@ Keep this file up to date: every merge request names the BR IDs it implements (i
 ## Status tracking
 
 Track Designed / Built / Tested per rule with GitLab issue labels (`br::BR01` ... `br::BR25`) or add a column per milestone here. The final report shows this matrix as the requirement-to-test traceability.
+
+## Automated tests by file
+
+Run with `npm test` (backend and frontend) and `npm run test:e2e` (browser). Every test name starts with or contains the BR id, or "check N" for the acceptance checks of [business-rules.md](business-rules.md) §8.
+
+| File | What it proves | Rules and checks |
+|---|---|---|
+| `backend/tests/scoring.test.js` | The 15 worked examples of §3.3 exactly, integer rounding, team average, ranks 1-1-3, values read from the table passed in | BR04, BR11, BR14, BR16-BR21; checks 21, 24 |
+| `backend/tests/auth.test.js` | Domain rule (three bad and three good addresses), identical answer for known and unknown address, OTP hash storage, lock after 5 failures, expiry, reuse, one session per student, inactivity expiry, token hash, picture type and size | BR01-BR03; checks 1-4 |
+| `backend/tests/quiz.test.js` | Eight checkpoints, inactive checkpoint, poor accuracy and outside radius use no attempt, no coordinates stored, start gate, 3/5 distinct questions and deadlines, bank limit, simultaneous starts, resume after new login, right answer revealed only after a wrong one, wrong order, double submit, expiry at ±1 ms, examples 1, 2, 3, 5, 8, 9, 7 through the API, hard offer rules, refresh keeps state, completed checkpoint is final, solo ranking ties | BR07-BR09, BR12-BR25; checks 5-15, 20, 22, 23, 25 |
+| `backend/tests/teams.test.js` | Team creation and uniqueness, invitations (accept, reject, expiry at exactly 24 h, generic answer, other people's invitations), last free place race, invalidation on team creation or acceptance, team board access, team score, team ranking ties, no e-mail or last name shown to others | BR04-BR06, BR24; checks 16-20 |
+| `frontend/tests/otp.test.jsx` | OTP boxes: auto-advance, paste, Backspace, only digits, six digits | BR01 |
+| `frontend/tests/menu.test.jsx` | Round menu: five stones, current page marked, page behind inert, Escape, arrow keys, Tab trap, scrim | UI spec |
+| `frontend/tests/timer.test.jsx` | Server-driven countdown, clock skew correction, no "expired" flash | BR13, BR22 |
+| `frontend/tests/mock-api.test.js` | The in-browser mock follows the same rules (domain, location gate, 5 distinct questions, reveal, full clear, final checkpoint, team board closed) | BR02, BR06, BR12-BR14, BR18, BR21 |
+| `frontend/e2e/*.spec.js` | Whole journey on 6 screen sizes (360, 390, 430, 768, 1024, 1280 px wide), no sideways scrolling, menu by mouse and keyboard, wrong answer, refresh, poor accuracy, far away | BR12, BR14, BR25, UI spec |
+| `frontend/e2e-fullstack/smoke.spec.js` | Sign-up with a real code, check-in, quiz and ranking through Vite, Express and MySQL | BR01, BR12, BR16, BR24 |
+
+Not automated yet: check 22 for log files (reviewed in code: the error handler never logs bodies), the real-phone location test, and the time-zone behaviour of the production server.

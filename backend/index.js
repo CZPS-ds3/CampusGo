@@ -18,9 +18,11 @@ const sweep = setInterval(() => {
 }, EXPIRY_SWEEP_MS);
 
 const housekeeping = setInterval(() => {
-  Promise.all([services.auth.purgeOldOtps(), services.teams.expireOldInvitations()]).catch(
-    (error) => console.error(`[housekeeping] ${error.message}`),
-  );
+  Promise.all([
+    services.auth.purgeOldOtps(),
+    services.teams.expireOldInvitations(),
+    services.quiz.purgeOldLocationChecks(),
+  ]).catch((error) => console.error(`[housekeeping] ${error.message}`));
 }, HOUSEKEEPING_MS);
 
 const server = app.listen(config.port, () => {

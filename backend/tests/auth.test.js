@@ -108,6 +108,25 @@ describe('BR01 BR02 OTP login', () => {
   });
 });
 
+describe('input limits (R-35)', () => {
+  it('names and nicknames longer than the database allows are refused with 400, not 500', async () => {
+    const email = `long@${DOMAIN}`;
+    await requestOtp(email);
+    await ctx.mailer.idle();
+    const otp = ctx.mailer.lastTo(email).text.match(/\b(\d{6})\b/)[1];
+    const res = await request(ctx.app)
+      .post('/api/auth/verify')
+      .send({ email, otp, firstName: 'A', lastName: 'B', nickname: 'x'.repeat(21) });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('INVALID_INPUT');
+  });
+
+  it('unicode and long-but-valid names are stored and shown correctly', async () => {
+    const { student } = await ctx.login('uni', { firstName: 'Zoë-Łukasz', lastName: 'Ñandú' });
+    expect(student.displayName).toBe('Zoë-Łukasz Ñ.');
+  });
+});
+
 describe('BR03 sessions', () => {
   it('check 4: a second login ends the first session', async () => {
     const first = await ctx.login('twice');

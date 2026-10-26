@@ -169,7 +169,7 @@ The source template has 8 normal rows for Building B, Building C and Library, an
 | Lifetime | 10 minutes (`expires_at = created_at + 10 min`) |
 | Use | Single use: `is_used = true` on success |
 | Failed entries | Maximum 5 per OTP (`failed_attempts`); at 5 the OTP is dead |
-| Resend | At most 1 new OTP per e-mail per 60 seconds and 5 per hour; excess requests get the generic message but no new mail |
+| Resend | At most 1 new OTP per e-mail per 30 seconds and 5 per hour; excess requests get the generic message but no new mail |
 | New OTP | A newer OTP for the same e-mail invalidates every older unused one (marks it used) |
 | Storage | Only `code_hash` (keyed hash, for example HMAC with a server secret) is stored, never the code |
 | Comparison | Constant time |

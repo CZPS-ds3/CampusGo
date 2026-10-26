@@ -19,7 +19,7 @@
 
 ## 2) WHY? — Impact, Benefits and Strategic Relevance
 
-- Accelerates the adaptation of international students through gamification (Pokémon GO style).
+- Accelerates the adaptation of international students through gamification (a location-based game).
 - Reduces initial culture shock and practical stress by turning campus orientation into a game: visit places, answer questions about them, earn points.
 - Fosters community building through teams (1–5 members) and live solo and team leaderboards.
 - Showcases innovative technical problem-solving: live-location verification, a server-authoritative quiz engine and a rule-driven scoring system.

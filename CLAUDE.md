@@ -5,7 +5,7 @@
 
 ## Project Overview
 
-**Campus & City Quest** (Project No. DHBW-INT-2027-01) is a gamified, mobile-responsive web application that helps incoming international students at DHBW Heilbronn explore the campus (Pokémon GO style) by verifying their location at 8 checkpoints and taking short quizzes.
+**Campus & City Quest** (Project No. DHBW-INT-2027-01) is a gamified, mobile-responsive web application that helps incoming international students at DHBW Heilbronn explore the campus like a location-based game by verifying their location at 8 checkpoints and taking short quizzes.
 
 **Source of truth:** `docs/business-rules.md` (BR01-BR25 + resolutions R-nn + scoring examples + acceptance checks). Entities and constraints: `docs/data-model.md`. Location: `docs/geofencing.md`. Questions: `docs/question-bank.md`. Rule-to-test matrix: `docs/traceability.md`. Plan: `docs/project_handbook.md`. If code, tests or other docs contradict `docs/business-rules.md`, the business rules win; to change a rule, edit that file first (with the team's approval).
 
@@ -28,42 +28,38 @@ Team: Catalina, Yuri, Ryan, Yi Heng (Project Manager), Akil.
 ```
 ai-logs/<member>/     Per-member AI session logs (catalina, yuri, ryan, yi_heng, akil)
 .gitlab/              Issue and merge request templates
-CLAUDE.md             This file
-requirements.md       What to install (npm only)
-package.json          npm scripts and dev dependencies (ESLint, Prettier, Vitest)
-docs/git-workflow.md  Git branching strategy and workflow
-project_chater.md     Project charter
-project_brief.md      Project brief
-docs/business-rules.md   Business rules BR01-BR25 (SOURCE OF TRUTH)
-docs/data-model.md       Entities, constraints, seed data
-docs/geofencing.md       Location verification architecture
-docs/question-bank.md    Quiz questions
-docs/traceability.md     Rule -> work package -> test matrix
-docs/project_handbook.md Full project plan
+backend/              Express API (index.js, src/routes|services|db|middleware, tests/, .env.example)
+frontend/             React + Vite app (src/api|components|hooks|pages|styles, tests/, e2e/, .env.example)
+design/               Architecture, ER diagram, API docs, decisions, UI spec, prototype reference, screenshots
+docs/                 business-rules.md (SOURCE OF TRUTH), data-model, geofencing, question-bank, traceability, git-workflow, project_handbook
+docker-compose.yml    MySQL 8.4 for development and tests
+scripts/              setup.mjs (after npm install), ensure-db.mjs (starts the database)
+CLAUDE.md, README.md, requirements.md, project_brief.md, project_chater.md
 ```
-
-Application code is added under `src/` and tests under `tests/` once development starts.
 
 ## Build / Run Commands
 
-The project uses Node.js (LTS, v20 or newer) and **npm only** (no yarn/pnpm). See `requirements.md`.
+The project uses Node.js (LTS, v20 or newer), **npm only** (no yarn/pnpm), npm workspaces (`frontend`, `backend`) and Docker Desktop for MySQL. See `requirements.md`.
 
 | Task | Command |
 |------|---------|
-| Install dependencies | `npm ci` |
-| Lint (ESLint) | `npm run lint` |
-| Lint and auto-fix | `npm run lint:fix` |
-| Check formatting (Prettier) | `npm run format:check` |
-| Format | `npm run format` |
-| Run tests (Vitest) | `npm test` |
-| **All checks** | `npm run check` |
-
-Start/build scripts (`dev`, `build`) are added to `package.json` once the application stack is chosen (WBS 2.2); do not invent them before then.
+| Install (also creates the `.env` files) | `npm install` (clean: `npm ci`) |
+| Start MySQL, migrate, seed, run API (3000) and web app (5173) | `npm run dev` |
+| Web app only with in-browser mock API (no Docker) | `npm run dev:mock` |
+| Lint / auto-fix (ESLint, zero warnings) | `npm run lint` / `npm run lint:fix` |
+| Check formatting / format (Prettier) | `npm run format:check` / `npm run format` |
+| Backend + frontend tests (Vitest) | `npm test` |
+| Browser tests on phone, tablet, laptop sizes (Playwright) | `npm run test:e2e` |
+| Smoke test through the real stack | `npm run test:e2e:full` |
+| Build the web app | `npm run build` |
+| Database | `npm run db:up`, `db:down`, `db:reset`, `db:migrate`, `db:seed` |
+| **All checks** (lint + format + tests + build) | `npm run check` |
 
 Rules:
 - Use `npm ci` for a clean install; use `npm install <pkg>` only when deliberately adding a dependency, and commit `package-lock.json`.
-- Never commit `node_modules/`, build output, or `.env` files.
-- Secrets (database URL, session secret, SMTP credentials) live in `.env` locally and are documented by name only in `.env.example`. Never hard-code or print them.
+- Never commit `node_modules/`, build output, uploads or `.env` files.
+- Secrets (database URL, session and OTP secrets, SMTP credentials) live in `backend/.env` and are documented by name only in `backend/.env.example`. Never hard-code or print them.
+- Seed data (checkpoint coordinates, questions) is **placeholder** until replaced; never present it as real.
 - `pylint` is a Python tool (pip, not npm). It is only relevant if Python code is ever added; see `requirements.md` section 8.
 
 ## Linting / Testing

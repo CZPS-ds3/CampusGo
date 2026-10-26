@@ -1,0 +1,54 @@
+/* Design tokens. Dark ink is the ground of game surfaces; paper and grey panels carry reading content. */
+:root {
+  --ink: #0b0e1f;
+  --ink-2: #151a38;
+  --ink-3: #232a55;
+  --red: #ff2e4d;
+  --dhbw-red: #e2001a;
+  --volt: #ffd60a;
+  --cyan: #19e3ff;
+  --mint: #2bffa6;
+  --paper: #f4f1e8;
+  --muted: #9aa3d6;
+  --warn: #ff8a00;
+  --grey-1: #f2f3f4;
+  --grey-2: #dfe1e4;
+  --text-1: #292a2d;
+  --text-2: #2f3033;
+
+  --font-display: 'Anton', 'Arial Narrow', sans-serif;
+  --font-body: 'Rubik', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-8: 32px;
+  --s-12: 48px;
+
+  --r-1: 12px;
+  --r-2: 16px;
+  --r-3: 24px;
+
+  --hard: 4px 4px 0 #000;
+  --skew: -6deg;
+  --skew-inv: 6deg;
+  --ease-pop: cubic-bezier(0.2, 0.9, 0.25, 1.25);
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  --z-banner: 45;
+  --z-scrim: 40;
+  --z-menu: 50;
+  --z-trigger: 60;
+  --z-sheet: 70;
+  --z-toast: 80;
+  --z-expired: 90;
+
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-t: env(safe-area-inset-top, 0px);
+  --trigger: 64px;
+  --menu-clearance: calc(var(--trigger) + 32px + var(--safe-b));
+}

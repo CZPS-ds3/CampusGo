@@ -50,6 +50,7 @@
 | S1 | **Read-first info page** per checkpoint (after the location check, before the quiz, no timer) | – | Shown before the quiz for all 8 places | Should |
 | C1 | Weekly automated challenge-streak reminders | – | – | Could |
 | C2 | Random time-based events giving extra chances to compete | – | – | Could |
+| C3 | City expansion: more places around Heilbronn after the campus pilot (only a teaser page exists in the pilot) | – | – | Could |
 | W1 | City-wide supermarket (Rewe, Lidl) and clothing-store locators | – | Removed from scope | **Won't** |
 | W2 | Native mobile apps (App Store / Google Play) | – | Web app only | **Won't** |
 | W3 | NFC tags, student-card reading, physical reader stations | – | Replaced by live-location verification | **Won't** |
@@ -372,7 +373,7 @@ Revenue: none expected (non-profit student service). Follow-up costs: hosting, e
 | Documentation & wiki | GitLab wiki + repository (`docs/`) | Handbook, rules, minutes, decisions | Akil |
 | Version control | GitLab repository (`main` ← `preproduction` ← `wip/[name]/feature` and `wip/[name]/bugfix`), see [git-workflow.md](git-workflow.md) | Code, versions, reviews | Ryan |
 | Dev tooling | npm only: ESLint, Prettier, Vitest — see [requirements.md](../requirements.md) | Lint, format, test | Everyone |
-| Backend data | Relational database (engine chosen in WBS 2.2) + seed scripts | Rules and content in data (BR11) | Ryan |
+| Backend data | MySQL 8.4 (Docker Compose, decided in WBS 2.2) + migrations and seed scripts | Rules and content in data (BR11) | Ryan |
 | E-mail | SMTP server or provider | OTP e-mails | Yuri |
 | Location | Browser Geolocation API (HTTPS; `localhost` in development) | Location verification | Yuri |
 | Test devices | Real Android and iOS phones | On-site calibration and tests | Akil |
