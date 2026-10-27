@@ -9,6 +9,8 @@ The executable schema is [backend/src/db/migrations/001_init.sql](../../backend/
 - Migrations are plain `.sql` files applied in name order by `backend/src/db/migrate.js`; applied files are listed in `schema_migrations`.
 - `npm run db:seed` loads the scoring tables (BR11), the 8 pilot checkpoints and placeholder questions. Coordinates, radii and questions in the seed are **placeholders**.
 
+Migration `002_avatar_and_facts.sql` adds `students.avatar_preset` (drawn avatar, 0 to 5) and the table `checkpoint_facts` (the read-first info page, three placeholder facts per checkpoint).
+
 ## Rules the database enforces itself
 
 MySQL has no partial unique indexes, so a stored generated column that is `NULL` when the row does not count, plus a unique key on it, is used instead.

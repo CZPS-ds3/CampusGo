@@ -30,10 +30,10 @@ const CHECKPOINTS = [
 
 const MULTIPLIERS = [100, 85, 70, 55, 40, 0];
 const OTHERS = [
-  { id: 101, displayName: 'Mia K.', points: 6290 },
-  { id: 102, displayName: 'Jonas', points: 5320 },
-  { id: 103, displayName: 'Aiko T.', points: 3100 },
-  { id: 104, displayName: 'Sara L.', points: 1200 },
+  { id: 101, displayName: 'Mia K.', points: 6290, avatarPreset: 1 },
+  { id: 102, displayName: 'Jonas', points: 5320, avatarPreset: 2 },
+  { id: 103, displayName: 'Aiko T.', points: 3100, avatarPreset: 3 },
+  { id: 104, displayName: 'Sara L.', points: 1200, avatarPreset: 4 },
 ];
 
 const fresh = () => ({
@@ -91,14 +91,16 @@ export function createMockApi(ApiError, getUnauthorized) {
   const copy = (value) => JSON.parse(JSON.stringify(value));
   const checkpoint = (id) => CHECKPOINTS.find((c) => c.id === Number(id));
 
+  const rankFor = (total) => 1 + OTHERS.filter((o) => o.points > total).length;
   const publicStudent = () => ({
     ...state.student,
     totalPoints: totalPoints(),
+    rank: rankFor(totalPoints()),
     teamId: state.team ? 1 : null,
     locationConsent: state.consent,
   });
-  const totalPoints = () =>
-    Math.ceil(state.attempts.reduce((n, a) => n + (a.pointsExact ?? 0), 0) / 100);
+  const totalExact = () => state.attempts.reduce((n, a) => n + (a.pointsExact ?? 0), 0);
+  const totalPoints = () => Math.ceil(totalExact() / 100);
 
   const slotsFor = (cp, seed) => {
     const picked = [];
@@ -212,12 +214,16 @@ export function createMockApi(ApiError, getUnauthorized) {
       endReason: a.endReason,
       correctCount: a.correctCount,
       questionCount: cp.questionCount,
+      passThreshold: cp.passThreshold,
       basePoints: a.basePoints,
       timeBonus: a.timeBonus,
       fullClearBonus: a.fullClearBonus,
       multiplierPercent: a.multiplierPercent,
       pointsEarned: a.pointsEarned,
       totalPoints: totalPoints(),
+      rankBefore: rankFor(Math.ceil(Math.max(0, totalExact() - (a.pointsExact ?? 0)) / 100)),
+      rankAfter: rankFor(totalPoints()),
+      nextMultiplierPercent: MULTIPLIERS[Math.min(used + 1, 6) - 1],
       checkpointCompleted: state.attempts.some(
         (x) => x.checkpointId === a.checkpointId && x.status === 'passed',
       ),
@@ -239,8 +245,10 @@ export function createMockApi(ApiError, getUnauthorized) {
       pictureUrl: null,
       members: state.team.members.map((m) => ({
         ...m,
+        avatarPreset: m.self ? state.student.avatarPreset : (m.avatarPreset ?? 1),
         totalPoints: m.self ? totalPoints() : m.totalPoints,
       })),
+      pending: (state.team.pending ?? []).filter((p) => Date.parse(p.expiresAt) > Date.now()),
       size: state.team.members.length,
       score: Math.ceil(
         state.team.members.reduce((n, m) => n + (m.self ? totalPoints() : m.totalPoints), 0) /
@@ -266,7 +274,7 @@ export function createMockApi(ApiError, getUnauthorized) {
       save();
       return { message: 'If the account exists, an email containing the OTP has been sent.' };
     },
-    async verify({ email, otp, firstName, lastName, nickname }) {
+    async verify({ email, otp, firstName, lastName, nickname, avatarPreset }) {
       const clean = String(email).trim().toLowerCase();
       if (String(otp).replace(/\s/g, '') !== OTP)
         throw fail(400, 'INVALID_CODE', 'Invalid or expired code.');
@@ -278,6 +286,7 @@ export function createMockApi(ApiError, getUnauthorized) {
           firstName,
           lastName,
           nickname: nickname || null,
+          avatarPreset: avatarPreset ?? 0,
           displayName: nickname || `${firstName} ${lastName.charAt(0).toUpperCase()}.`,
           pictureUrl: null,
         };
@@ -313,6 +322,13 @@ export function createMockApi(ApiError, getUnauthorized) {
       save();
       return { pictureUrl: url };
     },
+    async setAvatarPreset(preset) {
+      needLogin();
+      state.student.avatarPreset = preset;
+      state.student.pictureUrl = null;
+      save();
+      return null;
+    },
     async consent() {
       needLogin();
       state.consent = true;
@@ -330,6 +346,8 @@ export function createMockApi(ApiError, getUnauthorized) {
             completed: mine.some((a) => a.status === 'passed'),
             attemptsUsed: mine.length,
             nextAttemptNumber: mine.length + 1,
+            bestScore: Math.max(0, ...mine.map((a) => a.pointsEarned ?? 0)),
+            facts: [1, 2, 3].map((n) => `PLACEHOLDER fact ${n} about ${c.name}.`),
           };
         }),
       };
@@ -492,6 +510,14 @@ export function createMockApi(ApiError, getUnauthorized) {
           `Please enter a school e-mail address (ending with ${DOMAIN}).`,
         );
       }
+      const taken = state.team.members.length + (state.team.pending ?? []).length;
+      if (taken < 5) {
+        state.team.pending = [
+          ...(state.team.pending ?? []),
+          { expiresAt: new Date(Date.now() + 24 * 3600e3).toISOString() },
+        ];
+        save();
+      }
       return { message: 'If the user exists and can be invited, an invitation has been sent.' };
     },
     async invitations() {
@@ -532,6 +558,7 @@ export function createMockApi(ApiError, getUnauthorized) {
         id: 1,
         displayName: state.student.displayName,
         pictureUrl: null,
+        avatarPreset: state.student.avatarPreset,
         points: totalPoints(),
         isYou: true,
       };

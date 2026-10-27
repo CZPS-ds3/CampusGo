@@ -14,6 +14,7 @@ erDiagram
     CHECKPOINTS ||--o{ ATTEMPTS : "is played in"
     CHECKPOINTS ||--o{ QUESTIONS : "owns"
     CHECKPOINTS ||--o{ LOCATION_CHECKS : "is checked by"
+    CHECKPOINTS ||--o{ CHECKPOINT_FACTS : "has read-first facts"
     DIFFICULTY ||--o{ QUESTIONS : "classifies"
     QUESTIONS ||--|{ OPTIONS : "has 4"
     ATTEMPTS ||--|{ ATTEMPT_QUESTIONS : "presents 3 or 5"
@@ -46,6 +47,7 @@ erDiagram
         string first_name
         string last_name
         string nickname
+        int avatar_preset
         int total_points
         bigint points_exact_x100
         datetime points_updated_at
@@ -116,6 +118,11 @@ erDiagram
         bigint invitee_id FK
         string status
         datetime expires_at
+    }
+    CHECKPOINT_FACTS {
+        bigint checkpoint_id PK
+        int position PK
+        string fact_text
     }
     LOCATION_CHECKS {
         bigint check_id PK

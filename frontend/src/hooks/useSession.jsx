@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { api, setUnauthorizedHandler } from '../api/client.js';
-import { copy } from '../i18n.js';
+import { t } from '../i18n.js';
 import { useToast } from './useToast.jsx';
 
 const SessionContext = createContext(null);
@@ -27,7 +27,7 @@ export function SessionProvider({ children }) {
   useEffect(() => {
     setUnauthorizedHandler(() => {
       setStudent((current) => {
-        if (current) toast.error(copy.errors.session);
+        if (current) toast.error(t('Your session ended. Please log in again.'));
         return null;
       });
     });

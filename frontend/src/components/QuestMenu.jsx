@@ -1,62 +1,88 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useLocation } from 'react-router-dom';
-import { copy } from '../i18n.js';
-import { Icon } from './icons.jsx';
+import { t } from '../i18n.js';
+import { GoBadge, Icon } from './icons.jsx';
 
 const ITEMS = [
-  { id: 'map', label: copy.nav.map, href: '/map', icon: 'map' },
-  { id: 'quests', label: copy.nav.quests, href: '/quests', icon: 'quests' },
-  { id: 'team', label: copy.nav.team, href: '/team', icon: 'team' },
-  { id: 'ranks', label: copy.nav.ranks, href: '/ranks', icon: 'ranks' },
-  { id: 'profile', label: copy.nav.profile, href: '/profile', icon: 'profile' },
+  { id: 'map', label: 'Map', href: '/map', icon: 'map' },
+  { id: 'quests', label: 'Quests', href: '/quests', icon: 'quests' },
+  { id: 'team', label: 'Team', href: '/team', icon: 'team' },
+  { id: 'ranks', label: 'Ranks', href: '/ranks', icon: 'ranks' },
+  { id: 'profile', label: 'Profile', href: '/profile', icon: 'profile' },
 ];
 
-const FOCUS_DELAY_MS = 300;
+const CLOSE_MS = 260;
+const FOCUS_DELAY_MS = 320;
+
+/** Which menu entry a path belongs to: the map, locate and info screens all sit under "Map". */
+function sectionOf(pathname) {
+  const hit = ITEMS.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
+  return hit ? hit.id : 'map';
+}
 
 /**
- * Plain round trigger at the bottom centre that opens a slanted, staggered "trail" of five stones.
- * While open the page behind is inert, Tab cycles between the trigger and the current stone, and the
- * arrow keys walk the stones (roving tabindex).
+ * The red GO badge opens five full-width bars (Map, Quests, Team, Ranks, Profile). While open the page
+ * behind is inert, Tab cycles between the badge and the current bar, and the arrow keys walk the bars.
+ * The badge shrinks while the page is scrolled down.
  */
 export function QuestMenu() {
-  const [open, setOpen] = useState(false);
+  const [phase, setPhase] = useState('closed');
   const [focusIndex, setFocusIndex] = useState(0);
+  const [spin, setSpin] = useState(0);
+  const [shrunk, setShrunk] = useState(false);
   const { pathname } = useLocation();
   const trigger = useRef(null);
-  const tiles = useRef([]);
+  const bars = useRef([]);
+  const lastY = useRef(0);
+  const open = phase === 'open';
 
-  const activeIndex = Math.max(
-    0,
-    ITEMS.findIndex((item) => pathname === item.href || pathname.startsWith(`${item.href}/`)),
-  );
+  const activeId = sectionOf(pathname);
+  const activeIndex = ITEMS.findIndex((item) => item.id === activeId);
 
   const close = useCallback((returnFocus = true) => {
-    setOpen(false);
+    setSpin((n) => n + 1);
+    setPhase('closing');
+    setTimeout(() => setPhase((current) => (current === 'closing' ? 'closed' : current)), CLOSE_MS);
     if (returnFocus) trigger.current?.focus();
   }, []);
 
   const openAt = useCallback((index) => {
     setFocusIndex(index);
-    setOpen(true);
+    setSpin((n) => n + 1);
+    setPhase('open');
   }, []);
 
-  // A navigation always closes the menu.
-  useEffect(() => setOpen(false), [pathname]);
+  // A navigation always closes the menu and brings the badge back to full size.
+  useEffect(() => {
+    setPhase('closed');
+    setShrunk(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    const onScroll = () => {
+      const y = window.scrollY;
+      if (y > lastY.current + 4) setShrunk(true);
+      else if (y < lastY.current - 4) setShrunk(false);
+      lastY.current = y;
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   // The page behind the menu cannot take focus or taps while it is open.
   useEffect(() => {
     const root = document.getElementById('root');
     if (!root) return undefined;
-    if (open) root.setAttribute('inert', '');
+    if (phase === 'open') root.setAttribute('inert', '');
     else root.removeAttribute('inert');
     return () => root.removeAttribute('inert');
-  }, [open]);
+  }, [phase]);
 
-  // Move focus to the chosen stone once the cascade is under way.
+  // Move focus to the chosen bar once the cascade is under way.
   useEffect(() => {
     if (!open) return undefined;
-    const id = setTimeout(() => tiles.current[focusIndex]?.focus(), FOCUS_DELAY_MS);
+    const id = setTimeout(() => bars.current[focusIndex]?.focus(), FOCUS_DELAY_MS);
     return () => clearTimeout(id);
     // Only when opening; later focus moves are done directly by the key handler.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -65,7 +91,7 @@ export function QuestMenu() {
   const moveTo = (index) => {
     const next = (index + ITEMS.length) % ITEMS.length;
     setFocusIndex(next);
-    tiles.current[next]?.focus();
+    bars.current[next]?.focus();
   };
 
   const onKeyDown = (event) => {
@@ -79,12 +105,12 @@ export function QuestMenu() {
       case 'ArrowUp':
       case 'ArrowRight':
         event.preventDefault();
-        moveTo(fromTrigger ? activeIndex : focusIndex + 1);
+        moveTo(fromTrigger ? activeIndex : focusIndex - 1);
         break;
       case 'ArrowDown':
       case 'ArrowLeft':
         event.preventDefault();
-        moveTo(fromTrigger ? activeIndex : focusIndex - 1);
+        moveTo(fromTrigger ? activeIndex : focusIndex + 1);
         break;
       case 'Home':
         event.preventDefault();
@@ -95,14 +121,14 @@ export function QuestMenu() {
         moveTo(ITEMS.length - 1);
         break;
       case 'Tab':
-        // Two stops by design: the trigger and the current stone. Arrows walk the rest.
+        // Two stops by design: the badge and the current bar. Arrows walk the rest.
         event.preventDefault();
-        if (fromTrigger) tiles.current[focusIndex]?.focus();
+        if (fromTrigger) bars.current[focusIndex]?.focus();
         else trigger.current?.focus();
         break;
       default: {
         const hit = ITEMS.findIndex(
-          (item) => item.label[0].toLowerCase() === event.key.toLowerCase(),
+          (item) => t(item.label)[0].toLowerCase() === event.key.toLowerCase(),
         );
         if (event.key.length === 1 && hit >= 0) moveTo(hit);
       }
@@ -110,55 +136,77 @@ export function QuestMenu() {
   };
 
   const onTriggerKeyDown = (event) => {
-    if (!open && event.key === 'ArrowUp') {
+    if (phase === 'closed' && event.key === 'ArrowUp') {
       event.preventDefault();
       openAt(ITEMS.length - 1);
     }
   };
 
+  const closing = phase === 'closing';
+
   return createPortal(
-    <nav className={`menu${open ? ' is-open' : ''}`} aria-label="Main" onKeyDown={onKeyDown}>
-      <div className="menu__scrim" onClick={() => close()} aria-hidden="true" />
-      <ul id="menu-panel" className="menu__panel" role="menu" aria-label="Main menu">
-        {ITEMS.map((item, index) => (
-          <li key={item.id} role="none" style={{ '--i': index }}>
-            <Link
-              ref={(node) => {
-                tiles.current[index] = node;
-              }}
-              role="menuitem"
-              className="tile"
-              to={item.href}
-              tabIndex={open && focusIndex === index ? 0 : -1}
-              aria-current={
-                index === activeIndex && pathname.startsWith(item.href) ? 'page' : undefined
-              }
-              onClick={() => setOpen(false)}
-            >
-              <span className="tile__n" aria-hidden="true">
-                {String(index + 1).padStart(2, '0')}
-              </span>
-              <Icon name={item.icon} />
-              <span className="tile__label">{item.label}</span>
-              <span className="tile__here">{copy.nav.here}</span>
-            </Link>
-          </li>
-        ))}
-      </ul>
+    <div className="menu" onKeyDown={onKeyDown}>
+      {phase !== 'closed' && (
+        <div className="menu__layer">
+          <div
+            className={`scrim${closing ? ' scrim--out' : ''}`}
+            onClick={() => close()}
+            aria-hidden="true"
+          />
+          <nav className="menu__bars" aria-label={t('Main menu')}>
+            <ul role="menu" aria-label={t('Main menu')}>
+              {ITEMS.map((item, index) => {
+                const here = item.id === activeId;
+                return (
+                  <li
+                    key={item.id}
+                    role="none"
+                    className={`menu__item${closing ? ' is-out' : ''}`}
+                    style={{ animationDelay: `${closing ? index * 20 : (4 - index) * 50}ms` }}
+                  >
+                    <Link
+                      ref={(node) => {
+                        bars.current[index] = node;
+                      }}
+                      role="menuitem"
+                      className={`bar${here ? ' is-here' : ''}`}
+                      to={item.href}
+                      tabIndex={open && focusIndex === index ? 0 : -1}
+                      aria-current={here ? 'page' : undefined}
+                      onClick={(event) => {
+                        if (here) {
+                          event.preventDefault();
+                          close();
+                        }
+                      }}
+                    >
+                      <Icon name={item.icon} size={26} />
+                      <span className="bar__label">{t(item.label)}</span>
+                      {here && <span className="caption">{t('You are here')}</span>}
+                      <Icon name="chevron" size={20} />
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </nav>
+        </div>
+      )}
       <button
         ref={trigger}
         type="button"
-        className="menu__trigger"
+        className={`ball${shrunk && !open ? ' is-small' : ''}`}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-controls="menu-panel"
-        aria-label={copy.nav.menu}
+        aria-label={open ? t('Close menu') : t('Open menu')}
         onClick={() => (open ? close() : openAt(activeIndex))}
         onKeyDown={onTriggerKeyDown}
       >
-        <Icon name={open ? 'close' : 'bars'} />
+        <span key={spin} className={`ball__spin${spin ? ' anim-spin' : ''}`}>
+          <GoBadge size={72} icon={open ? 'close' : 'compass'} />
+        </span>
       </button>
-    </nav>,
+    </div>,
     document.body,
   );
 }

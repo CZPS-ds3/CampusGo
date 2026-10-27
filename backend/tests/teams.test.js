@@ -244,3 +244,16 @@ describe('BR04 BR06 BR24 team leaderboard', () => {
     expect(shown).toContain('Anna S.');
   });
 });
+
+describe('pending invitations on the team card', () => {
+  it('BR06 pending invitations show only an expiry, never the invitee address', async () => {
+    const lead = await ctx.login('lead');
+    const guest = await ctx.login('guest');
+    await lead.agent.post('/api/teams').send({ name: 'Night Owls' }).expect(201);
+    await lead.agent.post('/api/teams/me/invitations').send({ email: guest.email }).expect(202);
+    const { body } = await lead.agent.get('/api/teams/me').expect(200);
+    expect(body.team.pending).toHaveLength(1);
+    expect(JSON.stringify(body)).not.toContain('guest@');
+    expect(Date.parse(body.team.pending[0].expiresAt)).toBeGreaterThan(ctx.clock.now());
+  });
+});

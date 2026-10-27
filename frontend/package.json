@@ -14,9 +14,7 @@
     "e2e:fullstack": "playwright test -c playwright.fullstack.config.js"
   },
   "dependencies": {
-    "@fontsource/anton": "^5.1.0",
-    "@fontsource/jetbrains-mono": "^5.1.0",
-    "@fontsource/rubik": "^5.1.0",
+    "@fontsource/source-sans-3": "^5.3.1",
     "leaflet": "^1.9.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

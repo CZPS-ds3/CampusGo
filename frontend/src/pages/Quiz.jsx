@@ -3,51 +3,42 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { errorText } from '../api/errorText.js';
 import { Button } from '../components/Button.jsx';
-import { Icon } from '../components/icons.jsx';
+import { Icon, IconButton } from '../components/icons.jsx';
 import { OfflineBanner, useOnline } from '../components/OfflineBanner.jsx';
-import { Sheet } from '../components/Sheet.jsx';
+import { Modal } from '../components/Sheet.jsx';
+import { Chip, Display } from '../components/ui.jsx';
 import { formatClock, useServerTimer } from '../hooks/useServerTimer.js';
-import { useSession } from '../hooks/useSession.jsx';
-import { copy } from '../i18n.js';
+import { formatNumber, t } from '../i18n.js';
 
 const LETTERS = ['A', 'B', 'C', 'D'];
 const URGENT_SECONDS = 30;
-const SECONDS_PER_QUESTION = 60;
+const PULSE_SECONDS = 10;
 const MAX_RETRIES = 3;
 
-function Countdown({ seconds, totalSeconds }) {
-  const urgent = seconds <= URGENT_SECONDS;
+function Timer({ seconds }) {
+  const urgent = seconds < URGENT_SECONDS;
   const [announcement, setAnnouncement] = useState('');
 
   useEffect(() => {
-    if (seconds === URGENT_SECONDS) setAnnouncement('30 seconds left');
-    else if (seconds === 10) setAnnouncement('10 seconds left');
-    else if (seconds === 0) setAnnouncement('Time is up');
+    if (seconds === URGENT_SECONDS) setAnnouncement(t('30 seconds left'));
+    else if (seconds === PULSE_SECONDS) setAnnouncement(t('10 seconds left'));
+    else if (seconds === 0) setAnnouncement(t('Time is up'));
   }, [seconds]);
 
   return (
     <>
-      <span
-        className={`timer${urgent ? ' is-urgent' : ''}`}
+      <div
+        className={`timer mono${urgent ? ' is-urgent' : ''}${seconds < PULSE_SECONDS ? ' timer-pulse' : ''}`}
         role="timer"
         aria-live="off"
-        aria-label="Time left"
+        aria-label={t('Time left {time}', { time: formatClock(seconds) })}
       >
-        <Icon name={urgent ? 'alarm' : 'clock'} />
-        <span>{formatClock(seconds)}</span>
-        <span className="timer__tag" aria-hidden="true">
-          {copy.quiz.hurry}
-        </span>
-      </span>
+        <Icon name="clock" size={20} />
+        {formatClock(seconds)}
+      </div>
       <span className="sr-only" role="status" aria-live="assertive">
         {announcement}
       </span>
-      <div className={`timebar${urgent ? ' is-urgent' : ''}`} aria-hidden="true">
-        <div
-          className="timebar__fill"
-          style={{ transform: `scaleX(${Math.min(1, seconds / totalSeconds)})` }}
-        />
-      </div>
     </>
   );
 }
@@ -57,25 +48,17 @@ function Option({ option, index, state, disabled, onPick }) {
     <li>
       <button
         type="button"
-        className={`opt${state ? ` is-${state}` : ''}`}
+        className={`opt${state ? ` is-${state}` : ''}${state === 'wrong' ? ' anim-shake' : ''}`}
         aria-disabled={disabled || undefined}
         onClick={() => onPick(option.id)}
       >
-        <span className="opt__key" aria-hidden="true">
+        <span className="opt__key display h3" aria-hidden="true">
           {LETTERS[index]}
         </span>
-        <span>{option.text}</span>
-        <span className="opt__tag">
-          {state === 'correct' && <Icon name="check" title={copy.quiz.rightAnswer} />}
-          {state === 'wrong' && <Icon name="cross" title={copy.quiz.yourAnswer} />}
-          {state === 'pending' && (
-            <span
-              className="spinner"
-              style={{ width: 20, height: 20 }}
-              aria-label={copy.quiz.saving}
-            />
-          )}
-        </span>
+        <span className="opt__text">{option.text}</span>
+        {state === 'correct' && <Icon name="check" title={t('Right answer')} />}
+        {state === 'wrong' && <Icon name="close" title={t('Your answer')} />}
+        {state === 'pending' && <span className="spinner" aria-label={t('Saving…')} />}
       </button>
     </li>
   );
@@ -85,14 +68,12 @@ export default function Quiz() {
   const { id } = useParams();
   const navigate = useNavigate();
   const online = useOnline();
-  const { student } = useSession();
   const [attempt, setAttempt] = useState(null);
   const [shown, setShown] = useState(null);
   const [feedback, setFeedback] = useState(null);
   const [pendingId, setPendingId] = useState(null);
   const [layer, setLayer] = useState(null);
   const [hardOpen, setHardOpen] = useState(false);
-  const [hardConfirm, setHardConfirm] = useState(false);
   const [retries, setRetries] = useState(0);
   const [retryOption, setRetryOption] = useState(null);
   const inFlight = useRef(false);
@@ -134,7 +115,10 @@ export default function Quiz() {
   // The server decides when time is up; the client only notices that its clock reached the deadline.
   const expired = attempt && attempt.status === 'active' && remainingMs === 0 && seconds === 0;
   useEffect(() => {
-    if (expired) setLayer({ kind: 'expired' });
+    if (expired) {
+      setHardOpen(false);
+      setLayer({ kind: 'expired' });
+    }
   }, [expired]);
 
   useEffect(() => {
@@ -201,7 +185,6 @@ export default function Quiz() {
       const { attempt: updated } = await api.acceptHard(attempt.id);
       setAttempt(updated);
       setHardOpen(false);
-      setHardConfirm(false);
     } catch (error) {
       setHardOpen(false);
       setLayer(
@@ -216,30 +199,31 @@ export default function Quiz() {
 
   if (!attempt) {
     return (
-      <div className="quiz">
-        <div className="quiz__card" aria-busy="true">
-          {layer?.kind === 'error' ? (
-            <>
-              <h1 className="display">{copy.quiz.errorTitle}</h1>
-              <p>{layer.message}</p>
-              <div className="row">
-                <Button onClick={load}>{copy.quiz.retry}</Button>
-                <Button variant="quiet" to="/map">
-                  {copy.quiz.toMap}
-                </Button>
-              </div>
-            </>
-          ) : (
-            <p role="status">{copy.quiz.loading}</p>
-          )}
-        </div>
-      </div>
+      <main className="page page--narrow">
+        {layer?.kind === 'error' ? (
+          <div className="card stack" role="alert">
+            <Display as="h1" size="h2">
+              {t('Something went wrong')}
+            </Display>
+            <p>{layer.message}</p>
+            <Button onClick={load}>{t('Try again')}</Button>
+            <Button variant="ghost" to="/map">
+              {t('Back to map')}
+            </Button>
+          </div>
+        ) : (
+          <p role="status" aria-busy="true" className="muted">
+            {t('Loading your question…')}
+          </p>
+        )}
+      </main>
     );
   }
 
   const question = attempt.questions.find((q) => q.number === shown) ?? attempt.questions[0];
-  const totalSeconds = attempt.questionCount * SECONDS_PER_QUESTION;
+  const total = attempt.questionCount;
   const locked = Boolean(pendingId || feedback || !online || layer || hardOpen);
+  const isHard = question.difficulty === 'HARD';
   const stateOf = (option) => {
     if (pendingId === option.id) return 'pending';
     if (!feedback) return null;
@@ -249,183 +233,160 @@ export default function Quiz() {
   };
   const lastQuestion = feedback && (feedback.result || attempt.status !== 'active');
 
+  if (hardOpen && layer?.kind !== 'expired') {
+    return (
+      <main className="bonus">
+        <div className="halftone bonus__dots" aria-hidden="true" />
+        <div className="bonus__inner anim-pop">
+          <Chip tone="accent" icon="bolt">
+            {t('Perfect so far')}
+          </Chip>
+          <Display as="h1" size="h1" className="accent block mt-s" tabIndex={-1} data-autofocus>
+            {t('Bonus')}
+            <br />
+            {t('round')}
+          </Display>
+          <p>
+            {t('Q1–4 all correct on your first try. Swap Q5 for one hard question worth')}{' '}
+            <b className="mono accent">{formatNumber(2000)}</b>.
+          </p>
+          <p className="small muted">{t('Timer keeps running. One shot, no retry.')}</p>
+          <p className="risk small">
+            <Icon name="warn" />
+            {t(
+              'You already have 4 of 5 right, so you have passed. A hard question is worth 2,000 instead of 1,000. If you get it wrong you lose the 1,000 for question 5 and the 200 full-clear bonus. You cannot switch back, and the clock keeps running.',
+            )}
+          </p>
+          <div className="stack mt">
+            <Button variant="dark" busy={pendingId === -1} onClick={goHard}>
+              {t('Accept bonus')} <Icon name="bolt" />
+            </Button>
+            <Button variant="ghost" onClick={() => setHardOpen(false)}>
+              {t('Decline, normal Q5')}
+            </Button>
+          </div>
+        </div>
+        <Timer seconds={seconds} />
+      </main>
+    );
+  }
+
   return (
     <>
-      <OfflineBanner message={copy.quiz.offline} />
-      <div className="quiz">
+      <OfflineBanner message={t('You are offline. The server clock keeps running.')} />
+      <main className="quiz">
         <header className="quiz__head">
-          <h1 className="quiz__title" title={attempt.checkpointName}>
-            {attempt.checkpointName}
+          <IconButton icon="back" label={t('Back (disabled during quiz)')} disabled />
+          <h1 className="display h3 grow quiz__count" title={attempt.checkpointName}>
+            <span className="sr-only">{attempt.checkpointName}. </span>
+            <span aria-label={t('Question {n} of {total}', { n: question.number, total })}>
+              {t('Q')} {question.number}/{total}
+            </span>
           </h1>
-          <span
-            className="chip quiz__counter"
-            aria-label={`Question ${question.number} of ${attempt.questionCount}`}
-          >
-            {question.number} / {attempt.questionCount}
-          </span>
-          <Countdown seconds={seconds} totalSeconds={totalSeconds} />
+          <Timer seconds={seconds} />
         </header>
 
-        <section className="quiz__card" aria-labelledby="question-text">
-          {question.difficulty === 'HARD' && (
-            <span className="chip chip--volt quiz__tag">HARD · 2,000</span>
-          )}
-          {layer?.kind === 'error' ? (
-            <div className="stack" role="alert">
-              <h2 className="display">{copy.quiz.errorTitle}</h2>
-              <p>{layer.message}</p>
-              <div className="row">
-                <Button
-                  onClick={() => {
-                    const again = layer.optionId;
-                    setLayer(null);
-                    if (again) setRetryOption(again);
-                    else load();
-                  }}
-                >
-                  {copy.quiz.retry}
-                </Button>
-                {retries >= MAX_RETRIES && (
-                  <Button variant="quiet" to="/map">
-                    {copy.quiz.toMap}
-                  </Button>
-                )}
-              </div>
-            </div>
-          ) : (
-            <>
-              <p id="question-text" className="quiz__question">
-                {question.text}
-              </p>
-              <ul className="options">
-                {question.options.map((option, index) => (
-                  <Option
-                    key={option.id}
-                    option={option}
-                    index={index}
-                    state={stateOf(option)}
-                    disabled={locked}
-                    onPick={pick}
-                  />
-                ))}
-              </ul>
-              <div className="feedback-region" role="status" aria-live="polite">
-                {feedback && (
-                  <p className={`feedback feedback--${feedback.correct ? 'right' : 'wrong'}`}>
-                    <Icon name={feedback.correct ? 'check' : 'cross'} />
-                    {feedback.correct ? copy.quiz.right : copy.quiz.wrong}
-                    {!feedback.correct && ` ${copy.quiz.rightAnswer}.`}
-                  </p>
-                )}
-              </div>
-              {feedback && (
-                <div className="quiz__next">
-                  <Button ref={nextButton} block onClick={next}>
-                    {lastQuestion ? copy.quiz.seeResult : copy.quiz.next}
-                    <Icon name="arrow" />
-                  </Button>
-                </div>
-              )}
-            </>
-          )}
-        </section>
+        <ol className="segments" aria-label={t('Questions')}>
+          {attempt.questions.map((q) => (
+            <li
+              key={q.number}
+              className={`segment${
+                q.answered
+                  ? q.correct
+                    ? ' is-ok'
+                    : ' is-bad'
+                  : q.number === shown
+                    ? ' is-now'
+                    : ''
+              }`}
+              aria-label={t('Question {n}', { n: q.number })}
+            />
+          ))}
+        </ol>
 
-        <aside className="quiz__side" aria-label="Your progress">
-          <dl>
-            <div>
-              <dt>{copy.quiz.points}</dt>
-              <dd>{(student?.totalPoints ?? 0).toLocaleString('en')}</dd>
-            </div>
-            <div>
-              <dt>{copy.quiz.attemptLabel}</dt>
-              <dd>{attempt.attemptNumber}</dd>
-            </div>
-            <div>
-              <dt>{copy.quiz.multiplier}</dt>
-              <dd>{attempt.multiplierPercent}%</dd>
-            </div>
-          </dl>
-          <ol className="dots" aria-label="Questions">
-            {attempt.questions.map((q) => {
-              const cls = q.answered
-                ? q.correct
-                  ? 'is-done'
-                  : 'is-wrong'
-                : q.number === shown
-                  ? 'is-current'
-                  : '';
-              const label = q.answered
-                ? q.correct
-                  ? 'correct'
-                  : 'wrong'
-                : q.number === shown
-                  ? 'current'
-                  : 'to do';
-              return (
-                <li
-                  key={q.number}
-                  className={`dot ${cls}`}
-                  aria-label={`Question ${q.number}: ${label}`}
-                >
-                  {q.number}
-                </li>
-              );
-            })}
-          </ol>
-          <p className="field__hint">{copy.quiz.timeBonus}</p>
-        </aside>
-      </div>
+        <p className="caption muted quiz__meta">
+          {attempt.checkpointName} · {t('Attempt {n} multiplier', { n: attempt.attemptNumber })} ×
+          {attempt.multiplierPercent}%
+        </p>
 
-      {hardOpen && (
-        <Sheet title={copy.quiz.hardTitle} locked onClose={() => {}}>
-          <div className="hard-choices">
-            <button
-              type="button"
-              className="hard-choice"
-              data-autofocus
-              onClick={() => setHardOpen(false)}
+        {layer?.kind === 'error' ? (
+          <div className="card stack" role="alert">
+            <Display as="h2" size="h2">
+              {t('Something went wrong')}
+            </Display>
+            <p>{layer.message}</p>
+            <Button
+              onClick={() => {
+                const again = layer.optionId;
+                setLayer(null);
+                if (again) setRetryOption(again);
+                else load();
+              }}
             >
-              <span className="hard-choice__points">1,000</span>
-              <strong>{copy.quiz.hardNormal}</strong>
-            </button>
-            <div className="hard-choice hard-choice--hard">
-              <span className="chip chip--volt">HARD</span>
-              <span className="hard-choice__points">2,000</span>
-              {hardConfirm ? (
-                <div className="row">
-                  <Button busy={pendingId === -1} onClick={goHard}>
-                    {copy.quiz.goHard}
-                  </Button>
-                  <Button variant="secondary" onClick={() => setHardConfirm(false)}>
-                    {copy.quiz.back}
-                  </Button>
-                </div>
-              ) : (
-                <Button variant="volt" onClick={() => setHardConfirm(true)}>
-                  {copy.quiz.hardHard}
-                </Button>
+              {t('Try again')}
+            </Button>
+            {retries >= MAX_RETRIES && (
+              <Button variant="ghost" to="/map">
+                {t('Back to map')}
+              </Button>
+            )}
+          </div>
+        ) : (
+          <>
+            <section
+              key={question.number}
+              className="card panel-accent anim-pop"
+              aria-labelledby="question-text"
+            >
+              {isHard && <p className="caption accent">{t('Bonus · worth 2,000')}</p>}
+              <h2 id="question-text" className="quiz__question">
+                {question.text}
+              </h2>
+            </section>
+            <ul className="options">
+              {question.options.map((option, index) => (
+                <Option
+                  key={option.id}
+                  option={option}
+                  index={index}
+                  state={stateOf(option)}
+                  disabled={locked}
+                  onPick={pick}
+                />
+              ))}
+            </ul>
+            <div className="quiz__feedback" role="status" aria-live="polite">
+              {feedback && (
+                <p className={`feedback ${feedback.correct ? 'is-right' : 'is-wrong'}`}>
+                  <Icon name={feedback.correct ? 'check' : 'close'} />
+                  {feedback.correct ? t('Correct!') : `${t('Not quite.')} ${t('Right answer')}.`}
+                </p>
               )}
             </div>
-          </div>
-          <p className="risk">
-            <Icon name="warn" />
-            {copy.quiz.hardRisk}
-          </p>
-        </Sheet>
-      )}
+            {feedback && (
+              <Button ref={nextButton} variant="sub" className="anim-pop" onClick={next}>
+                {lastQuestion ? t('Finish') : t('Next')} <Icon name="arrow" />
+              </Button>
+            )}
+          </>
+        )}
+      </main>
 
       {layer?.kind === 'expired' && (
-        <div className="layer" role="alertdialog" aria-modal="true" aria-labelledby="expired-title">
-          <h2 id="expired-title">{copy.quiz.expiredTitle}</h2>
-          <p className="mono">0:00</p>
-          <p>{copy.quiz.expiredBody}</p>
+        <Modal title={t('Time is up')}>
+          <Display as="h2" size="h2">
+            {t('Time is up')}
+          </Display>
+          <p className="mono h1">0:00</p>
+          <p className="muted">{t('The clock ran out. Your answers so far count.')}</p>
           <Button
             ref={expiredButton}
+            className="mt"
             onClick={() => navigate(`/result/${attempt.id}`, { replace: true })}
           >
-            {copy.quiz.seeResult}
+            {t('See result')}
           </Button>
-        </div>
+        </Modal>
       )}
     </>
   );

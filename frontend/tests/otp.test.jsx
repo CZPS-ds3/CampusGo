@@ -14,7 +14,7 @@ function Harness({ initial = '' }) {
   );
 }
 
-const box = (n) => screen.getByLabelText(`One-time code, digit ${n}`);
+const box = (n) => screen.getByLabelText(`Digit ${n} of 6`);
 
 describe('BR01 OTP input', () => {
   it('moves to the next box after each digit', async () => {

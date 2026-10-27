@@ -25,6 +25,7 @@ const schemas = {
     firstName: name.optional(),
     lastName: name.optional(),
     nickname: z.string().trim().max(20).optional(),
+    avatarPreset: z.number().int().min(0).max(5).optional(),
   }),
   location: z.object({
     latitude: z.number().min(-90).max(90),
@@ -86,6 +87,7 @@ export function createApp({ pool, config, mailer, clock }) {
         firstName: body.firstName,
         lastName: body.lastName,
         nickname: body.nickname || null,
+        avatarPreset: body.avatarPreset,
       });
       if (result.status === 'profile_required') return res.json({ status: 'profile_required' });
       res.cookie(SESSION_COOKIE, result.token, sessionCookieOptions(config));
@@ -116,7 +118,24 @@ export function createApp({ pool, config, mailer, clock }) {
   // ----- everything below needs a session -----
   api.use(needLogin);
 
-  api.get('/me', (req, res) => res.json({ student: publicStudent(req.student) }));
+  api.get(
+    '/me',
+    handle(async (req, res) => {
+      const rank = await boards.rankOf(req.student.total_points);
+      res.json({ student: { ...publicStudent(req.student), rank } });
+    }),
+  );
+  api.post(
+    '/me/avatar-preset',
+    handle(async (req, res) => {
+      const { preset } = z.object({ preset: z.number().int().min(0).max(5) }).parse(req.body);
+      await pool.query(
+        'UPDATE students SET avatar_preset = ?, profile_picture = NULL WHERE student_id = ?',
+        [preset, req.student.student_id],
+      );
+      res.status(204).end();
+    }),
+  );
   api.post(
     '/me/picture',
     upload.single('file'),

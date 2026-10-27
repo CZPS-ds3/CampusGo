@@ -1,13 +1,16 @@
 import { expect, test } from '@playwright/test';
-import { expectNoHorizontalScroll, shot, login } from './helpers.js';
+import { expectNoHorizontalScroll, login, shot } from './helpers.js';
 
-test.describe('round menu with the slanted trail', () => {
-  test('opens, shows five stones, navigates and closes with Escape', async ({ page }, testInfo) => {
+test.describe('GO badge menu', () => {
+  test('opens five bars, marks the page, navigates and closes with Escape', async ({
+    page,
+  }, testInfo) => {
     await login(page);
-    const trigger = page.getByRole('button', { name: 'Menu' });
+    const trigger = page.getByRole('button', { name: 'Open menu' });
     await expect(trigger).toHaveAttribute('aria-expanded', 'false');
     await trigger.click();
-    await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    const close = page.getByRole('button', { name: 'Close menu' });
+    await expect(close).toHaveAttribute('aria-expanded', 'true');
     for (const label of ['Map', 'Quests', 'Team', 'Ranks', 'Profile']) {
       await expect(page.getByRole('menuitem', { name: new RegExp(label) })).toBeVisible();
     }
@@ -16,31 +19,31 @@ test.describe('round menu with the slanted trail', () => {
       'page',
     );
     await page.waitForTimeout(700);
-    await shot(page, testInfo, '09-menu-open');
+    await shot(page, testInfo, '11-menu-open');
 
     await page.keyboard.press('Escape');
-    await expect(trigger).toHaveAttribute('aria-expanded', 'false');
-    await expect(trigger).toBeFocused();
+    await expect(page.getByRole('button', { name: 'Open menu' })).toBeFocused();
+    await expect(page.getByRole('menuitem')).toHaveCount(0);
 
-    await trigger.click();
+    await page.getByRole('button', { name: 'Open menu' }).click();
     await page.getByRole('menuitem', { name: /Quests/ }).click();
     await expect(page.getByRole('heading', { name: 'Quests' })).toBeVisible();
-    await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.getByRole('menuitem')).toHaveCount(0);
     await expectNoHorizontalScroll(page);
   });
 
-  test('keyboard: arrows walk the stones and Tab stays inside the menu', async ({ page }) => {
+  test('keyboard: arrows walk the bars and Tab stays inside the menu', async ({ page }) => {
     await login(page);
-    const trigger = page.getByRole('button', { name: 'Menu' });
+    const trigger = page.getByRole('button', { name: 'Open menu' });
     await trigger.focus();
     await page.keyboard.press('Enter');
     await expect(page.getByRole('menuitem', { name: /Map/ })).toBeFocused();
-    await page.keyboard.press('ArrowUp');
+    await page.keyboard.press('ArrowDown');
     await expect(page.getByRole('menuitem', { name: /Quests/ })).toBeFocused();
     await page.keyboard.press('End');
     await expect(page.getByRole('menuitem', { name: /Profile/ })).toBeFocused();
     await page.keyboard.press('Tab');
-    await expect(trigger).toBeFocused();
+    await expect(page.getByRole('button', { name: 'Close menu' })).toBeFocused();
     await page.keyboard.press('Tab');
     await expect(page.getByRole('menuitem', { name: /Profile/ })).toBeFocused();
   });
@@ -48,17 +51,38 @@ test.describe('round menu with the slanted trail', () => {
   test('every screen fits without sideways scrolling', async ({ page }, testInfo) => {
     await login(page);
     for (const [path, heading, name] of [
-      ['/quests', 'Quests', '10-quests'],
-      ['/team', 'Team', '11-team'],
-      ['/ranks', 'Ranks', '12-ranks'],
-      ['/profile', 'Profile', '13-profile'],
-      ['/city', 'City quests', '14-city'],
+      ['/quests', 'Quests', '12-quests'],
+      ['/team', 'Team', '13-team'],
+      ['/ranks', 'Ranks', '14-ranks'],
     ]) {
       await page.goto(path);
-      await expect(page.getByRole('heading', { name: heading })).toBeVisible();
+      await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible();
       await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
       await expectNoHorizontalScroll(page);
       await shot(page, testInfo, name);
     }
+    await page.goto('/profile');
+    await expect(page.getByRole('heading', { name: 'Ada' })).toBeVisible();
+    await expectNoHorizontalScroll(page);
+    await shot(page, testInfo, '15-profile');
+  });
+});
+
+test.describe('preferences', () => {
+  test('dark mode, font size and German can be switched and are remembered', async ({
+    page,
+  }, testInfo) => {
+    await login(page);
+    await page.goto('/profile');
+    await page.getByRole('switch', { name: 'Dark mode' }).click();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await page.getByRole('radio', { name: 'Large', exact: true }).click();
+    await page.getByRole('radio', { name: 'Deutsch' }).click();
+    await expect(page.getByText('Einstellungen')).toBeVisible();
+    await expectNoHorizontalScroll(page);
+    await shot(page, testInfo, '16-profile-dark-de');
+    await page.reload();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await expect(page.getByText('Einstellungen')).toBeVisible();
   });
 });

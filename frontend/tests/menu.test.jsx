@@ -19,14 +19,18 @@ function setup(path = '/quests') {
   return { root, ...view };
 }
 
-describe('quest menu', () => {
+const openButton = () => screen.getByRole('button', { name: 'Open menu' });
+
+describe('GO badge menu', () => {
   it('opens with five destinations and marks the current page', async () => {
     const user = userEvent.setup();
     setup('/quests');
-    const trigger = screen.getByRole('button', { name: 'Menu' });
-    expect(trigger).toHaveAttribute('aria-expanded', 'false');
-    await user.click(trigger);
-    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    expect(openButton()).toHaveAttribute('aria-expanded', 'false');
+    await user.click(openButton());
+    expect(screen.getByRole('button', { name: 'Close menu' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
     expect(screen.getAllByRole('menuitem')).toHaveLength(5);
     expect(screen.getByRole('menuitem', { name: /Quests/ })).toHaveAttribute(
       'aria-current',
@@ -35,39 +39,43 @@ describe('quest menu', () => {
     expect(screen.getByRole('menuitem', { name: /Map/ })).not.toHaveAttribute('aria-current');
   });
 
+  it('treats the locate and info screens as part of the map section', async () => {
+    const user = userEvent.setup();
+    setup('/locate/3');
+    await user.click(openButton());
+    expect(screen.getByRole('menuitem', { name: /Map/ })).toHaveAttribute('aria-current', 'page');
+  });
+
   it('makes the page behind inert while open and removes it on Escape', async () => {
     const user = userEvent.setup();
     const { root } = setup();
-    const trigger = screen.getByRole('button', { name: 'Menu' });
-    await user.click(trigger);
+    await user.click(openButton());
     expect(root).toHaveAttribute('inert');
     await user.keyboard('{Escape}');
     expect(root).not.toHaveAttribute('inert');
-    expect(trigger).toHaveFocus();
-    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(openButton()).toHaveFocus();
   });
 
-  it('puts focus on the current stone and walks the stones with the arrow keys', async () => {
+  it('puts focus on the current bar and walks the bars with the arrow keys', async () => {
     const user = userEvent.setup();
     setup('/quests');
-    await user.click(screen.getByRole('button', { name: 'Menu' }));
+    await user.click(openButton());
     await waitFor(() => expect(screen.getByRole('menuitem', { name: /Quests/ })).toHaveFocus());
-    await user.keyboard('{ArrowUp}');
+    await user.keyboard('{ArrowDown}');
     expect(screen.getByRole('menuitem', { name: /Team/ })).toHaveFocus();
     await user.keyboard('{Home}');
     expect(screen.getByRole('menuitem', { name: /Map/ })).toHaveFocus();
-    await user.keyboard('{ArrowDown}');
+    await user.keyboard('{ArrowUp}');
     expect(screen.getByRole('menuitem', { name: /Profile/ })).toHaveFocus();
   });
 
-  it('keeps Tab inside the menu: trigger and current stone only', async () => {
+  it('keeps Tab inside the menu: badge and current bar only', async () => {
     const user = userEvent.setup();
     setup('/quests');
-    const trigger = screen.getByRole('button', { name: 'Menu' });
-    await user.click(trigger);
+    await user.click(openButton());
     await waitFor(() => expect(screen.getByRole('menuitem', { name: /Quests/ })).toHaveFocus());
     await user.tab();
-    expect(trigger).toHaveFocus();
+    expect(screen.getByRole('button', { name: 'Close menu' })).toHaveFocus();
     await user.tab();
     expect(screen.getByRole('menuitem', { name: /Quests/ })).toHaveFocus();
   });
@@ -75,9 +83,8 @@ describe('quest menu', () => {
   it('closes when the scrim is clicked', async () => {
     const user = userEvent.setup();
     const { baseElement } = setup();
-    const trigger = screen.getByRole('button', { name: 'Menu' });
-    await user.click(trigger);
-    await user.click(baseElement.querySelector('.menu__scrim'));
-    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    await user.click(openButton());
+    await user.click(baseElement.querySelector('.scrim'));
+    await waitFor(() => expect(screen.queryAllByRole('menuitem')).toHaveLength(0));
   });
 });

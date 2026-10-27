@@ -1,18 +1,12 @@
 import { forwardRef } from 'react';
 import { Link } from 'react-router-dom';
 
-/** Button or link that looks like one. `busy` keeps the label and shows a spinner. */
+/** Button or link that looks like one. Variants: red (default), dark, sub, ok, ghost. `busy` shows a spinner. */
 export const Button = forwardRef(function Button(
-  { variant, block, small, busy, to, children, className = '', ...rest },
+  { variant, small, busy, to, children, className = '', ...rest },
   ref,
 ) {
-  const classes = [
-    'btn',
-    variant && `btn--${variant}`,
-    block && 'btn--block',
-    small && 'btn--small',
-    className,
-  ]
+  const classes = ['btn', variant && `btn--${variant}`, small && 'btn--sm', className]
     .filter(Boolean)
     .join(' ');
   if (to) {

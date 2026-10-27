@@ -1,47 +1,75 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { errorText } from '../api/errorText.js';
 import { Avatar } from '../components/Avatar.jsx';
 import { Button } from '../components/Button.jsx';
-import { Screen, Skeleton } from '../components/Screen.jsx';
+import { Icon } from '../components/icons.jsx';
+import { Page, Skeleton } from '../components/Screen.jsx';
+import { Chip, Display, EmptyState, Input } from '../components/ui.jsx';
 import { useSession } from '../hooks/useSession.jsx';
 import { useToast } from '../hooks/useToast.jsx';
-import { copy } from '../i18n.js';
+import { formatNumber, t } from '../i18n.js';
 
 const MAX_MEMBERS = 5;
-const dateFormat = new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
+const dateFormat = (lang) =>
+  new Intl.DateTimeFormat(lang === 'de' ? 'de-DE' : 'en-GB', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
+
+const hms = (ms) => {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return [Math.floor(s / 3600), Math.floor((s % 3600) / 60), s % 60]
+    .map((n) => String(n).padStart(2, '0'))
+    .join(':');
+};
 
 function Invitations({ items, onAnswer, busyId }) {
   return (
-    <section className="panel stack" aria-labelledby="invites-title">
-      <h2 id="invites-title">{copy.team.invitesTitle}</h2>
-      {items.length === 0 && <p className="muted">{copy.team.noInvites}</p>}
+    <section className="stack" aria-labelledby="invites-title">
+      <Display as="h2" size="h2" id="invites-title">
+        {t('Invitations')}
+      </Display>
+      {items.length === 0 && (
+        <EmptyState
+          icon="mail"
+          title={t('No invites')}
+          body={t('When a team invites you, it shows up here.')}
+        />
+      )}
       <ul className="stack">
         {items.map((invite) => (
-          <li key={invite.id} className="invite stack stack--tight">
-            <p>
-              <strong>{invite.teamName}</strong>
-              <br />
-              <span className="muted">{copy.team.from(invite.teamName, invite.inviterName)}</span>
+          <li key={invite.id} className="card stack stack--tight">
+            <div className="row row--between row--top">
+              <div>
+                <p className="display h3">{invite.teamName}</p>
+                <p className="small muted">
+                  {t('From')} {invite.inviterName}
+                </p>
+              </div>
+              <Chip tone="sub">{t('Open')}</Chip>
+            </div>
+            <p className="small muted">
+              {t('Valid until {when}', {
+                when: dateFormat(document.documentElement.lang).format(new Date(invite.expiresAt)),
+              })}
             </p>
-            <p className="field__hint">
-              {copy.team.expires(dateFormat.format(new Date(invite.expiresAt)))}
-            </p>
-            <div className="row">
+            <div className="grid2">
               <Button
                 small
+                variant="ok"
                 busy={busyId === invite.id}
                 onClick={() => onAnswer(invite.id, 'accept')}
               >
-                {copy.team.accept}
+                {t('Accept')}
               </Button>
               <Button
                 small
-                variant="quiet"
+                variant="ghost"
                 disabled={busyId === invite.id}
                 onClick={() => onAnswer(invite.id, 'reject')}
               >
-                {copy.team.reject}
+                {t('Reject')}
               </Button>
             </div>
           </li>
@@ -58,8 +86,11 @@ export default function Team() {
   const [invites, setInvites] = useState([]);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [picture, setPicture] = useState(null);
   const [busy, setBusy] = useState('');
   const [fieldError, setFieldError] = useState('');
+  const [, tick] = useState(0);
+  const fileInput = useRef(null);
 
   const load = useCallback(async () => {
     try {
@@ -76,6 +107,12 @@ export default function Team() {
     load();
   }, [load]);
 
+  // The countdown of pending invitations ticks every second.
+  useEffect(() => {
+    const id = setInterval(() => tick((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+
   const guarded = async (key, work) => {
     setBusy(key);
     setFieldError('');
@@ -90,11 +127,23 @@ export default function Team() {
 
   const create = (event) => {
     event.preventDefault();
+    if (name.trim().length < 2) {
+      setFieldError(t('Team name is required'));
+      return undefined;
+    }
     return guarded('create', async () => {
       const { team: created } = await api.createTeam(name.trim());
-      setTeam(created);
+      if (picture) {
+        try {
+          await api.uploadTeamPicture(picture);
+        } catch {
+          // The picture is optional; the team exists either way.
+        }
+      }
       setInvites([]);
+      toast.info(t('Team {name} created', { name: created.name }));
       await refresh();
+      await load();
     });
   };
 
@@ -103,7 +152,8 @@ export default function Team() {
     return guarded('invite', async () => {
       await api.invite(email.trim());
       setEmail('');
-      toast.info(copy.team.invited);
+      toast.info(t('If the user exists and can be invited, an invitation has been sent.'));
+      await load();
     });
   };
 
@@ -111,111 +161,167 @@ export default function Team() {
     guarded(`invite-${id}`, async () => {
       if (decision === 'accept') {
         const { team: joined } = await api.acceptInvitation(id);
-        setTeam(joined);
-        setInvites([]);
+        toast.info(t('Joined {name}', { name: joined.name }));
         await refresh();
       } else {
         await api.rejectInvitation(id);
-        setInvites((list) => list.filter((i) => i.id !== id));
       }
     }).then(() => load());
 
   if (team === undefined) {
     return (
-      <Screen title={copy.team.title} wide>
+      <Page title={t('Team')}>
         <Skeleton rows={3} />
-      </Screen>
+      </Page>
     );
   }
 
-  return (
-    <Screen title={copy.team.title} wide>
-      {fieldError && (
-        <p className="field__error" role="alert">
-          {fieldError}
-        </p>
-      )}
-      {team ? (
+  const error = fieldError && (
+    <p className="field-note field-note--error" role="alert">
+      <Icon name="warn" size={18} />
+      <span>{fieldError}</span>
+    </p>
+  );
+
+  if (!team) {
+    return (
+      <Page title={t('Team')} wide>
+        <p className="muted">{t('Teams of 2 to 5 share a rank on the team board.')}</p>
+        {error}
         <div className="twocol">
-          <section className="panel stack" aria-labelledby="team-name">
+          <form className="card stack" noValidate onSubmit={create}>
+            <Display as="h2" size="h3">
+              {t('Create team')}
+            </Display>
             <div className="row">
-              <h2 id="team-name">{team.name}</h2>
-              <span className="chip chip--grey">
-                {copy.team.score}: {team.score.toLocaleString('en')}
-              </span>
-            </div>
-            {!team.active && <p className="muted">{copy.team.inactive}</p>}
-            <h3>
-              {copy.team.members} ({team.size}/{MAX_MEMBERS})
-            </h3>
-            <ul className="members">
-              {team.members.map((m) => (
-                <li key={m.id} className="member">
-                  <Avatar name={m.displayName} url={m.pictureUrl} />
-                  <span className="member__name">{m.displayName}</span>
-                  <span className="mono">{m.totalPoints.toLocaleString('en')}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
-          <section className="panel stack" aria-labelledby="invite-title">
-            <h2 id="invite-title">{copy.team.inviteTitle}</h2>
-            {team.size >= MAX_MEMBERS ? (
-              <p className="muted">{copy.team.full}</p>
-            ) : (
-              <form className="stack" onSubmit={sendInvite} noValidate>
-                <div className="field">
-                  <label className="field__label" htmlFor="invite-email">
-                    {copy.team.inviteLabel}
-                  </label>
-                  <input
-                    id="invite-email"
-                    className="input"
-                    type="email"
-                    inputMode="email"
-                    autoCapitalize="none"
-                    spellCheck={false}
-                    value={email}
-                    onChange={(event) => setEmail(event.target.value)}
-                  />
-                </div>
-                <Button type="submit" busy={busy === 'invite'} disabled={!email.trim()}>
-                  {copy.team.invite}
-                </Button>
-              </form>
-            )}
-          </section>
-        </div>
-      ) : (
-        <div className="twocol">
-          <section className="panel stack" aria-labelledby="create-title">
-            <h2 id="create-title">{copy.team.noTeamTitle}</h2>
-            <p>{copy.team.noTeamBody}</p>
-            <form className="stack" onSubmit={create}>
-              <div className="field">
-                <label className="field__label" htmlFor="team-name-input">
-                  {copy.team.nameLabel}
-                </label>
-                <input
-                  id="team-name-input"
-                  className="input"
-                  maxLength={30}
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
+              {picture ? (
+                <Avatar
+                  size={56}
+                  avatar={{ url: URL.createObjectURL(picture) }}
+                  label={t('Team picture')}
                 />
-              </div>
-              <Button type="submit" busy={busy === 'create'} disabled={name.trim().length < 2}>
-                {copy.team.create}
-              </Button>
-            </form>
-          </section>
+              ) : (
+                <span className="empty__icon">
+                  <Icon name="team" />
+                </span>
+              )}
+              <button
+                type="button"
+                className="dashed-btn grow"
+                onClick={() => fileInput.current?.click()}
+              >
+                <Icon name="upload" size={20} />
+                <span className="caption">{t('Picture (optional)')}</span>
+              </button>
+              <input
+                ref={fileInput}
+                type="file"
+                className="sr-only"
+                accept="image/png,image/jpeg,image/webp"
+                tabIndex={-1}
+                aria-label={t('Upload team picture')}
+                onChange={(event) => setPicture(event.target.files?.[0] ?? null)}
+              />
+            </div>
+            <Input
+              label={t('Team name *')}
+              maxLength={30}
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
+            <Button type="submit" variant="ok" busy={busy === 'create'}>
+              {t('Create team')}
+            </Button>
+          </form>
           <Invitations
             items={invites}
             onAnswer={answer}
             busyId={busy.startsWith('invite-') ? Number(busy.slice(7)) : null}
           />
         </div>
+      </Page>
+    );
+  }
+
+  const slots = Array.from({ length: MAX_MEMBERS }, (_, k) => {
+    if (k < team.members.length) return { kind: 'member', member: team.members[k] };
+    const pending = team.pending[k - team.members.length];
+    return pending ? { kind: 'pending', pending } : { kind: 'open' };
+  });
+  const full = team.members.length + team.pending.length >= MAX_MEMBERS;
+
+  return (
+    <Page title={team.name} wide>
+      <p className="mono accent">
+        {team.members.length}/{MAX_MEMBERS} <span className="caption muted">{t('members')}</span>
+        {' · '}
+        {formatNumber(team.score)} <span className="caption muted">{t('Team score')}</span>
+      </p>
+      {!team.active && (
+        <p className="small muted">{t('A team appears in the ranking from two members.')}</p>
       )}
-    </Screen>
+      {error}
+      <div className="twocol">
+        <ul className="stack stack--tight" aria-label={t('Members')}>
+          {slots.map((slot, k) =>
+            slot.kind === 'member' ? (
+              <li key={k} className="card card--tight row">
+                <Avatar
+                  size={40}
+                  name={slot.member.displayName}
+                  avatar={{ url: slot.member.pictureUrl, preset: slot.member.avatarPreset }}
+                />
+                <span className="grow truncate strong">{slot.member.displayName}</span>
+                <span className="mono small">{formatNumber(slot.member.totalPoints)}</span>
+              </li>
+            ) : (
+              <li key={k} className="slot row">
+                <span className="slot__icon">
+                  <Icon name={slot.kind === 'pending' ? 'clock' : 'plus'} size={18} />
+                </span>
+                <span className="small">
+                  {slot.kind === 'pending' ? (
+                    <>
+                      {t('Invite pending')} ·{' '}
+                      <span className="mono">
+                        {hms(Date.parse(slot.pending.expiresAt) - Date.now())}
+                      </span>{' '}
+                      {t('left')}
+                    </>
+                  ) : (
+                    t('Open slot')
+                  )}
+                </span>
+              </li>
+            ),
+          )}
+        </ul>
+        <section className="stack" aria-labelledby="invite-title">
+          <Display as="h2" size="h2" id="invite-title">
+            {t('Invite by email')}
+          </Display>
+          {full ? (
+            <p className="muted">{t('Your team is full (5 of 5)')}</p>
+          ) : (
+            <form className="stack" noValidate onSubmit={sendInvite}>
+              <Input
+                label={t('School email')}
+                type="email"
+                inputMode="email"
+                autoCapitalize="none"
+                spellCheck={false}
+                placeholder="name@heilbronn.dhbw.de"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                hint={t('Invitations expire after 24 hours.')}
+              />
+              <Button type="submit" variant="sub" busy={busy === 'invite'} disabled={!email.trim()}>
+                <Icon name="mail" /> {t('Send invite')}
+              </Button>
+            </form>
+          )}
+        </section>
+      </div>
+    </Page>
   );
 }

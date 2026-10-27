@@ -6,9 +6,9 @@ test('real stack: sign up with an e-mail code, check in, pass a quiz, appear in 
   const email = `smoke${Date.now()}@heilbronn.dhbw.de`;
 
   await page.goto('/login');
-  await page.getByLabel('School e-mail').fill(email);
-  await page.getByRole('button', { name: 'Send my code' }).click();
-  await expect(page.getByRole('heading', { name: 'Enter your code' })).toBeVisible();
+  await page.getByLabel('School email').fill(email);
+  await page.getByRole('button', { name: 'Send code' }).click();
+  await expect(page.getByRole('heading', { name: /6-digit code/ })).toBeVisible();
 
   // The backend prints the mail in development; the dev-only route hands the code to the test.
   let otp;
@@ -24,28 +24,29 @@ test('real stack: sign up with an e-mail code, check in, pass a quiz, appear in 
     )
     .toBeTruthy();
 
-  await page.getByLabel('One-time code, digit 1').click();
+  await page.getByLabel('Digit 1 of 6').click();
   await page.keyboard.insertText(otp);
-  await page.getByRole('button', { name: 'Log in' }).click();
-  await page.getByLabel('First name').fill('Smoke');
-  await page.getByLabel('Last name').fill('Tester');
-  await page.getByRole('button', { name: 'Start playing' }).click();
-  await expect(page.getByRole('heading', { name: 'Campus map' })).toBeVisible();
+  await page.getByLabel('First name *').fill('Smoke');
+  await page.getByLabel('Last name *').fill('Tester');
+  await page.getByRole('button', { name: 'Enter campus' }).click();
+  await expect(page.getByText(/Rank #/)).toBeVisible();
 
-  await page.locator('.cplist__item').filter({ hasText: 'Containers' }).click();
-  await page.getByRole('button', { name: /Check my location/ }).click();
+  await page.goto('/quests');
+  await page.getByRole('link', { name: /Containers/ }).click();
+  await page.getByRole('link', { name: 'Start quest' }).click();
   await page.getByRole('button', { name: 'I agree' }).click();
-  await expect(page.getByText('You are at the checkpoint.')).toBeVisible();
-  await page.getByRole('button', { name: 'Start the quiz' }).click();
+  await expect(page.getByText('Locked on!')).toBeVisible();
+  await expect(page.getByText(/PLACEHOLDER fact 1/)).toBeVisible();
+  await page.getByRole('button', { name: "I'm ready" }).click();
   await expect(page.getByRole('timer')).toBeVisible();
 
   for (let i = 0; i < 3; i += 1) {
     await page.getByRole('button', { name: /placeholder answer/ }).click();
     await expect(page.getByText('Correct!')).toBeVisible();
-    await page.getByRole('button', { name: i === 2 ? 'See result' : 'Next' }).click();
+    await page.getByRole('button', { name: i === 2 ? 'Finish' : 'Next' }).click();
   }
-  await expect(page.getByRole('heading', { name: 'Passed' })).toBeVisible();
+  await expect(page.getByText('Checkpoint cleared')).toBeVisible();
 
-  await page.getByRole('link', { name: 'See the ranking' }).click();
-  await expect(page.locator('.board__row.is-you')).toBeVisible();
+  await page.goto('/ranks');
+  await expect(page.locator('.ranks__you')).toBeVisible();
 });

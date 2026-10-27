@@ -5,7 +5,7 @@ A single-page web app talks to a REST API. The API holds all rules, time and sta
 
 | Layer | Technology | Responsibility |
 |---|---|---|
-| Frontend (`frontend/`) | React 18, Vite, React Router, Leaflet (OpenStreetMap tiles, darkened by CSS), plain CSS with design tokens | Screens, map, geolocation request, server-driven quiz, mock mode for development without a backend |
+| Frontend (`frontend/`) | React 18, Vite, React Router, Leaflet (OpenStreetMap tiles, darkened by CSS), plain CSS with semantic design tokens (light and dark theme), self-hosted Source Sans 3, German and English texts | Screens, map, geolocation request, server-driven quiz, mock mode for development without a backend |
 | Backend (`backend/`) | Node 20+, Express, zod, helmet, express-rate-limit, nodemailer, multer + sharp | OTP login, sessions, teams, location check (haversine), quiz engine, scoring, leaderboards |
 | Database | MySQL 8.4 (Docker Compose, port 3307) | Students, sessions, attempts, questions, scoring tables, location checks |
 | Tooling | npm workspaces, ESLint, Prettier, Vitest, Supertest, Playwright | One install, one `npm run dev`, one `npm run check` |

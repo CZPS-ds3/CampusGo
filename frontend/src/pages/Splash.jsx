@@ -1,37 +1,34 @@
 import { Button } from '../components/Button.jsx';
-import { copy } from '../i18n.js';
+import { Icon } from '../components/icons.jsx';
+import { LangSwitch, Logo } from '../components/ui.jsx';
 import { useSession } from '../hooks/useSession.jsx';
-
-/** Authored radar rings: concentric circles around a single dot, with a dashed trail. No imagery needed. */
-function Radar() {
-  return (
-    <svg className="radar" viewBox="0 0 320 320" aria-hidden="true" focusable="false">
-      <circle cx="160" cy="160" r="150" className="radar__ring" />
-      <circle cx="160" cy="160" r="110" className="radar__ring" />
-      <circle cx="160" cy="160" r="70" className="radar__ring" />
-      <path d="M40 250 C 100 210, 130 230, 160 160 S 230 90, 280 60" className="radar__trail" />
-      <circle cx="40" cy="250" r="9" className="radar__stone" />
-      <circle cx="128" cy="222" r="9" className="radar__stone" />
-      <circle cx="232" cy="106" r="9" className="radar__stone" />
-      <circle cx="280" cy="60" r="9" className="radar__stone" />
-      <circle cx="160" cy="160" r="16" className="radar__dot" />
-    </svg>
-  );
-}
+import { t } from '../i18n.js';
 
 export default function Splash() {
   const { student, ready } = useSession();
   const signedIn = ready && student;
   return (
     <main className="splash">
-      <div className="splash__text">
-        <h1 className="display splash__title">{copy.splash.title}</h1>
-        <p className="splash__lead">{copy.splash.lead}</p>
-        <Button to={signedIn ? '/map' : '/login'}>
-          {signedIn ? copy.splash.resume : copy.splash.start}
+      <div className="halftone splash__dots" aria-hidden="true" />
+      <div className="splash__lang">
+        <LangSwitch />
+      </div>
+      <div className="splash__center">
+        <div className="anim-pop">
+          <Logo height={96} />
+        </div>
+        <h1 className="splash__title anim-fade" style={{ animationDelay: '300ms' }}>
+          <span className="display splash__line1">Campus</span>
+          <span className="display splash__line2">&amp; City Quest</span>
+        </h1>
+        <span className="splash__bar" aria-hidden="true" />
+        <p className="caption muted">{t('DHBW Heilbronn · Orientation game')}</p>
+      </div>
+      <div className="splash__cta">
+        <Button to={signedIn ? '/map' : '/login'} className="anim-pop">
+          {signedIn ? t('Back to map') : t('Start')} <Icon name="arrow" />
         </Button>
       </div>
-      <Radar />
     </main>
   );
 }

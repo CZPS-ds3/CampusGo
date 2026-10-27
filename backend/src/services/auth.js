@@ -43,6 +43,7 @@ export function publicStudent(row) {
     nickname: row.nickname,
     displayName: displayName(row),
     pictureUrl: row.profile_picture,
+    avatarPreset: row.avatar_preset,
     totalPoints: row.total_points,
     teamId: row.team_id,
     locationConsent: Boolean(row.location_consent_at),
@@ -150,9 +151,17 @@ export function createAuthService({ pool, config, mailer, clock }) {
       if (!student) {
         if (!profile?.firstName || !profile?.lastName) return { status: 'profile_required' }; // OTP stays usable
         const [inserted] = await conn.query(
-          `INSERT INTO students (email, first_name, last_name, nickname, total_points, points_exact_x100, points_updated_at, created_at)
-           VALUES (?, ?, ?, ?, 0, 0, ?, ?)`,
-          [email, profile.firstName, profile.lastName, profile.nickname ?? null, at(now), at(now)],
+          `INSERT INTO students (email, first_name, last_name, nickname, avatar_preset, total_points, points_exact_x100, points_updated_at, created_at)
+           VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?)`,
+          [
+            email,
+            profile.firstName,
+            profile.lastName,
+            profile.nickname ?? null,
+            profile.avatarPreset ?? null,
+            at(now),
+            at(now),
+          ],
         );
         const [[row]] = await conn.query('SELECT * FROM students WHERE student_id = ?', [
           inserted.insertId,

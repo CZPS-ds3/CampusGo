@@ -11,7 +11,7 @@ export function createLeaderboardService({ pool }) {
 
   async function solo(studentId) {
     const [rows] = await pool.query(
-      `SELECT student_id, first_name, last_name, nickname, profile_picture, total_points, points_updated_at
+      `SELECT student_id, first_name, last_name, nickname, profile_picture, avatar_preset, total_points, points_updated_at
        FROM students ORDER BY total_points DESC, points_updated_at ASC, student_id ASC`,
     );
     const entries = assignRanks(rows.map((r) => ({ ...r, points: r.total_points }))).map((r) => ({
@@ -19,6 +19,7 @@ export function createLeaderboardService({ pool }) {
       id: r.student_id,
       displayName: displayName(r),
       pictureUrl: r.profile_picture,
+      avatarPreset: r.avatar_preset,
       points: r.points,
       isYou: r.student_id === studentId,
     }));
@@ -50,5 +51,14 @@ export function createLeaderboardService({ pool }) {
     return { entries: top(entries), yourTeam: standing(entries.find((e) => e.isYourTeam)) };
   }
 
-  return { solo, team };
+  /** Competition rank for a given total: one more than the number of students with strictly more points (R-52). */
+  async function rankOf(total, conn = pool) {
+    const [[row]] = await conn.query(
+      'SELECT COUNT(*) AS higher FROM students WHERE total_points > ?',
+      [total],
+    );
+    return Number(row.higher) + 1;
+  }
+
+  return { solo, team, rankOf };
 }

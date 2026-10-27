@@ -1,13 +1,13 @@
 import { useRef } from 'react';
-import { copy } from '../i18n.js';
+import { t } from '../i18n.js';
 
 const LENGTH = 6;
 
 /**
  * Six one-digit boxes. Typing moves on, Backspace moves back, pasting a code fills all boxes.
- * `value` is a string of up to six digits.
+ * `value` is a string of up to six digits; changing `shake` replays the shake animation.
  */
-export function OTPInput({ value, onChange, disabled }) {
+export function OTPInput({ value, onChange, disabled, shake = 0 }) {
   const refs = useRef([]);
   const digits = Array.from({ length: LENGTH }, (_, i) => value[i] ?? '');
 
@@ -32,12 +32,11 @@ export function OTPInput({ value, onChange, disabled }) {
   const handleKeyDown = (index, event) => {
     if (event.key === 'Backspace') {
       event.preventDefault();
+      const next = digits.slice();
       if (digits[index]) {
-        const next = digits.slice();
         next[index] = '';
         commit(next.join(''));
       } else if (index > 0) {
-        const next = digits.slice();
         next[index - 1] = '';
         commit(next.join(''));
         focusBox(index - 1);
@@ -58,18 +57,24 @@ export function OTPInput({ value, onChange, disabled }) {
   };
 
   return (
-    <div className="otp" role="group" aria-label="One-time code" onPaste={handlePaste}>
+    <div
+      key={shake}
+      className={`otps${shake ? ' anim-shake' : ''}`}
+      role="group"
+      aria-label={t('One-time code')}
+      onPaste={handlePaste}
+    >
       {digits.map((digit, index) => (
         <input
           key={index}
           ref={(node) => {
             refs.current[index] = node;
           }}
-          className="otp__box"
+          className={`otp${digit ? ' is-filled' : ''}`}
           inputMode="numeric"
           autoComplete={index === 0 ? 'one-time-code' : 'off'}
           maxLength={LENGTH}
-          aria-label={`${copy.login.otpLabel} ${index + 1}`}
+          aria-label={t('Digit {n} of 6', { n: index + 1 })}
           value={digit}
           disabled={disabled}
           onChange={(event) => handleChange(index, event.target.value)}

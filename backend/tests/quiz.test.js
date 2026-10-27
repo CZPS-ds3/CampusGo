@@ -482,3 +482,39 @@ describe('BR04 BR24 solo leaderboard', () => {
     expect(body.you.rank).toBe(3);
   });
 });
+
+describe('read-first info, best score and rank (R-62, BR24)', () => {
+  it('R-62 every checkpoint lists its read-first facts, and the best score of the student', async () => {
+    const { agent } = await ctx.login('facts');
+    const first = await ctx.startAttempt(agent, 'Containers');
+    await ctx.answerPattern(agent, first, [true, true, false]);
+    const cp = await ctx.checkpointByName(agent, 'Containers');
+    expect(cp.facts).toHaveLength(3);
+    expect(cp.facts[0]).toContain('PLACEHOLDER');
+    expect(cp.bestScore).toBeGreaterThan(0);
+    const mensa = await ctx.checkpointByName(agent, 'Mensa');
+    expect(mensa.bestScore).toBe(0);
+  });
+
+  it('BR24 the result carries the rank before and after, and what the next attempt pays', async () => {
+    const rival = await ctx.login('rival');
+    const attempt0 = await ctx.startAttempt(rival.agent, 'Containers');
+    await ctx.answerPattern(rival.agent, attempt0, [true, true, true]);
+    const { agent } = await ctx.login('climber');
+    const attempt = await ctx.startAttempt(agent, 'Containers');
+    ctx.clock.advance(120_000);
+    const last = await ctx.answerPattern(agent, attempt, [false, false, false]);
+    expect(last.body.result).toMatchObject({
+      passed: false,
+      rankBefore: 2,
+      rankAfter: 2,
+      nextMultiplierPercent: 85,
+    });
+    const second = await ctx.startAttempt(agent, 'Containers');
+    const won = await ctx.answerPattern(agent, second, [true, true, true]);
+    // Attempt 2 pays 85%, which is still less than the rival's full first attempt.
+    expect(won.body.result).toMatchObject({ rankBefore: 2, rankAfter: 2 });
+    const me = await agent.get('/api/me').expect(200);
+    expect(me.body.student.rank).toBe(won.body.result.rankAfter);
+  });
+});

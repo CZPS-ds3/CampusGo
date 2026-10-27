@@ -116,12 +116,35 @@ export async function seedPlaceholderQuestions(conn) {
   }
 }
 
+/** Three placeholder "read first" facts per checkpoint (replace with verified texts before the pilot). */
+export async function seedPlaceholderFacts(conn) {
+  const [checkpoints] = await conn.query('SELECT checkpoint_id, checkpoint_name FROM checkpoints');
+  for (const checkpoint of checkpoints) {
+    const [[{ count }]] = await conn.query(
+      'SELECT COUNT(*) AS count FROM checkpoint_facts WHERE checkpoint_id = ?',
+      [checkpoint.checkpoint_id],
+    );
+    if (count > 0) continue;
+    for (let position = 1; position <= 3; position += 1) {
+      await conn.query(
+        'INSERT INTO checkpoint_facts (checkpoint_id, position, fact_text) VALUES (?, ?, ?)',
+        [
+          checkpoint.checkpoint_id,
+          position,
+          `PLACEHOLDER fact ${position} about ${checkpoint.checkpoint_name}.`,
+        ],
+      );
+    }
+  }
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const config = loadConfig();
   const pool = createPool(config.databaseUrl);
   try {
     await seedReference(pool);
     await seedPlaceholderQuestions(pool);
+    await seedPlaceholderFacts(pool);
     console.log(
       '[seed] reference data, 8 PLACEHOLDER checkpoints and placeholder questions are in place',
     );

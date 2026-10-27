@@ -61,6 +61,7 @@ const realApi = {
     form.append('file', file);
     return request('POST', '/me/picture', { form });
   },
+  setAvatarPreset: (preset) => post('/me/avatar-preset', { preset }),
   consent: () => post('/me/location-consent'),
   checkpoints: () => request('GET', '/checkpoints'),
   locationCheck: (id, sample) => post(`/checkpoints/${id}/location-check`, sample),

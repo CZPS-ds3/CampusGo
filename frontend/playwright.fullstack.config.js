@@ -9,6 +9,7 @@ export default defineConfig({
   reporter: [['list']],
   use: {
     baseURL: 'http://localhost:5173',
+    locale: 'en-US',
     permissions: ['geolocation'],
     geolocation: { latitude: 49.1221, longitude: 9.2121, accuracy: 10 },
     viewport: { width: 390, height: 844 },

@@ -3,7 +3,7 @@ import { createApp } from '../src/app.js';
 import { createFakeClock } from '../src/clock.js';
 import { loadConfig } from '../src/config.js';
 import { createPool } from '../src/db/pool.js';
-import { seedPlaceholderQuestions, seedReference } from '../src/db/seed.js';
+import { seedPlaceholderFacts, seedPlaceholderQuestions, seedReference } from '../src/db/seed.js';
 import { createTestMailer } from '../src/services/mailer.js';
 
 const TABLES = [
@@ -34,6 +34,7 @@ export async function createTestContext(envOverrides = {}) {
       for (const table of TABLES) await conn.query(`DELETE FROM ${table}`);
       await conn.query('SET FOREIGN_KEY_CHECKS = 1');
       await seedReference(conn);
+      await seedPlaceholderFacts(conn);
       await seedPlaceholderQuestions(conn); // inserts once, later runs only reset the flags below
       await conn.query('UPDATE checkpoints SET is_active = 1');
       await conn.query('UPDATE questions SET is_active = 1');

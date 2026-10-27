@@ -2,14 +2,21 @@ import { useEffect, useRef, useState } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { errorText } from '../api/errorText.js';
+import { Avatar, PRESET_COUNT } from '../components/Avatar.jsx';
 import { Button } from '../components/Button.jsx';
+import { Icon, IconButton } from '../components/icons.jsx';
 import { OTPInput } from '../components/OTPInput.jsx';
+import { Sheet } from '../components/Sheet.jsx';
+import { Chip, Display, Input, LangSwitch, Logo } from '../components/ui.jsx';
 import { useSession } from '../hooks/useSession.jsx';
-import { copy } from '../i18n.js';
+import { formatClock } from '../hooks/useServerTimer.js';
+import { t } from '../i18n.js';
 
 const RESEND_SECONDS = 30;
+const CODE_LIFETIME_SECONDS = 600;
 const SCHOOL_DOMAIN = 'heilbronn.dhbw.de';
-const SHOW_DEV_FILL = import.meta.env.DEV && import.meta.env.VITE_USE_MOCKS !== 'true';
+// Development helper: shows the e-mail the server "sent", so nobody needs a mail account to try the app.
+const SHOW_INBOX = import.meta.env.DEV;
 
 const looksLikeSchoolEmail = (value) => {
   const email = value.trim().toLowerCase();
@@ -29,22 +36,32 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [profile, setProfile] = useState({ firstName: '', lastName: '', nickname: '' });
+  const [avatarPreset, setAvatarPreset] = useState(0);
+  const [photo, setPhoto] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [shake, setShake] = useState(0);
   const [cooldown, setCooldown] = useState(0);
+  const [expires, setExpires] = useState(CODE_LIFETIME_SECONDS);
+  const [inbox, setInbox] = useState(null);
+  const [welcome, setWelcome] = useState(false);
   const heading = useRef(null);
+  const fileInput = useRef(null);
 
   useEffect(() => {
     heading.current?.focus({ preventScroll: true });
   }, [step]);
 
   useEffect(() => {
-    if (cooldown <= 0) return undefined;
-    const id = setTimeout(() => setCooldown((s) => s - 1), 1000);
-    return () => clearTimeout(id);
-  }, [cooldown]);
+    if (step === 'email') return undefined;
+    const id = setInterval(() => {
+      setCooldown((s) => Math.max(0, s - 1));
+      setExpires((s) => Math.max(0, s - 1));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [step]);
 
-  if (ready && student) return <Navigate to={state?.from ?? '/map'} replace />;
+  if (ready && student && !welcome) return <Navigate to={state?.from ?? '/map'} replace />;
 
   const run = async (work) => {
     setBusy(true);
@@ -60,163 +77,332 @@ export default function Login() {
 
   const sendCode = (event) => {
     event?.preventDefault();
+    if (!email.trim()) {
+      setError(t('Enter your email'));
+      setShake((n) => n + 1);
+      return undefined;
+    }
     if (!looksLikeSchoolEmail(email)) {
-      setError(copy.login.emailInvalid);
+      setError(t('Use your @heilbronn.dhbw.de school email'));
+      setShake((n) => n + 1);
       return undefined;
     }
     return run(async () => {
       await api.requestOtp(email.trim());
       setCode('');
       setCooldown(RESEND_SECONDS);
+      setExpires(CODE_LIFETIME_SECONDS);
       setStep('otp');
     });
   };
 
-  const verify = (event) => {
-    event?.preventDefault();
-    if (code.length !== 6) return undefined;
-    return run(async () => {
+  const finish = async (result) => {
+    setWelcome(true); // before the session appears, so the guard above does not redirect early
+    setStudent(result.student);
+    if (photo) {
       try {
-        const body = { email: email.trim(), otp: code };
-        const result = await api.verify(
-          step === 'profile' ? { ...body, ...cleanProfile(profile) } : body,
-        );
+        await api.uploadPicture(photo);
+      } catch {
+        // The picture is optional; a failed upload must not block the first login.
+      }
+    }
+    setTimeout(() => navigate(state?.from ?? '/map', { replace: true }), 700);
+  };
+
+  const verify = (digits, withProfile) =>
+    run(async () => {
+      const body = { email: email.trim(), otp: digits };
+      if (withProfile) {
+        Object.assign(body, {
+          firstName: profile.firstName.trim(),
+          lastName: profile.lastName.trim(),
+          nickname: profile.nickname.trim() || undefined,
+          avatarPreset,
+        });
+      }
+      try {
+        const result = await api.verify(body);
         if (result.status === 'profile_required') {
           setStep('profile');
           return;
         }
-        setStudent(result.student);
-        navigate(state?.from ?? '/map', { replace: true });
+        await finish(result);
       } catch (failure) {
         if (failure.code === 'INVALID_CODE') {
           setCode('');
-          throw Object.assign(failure, { message: copy.login.codeInvalid });
+          setShake((n) => n + 1);
+          throw Object.assign(failure, { message: t('That code is wrong or has expired.') });
         }
         throw failure;
       }
     });
+
+  const onCodeChange = (value) => {
+    setCode(value);
+    if (value.length === 6 && !busy) verify(value, false);
   };
 
-  const fillDevCode = () =>
+  const openInbox = () =>
     run(async () => {
       const { otp } = await api.devLastOtp(email.trim());
-      setCode(otp);
+      setInbox(otp);
     });
+
+  const submitProfile = (event) => {
+    event.preventDefault();
+    if (!profile.firstName.trim() || !profile.lastName.trim()) {
+      setError(t('First and last name are required'));
+      return;
+    }
+    verify(code, true);
+  };
+
+  const expired = expires <= 0;
 
   return (
     <main className="login">
-      <section className="login__card panel panel--paper" aria-labelledby="login-title">
-        <h1 id="login-title" ref={heading} tabIndex={-1} className="display login__title">
-          {step === 'email'
-            ? copy.login.title
-            : step === 'otp'
-              ? copy.login.otpTitle
-              : copy.login.profileTitle}
-        </h1>
-
+      <div className="halftone login__dots" aria-hidden="true" />
+      <div className="login__inner">
         {step === 'email' && (
-          <form className="stack" onSubmit={sendCode} noValidate>
-            <div className="field">
-              <label className="field__label" htmlFor="email">
-                {copy.login.emailLabel}
-              </label>
-              <input
-                id="email"
-                className="input"
-                type="email"
-                inputMode="email"
-                autoComplete="email"
-                autoCapitalize="none"
-                spellCheck={false}
-                value={email}
-                aria-invalid={Boolean(error) || undefined}
-                aria-describedby="email-hint email-error"
-                onChange={(event) => setEmail(event.target.value)}
-              />
-              <p id="email-hint" className="field__hint">
-                {copy.login.emailHint}
-              </p>
-              {error && (
-                <p id="email-error" className="field__error" role="alert">
-                  {error}
-                </p>
-              )}
+          <>
+            <div className="login__top">
+              <Logo height={44} />
+              <LangSwitch />
             </div>
-            <Button type="submit" block busy={busy}>
-              {copy.login.sendCode}
-            </Button>
-          </form>
+            <Chip tone="sub" icon="mail">
+              {t('Step {n} of 2', { n: 1 })}
+            </Chip>
+            <Display as="h1" size="h1" ref={heading} tabIndex={-1} className="login__title">
+              {t('Log in to')}
+              <br />
+              <span className="accent">{t('start the quest')}</span>
+            </Display>
+            <p className="muted">
+              {t('Use your school email. We send a 6-digit code, no password needed.')}
+            </p>
+            <form className="stack" noValidate onSubmit={sendCode}>
+              <div key={shake} className={shake ? 'anim-shake' : ''}>
+                <Input
+                  label={t('School email')}
+                  type="email"
+                  inputMode="email"
+                  autoComplete="email"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  placeholder="name@heilbronn.dhbw.de"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  error={error}
+                  hint={t('Only @heilbronn.dhbw.de addresses work.')}
+                />
+              </div>
+              <Button type="submit" busy={busy}>
+                {t('Send code')} <Icon name="arrow" />
+              </Button>
+            </form>
+          </>
         )}
 
         {step === 'otp' && (
-          <form className="stack" onSubmit={verify}>
-            <p>{copy.login.otpHint(email.trim())}</p>
-            <OTPInput value={code} onChange={setCode} disabled={busy} />
-            {error && (
-              <p className="field__error" role="alert">
-                {error}
-              </p>
-            )}
-            <Button type="submit" block busy={busy} disabled={code.length !== 6}>
-              {copy.login.verify}
-            </Button>
+          <>
             <div className="row">
-              <Button variant="quiet" small disabled={cooldown > 0 || busy} onClick={sendCode}>
-                {cooldown > 0 ? copy.login.resendIn(cooldown) : copy.login.resend}
-              </Button>
-              {SHOW_DEV_FILL && (
-                <Button variant="quiet" small disabled={busy} onClick={fillDevCode}>
-                  {copy.login.devFill}
-                </Button>
+              <IconButton
+                icon="back"
+                label={t('Back to email')}
+                onClick={() => {
+                  setStep('email');
+                  setError('');
+                }}
+              />
+              <Chip tone="sub" icon="mail">
+                {t('Step {n} of 2', { n: 2 })}
+              </Chip>
+            </div>
+            <Display as="h1" size="h1" ref={heading} tabIndex={-1} className="login__title">
+              {t('Enter the')}
+              <br />
+              <span className="accent">{t('6-digit code')}</span>
+            </Display>
+            <div>
+              <p className="small muted">
+                {t('If the account exists, an email containing the OTP has been sent.')}
+              </p>
+              <p className="small login__email">{email.trim()}</p>
+            </div>
+            <OTPInput
+              value={code}
+              onChange={onCodeChange}
+              disabled={busy || expired}
+              shake={shake}
+            />
+            <div className="login__message" aria-live="polite">
+              {error && (
+                <p className="field-note field-note--error" role="alert">
+                  <Icon name="warn" size={18} />
+                  <span>{error}</span>
+                </p>
+              )}
+              {expired && !error && (
+                <p className="field-note field-note--error">
+                  <Icon name="warn" size={18} />
+                  <span>{t('This code has expired. Request a new one.')}</span>
+                </p>
               )}
             </div>
-          </form>
+            <div className="card login__timer">
+              <div>
+                <p className="caption muted">{t('Code expires in')}</p>
+                <p className={`mono h2 ${expires <= 60 ? 'warn-text' : ''}`}>
+                  {formatClock(expires)}
+                </p>
+              </div>
+              <Icon name="clock" size={32} />
+            </div>
+            <Button
+              variant={expired ? 'dark' : 'ghost'}
+              disabled={cooldown > 0 && !expired}
+              onClick={sendCode}
+              busy={busy && !code}
+            >
+              <Icon name="refresh" />
+              {cooldown > 0 && !expired ? t('Resend in {n}s', { n: cooldown }) : t('Resend code')}
+            </Button>
+            {SHOW_INBOX && (
+              <Button variant="ghost" onClick={openInbox}>
+                <Icon name="mail" /> {t('Open mock inbox')}
+              </Button>
+            )}
+          </>
         )}
 
         {step === 'profile' && (
-          <form className="stack" onSubmit={verify}>
-            <p>{copy.login.profileHint}</p>
-            {[
-              ['firstName', copy.login.firstName, 'given-name'],
-              ['lastName', copy.login.lastName, 'family-name'],
-              ['nickname', copy.login.nickname, 'nickname'],
-            ].map(([key, label, autoComplete]) => (
-              <div className="field" key={key}>
-                <label className="field__label" htmlFor={key}>
-                  {label}
-                </label>
+          <form className="stack" noValidate onSubmit={submitProfile}>
+            <div className="login__top">
+              <Chip tone="accent">{t('First login')}</Chip>
+              <Logo height={36} />
+            </div>
+            <Display as="h1" size="h1" ref={heading} tabIndex={-1} className="login__title">
+              {t('Create your')}
+              <br />
+              <span className="accent">{t('player card')}</span>
+            </Display>
+            <p className="small muted login__email">{email.trim()}</p>
+            <div className="row login__photo">
+              <Avatar
+                size={96}
+                avatar={{
+                  url: photo ? URL.createObjectURL(photo) : undefined,
+                  preset: avatarPreset,
+                }}
+                label={t('Profile picture preview')}
+              />
+              <div className="login__upload">
+                <button
+                  type="button"
+                  className="dashed-btn"
+                  onClick={() => fileInput.current?.click()}
+                >
+                  <Icon name="upload" />
+                  <span className="caption">{t('Upload photo')}</span>
+                </button>
                 <input
-                  id={key}
-                  className="input"
-                  autoComplete={autoComplete}
-                  maxLength={key === 'nickname' ? 20 : 50}
-                  value={profile[key]}
-                  onChange={(event) => setProfile({ ...profile, [key]: event.target.value })}
+                  ref={fileInput}
+                  type="file"
+                  className="sr-only"
+                  accept="image/png,image/jpeg,image/webp"
+                  tabIndex={-1}
+                  aria-label={t('Upload profile picture')}
+                  onChange={(event) => setPhoto(event.target.files?.[0] ?? null)}
                 />
+                <p className="small muted">{t('Optional')}</p>
               </div>
-            ))}
-            {error && (
-              <p className="field__error" role="alert">
-                {error}
-              </p>
-            )}
-            <Button
-              type="submit"
-              block
-              busy={busy}
-              disabled={!profile.firstName.trim() || !profile.lastName.trim()}
-            >
-              {copy.login.createProfile}
+            </div>
+            <div className="presets" role="radiogroup" aria-label={t('Preset avatars')}>
+              {Array.from({ length: PRESET_COUNT }, (_, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  role="radio"
+                  aria-checked={avatarPreset === i && !photo}
+                  aria-label={t('Avatar {n}', { n: i + 1 })}
+                  className="preset"
+                  onClick={() => {
+                    setAvatarPreset(i);
+                    setPhoto(null);
+                  }}
+                >
+                  <Avatar size={44} avatar={{ preset: i }} />
+                </button>
+              ))}
+            </div>
+            <Input
+              label={t('First name *')}
+              autoComplete="given-name"
+              maxLength={50}
+              value={profile.firstName}
+              onChange={(event) => setProfile({ ...profile, firstName: event.target.value })}
+            />
+            <Input
+              label={t('Last name *')}
+              autoComplete="family-name"
+              maxLength={50}
+              value={profile.lastName}
+              onChange={(event) => setProfile({ ...profile, lastName: event.target.value })}
+            />
+            <Input
+              label={t('Nickname (optional)')}
+              maxLength={20}
+              value={profile.nickname}
+              onChange={(event) => setProfile({ ...profile, nickname: event.target.value })}
+              hint={t('Shown on rankings instead of your last name.')}
+              error={error}
+            />
+            <Button type="submit" variant="ok" busy={busy}>
+              {t('Enter campus')} <Icon name="arrow" />
             </Button>
           </form>
         )}
-      </section>
+      </div>
+
+      {welcome && (
+        <div className="login__done anim-fade" role="status">
+          <span className="anim-pop">
+            <Icon name="check" size={96} />
+          </span>
+          <span className="sr-only">{t('Logged in')}</span>
+        </div>
+      )}
+
+      {inbox && (
+        <Sheet title={t('Mock inbox')} onClose={() => setInbox(null)}>
+          <div className="row row--between">
+            <Display size="h3">{t('Mock inbox')}</Display>
+            <IconButton icon="close" label={t('Close inbox')} onClick={() => setInbox(null)} />
+          </div>
+          <div className="card card--flat stack stack--tight">
+            <p className="caption muted">{t('From')}</p>
+            <p className="strong">Campus &amp; City Quest</p>
+            <p className="caption muted">{t('Subject')}</p>
+            <p className="strong">{t('Your login code')}</p>
+            <hr className="rule" />
+            <p className="small">
+              {t('Use this code to finish logging in. It expires in 10 minutes.')}
+            </p>
+            <p className="mono inbox__code">{inbox}</p>
+          </div>
+          <Button
+            variant="sub"
+            className="mt"
+            data-autofocus
+            onClick={() => {
+              setInbox(null);
+              onCodeChange(inbox);
+            }}
+          >
+            {t('Use this code')}
+          </Button>
+        </Sheet>
+      )}
     </main>
   );
 }
-
-const cleanProfile = (profile) => ({
-  firstName: profile.firstName.trim(),
-  lastName: profile.lastName.trim(),
-  nickname: profile.nickname.trim() || undefined,
-});

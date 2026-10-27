@@ -220,6 +220,12 @@ erDiagram
     }
 ```
 
+### 3.x Additions made while building (2026-10-27)
+
+- `Student.avatar_preset` (0 to 5, nullable): the drawn avatar picked at sign-up; an uploaded picture wins over it.
+- `Checkpoint_Fact (checkpoint_id, position 1-5, fact_text)`: the "read these first" facts of the info page (Should item). Seeded with PLACEHOLDER texts.
+- `Location_Check` (see R-62 and R-63) holds only inside yes/no and a time.
+
 ## 4. Seed data for BR11 (no admin UI)
 
 **Approach.** Reference data and the question bank are plain files in the repository (SQL or CSV) loaded by a seed script, run by the developers at deployment. The script is idempotent: it upserts by natural key (`difficulty`, `bonus_type`, `attempt_number`, `checkpoint_name`, and for questions a stable external key kept in the seed file), so running it twice gives the same result. Changing a point value means editing the table (or the seed file) and re-running it; no backend code changes (BR11). The script runs in one transaction and ends with a validation step that fails the whole load if any of these is violated:

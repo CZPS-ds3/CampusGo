@@ -21,6 +21,7 @@ export default defineConfig({
   reporter: [['list']],
   use: {
     baseURL: `http://localhost:${PORT}`,
+    locale: 'en-US',
     permissions: ['geolocation'],
     geolocation: LIBRARY,
     trace: 'retain-on-failure',

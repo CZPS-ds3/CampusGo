@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
+import { Icon } from '../components/icons.jsx';
 
 const ToastContext = createContext(null);
 const LIFETIME_MS = 4500;
@@ -11,7 +12,7 @@ export function ToastProvider({ children }) {
     const id = nextId.current;
     nextId.current += 1;
     setToasts((list) => [...list.slice(-2), { id, text, kind }]);
-    setTimeout(() => setToasts((list) => list.filter((t) => t.id !== id)), LIFETIME_MS);
+    setTimeout(() => setToasts((list) => list.filter((toast) => toast.id !== id)), LIFETIME_MS);
   }, []);
 
   const api = useMemo(
@@ -23,9 +24,10 @@ export function ToastProvider({ children }) {
     <ToastContext.Provider value={api}>
       {children}
       <div className="toasts" role="status" aria-live="polite">
-        {toasts.map((t) => (
-          <div key={t.id} className={`toast toast--${t.kind}`}>
-            {t.text}
+        {toasts.map((toast) => (
+          <div key={toast.id} className={`toast toast--${toast.kind}`}>
+            <Icon name={toast.kind === 'error' ? 'warn' : 'check'} />
+            <span>{toast.text}</span>
           </div>
         ))}
       </div>

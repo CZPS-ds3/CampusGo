@@ -47,8 +47,13 @@ export function createTeamService({ pool, config, clock }) {
     if (!student?.team_id) return null;
     const [[team]] = await pool.query('SELECT * FROM teams WHERE team_id = ?', [student.team_id]);
     const [members] = await pool.query(
-      'SELECT student_id, first_name, last_name, nickname, profile_picture, total_points FROM students WHERE team_id = ? ORDER BY team_joined_at, student_id',
+      'SELECT student_id, first_name, last_name, nickname, profile_picture, avatar_preset, total_points FROM students WHERE team_id = ? ORDER BY team_joined_at, student_id',
       [team.team_id],
+    );
+    // Pending invitations are shown only as open slots with their expiry; the invitee's address stays private.
+    const [pending] = await pool.query(
+      "SELECT expires_at FROM team_invitations WHERE team_id = ? AND status = 'pending' AND expires_at > ? ORDER BY created_at",
+      [team.team_id, at(clock.now())],
     );
     return {
       id: team.team_id,
@@ -58,8 +63,10 @@ export function createTeamService({ pool, config, clock }) {
         id: m.student_id,
         displayName: displayName(m),
         pictureUrl: m.profile_picture,
+        avatarPreset: m.avatar_preset,
         totalPoints: m.total_points,
       })),
+      pending: pending.map((p) => ({ expiresAt: p.expires_at.toISOString() })),
       size: members.length,
       score: team.team_score,
       active: members.length >= 2,

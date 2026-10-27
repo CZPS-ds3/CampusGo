@@ -4,13 +4,8 @@ import { createPortal } from 'react-dom';
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-/**
- * Modal sheet with a real focus trap. The page behind is inert while it is open, Escape closes it
- * (unless `locked`), and focus returns to whatever opened it.
- */
-export function Sheet({ title, onClose, locked, light, children, labelId = 'sheet-title' }) {
-  const box = useRef(null);
-
+/** Shared focus handling for dialogs: page behind is inert, Tab stays inside, Escape closes, focus returns. */
+function useDialog(box, onClose, locked) {
   useEffect(() => {
     const root = document.getElementById('root');
     const opener = document.activeElement;
@@ -21,9 +16,9 @@ export function Sheet({ title, onClose, locked, light, children, labelId = 'shee
       root?.removeAttribute('inert');
       if (opener instanceof HTMLElement) opener.focus();
     };
-  }, []);
+  }, [box]);
 
-  const onKeyDown = (event) => {
+  return (event) => {
     if (event.key === 'Escape' && !locked) {
       event.preventDefault();
       onClose?.();
@@ -42,18 +37,46 @@ export function Sheet({ title, onClose, locked, light, children, labelId = 'shee
       }
     }
   };
+}
 
+/** Bottom sheet (a centred card on tablets and laptops). `locked` means only an explicit choice closes it. */
+export function Sheet({ title, onClose, locked, children }) {
+  const box = useRef(null);
+  const onKeyDown = useDialog(box, onClose, locked);
   return createPortal(
-    <div className="sheet-scrim" onKeyDown={onKeyDown}>
+    <div className="sheet-root" onKeyDown={onKeyDown}>
+      <div className="scrim" onClick={locked ? undefined : onClose} aria-hidden="true" />
       <div
         ref={box}
-        className={`sheet${light ? ' sheet--light' : ''}`}
+        className="sheet"
         role="dialog"
         aria-modal="true"
-        aria-labelledby={labelId}
+        aria-label={title}
         tabIndex={-1}
       >
-        <h2 id={labelId}>{title}</h2>
+        <div className="sheet__grip" aria-hidden="true" />
+        {children}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+/** Centred confirmation card. */
+export function Modal({ title, onClose, children }) {
+  const box = useRef(null);
+  const onKeyDown = useDialog(box, onClose, false);
+  return createPortal(
+    <div className="modal-root" onKeyDown={onKeyDown}>
+      <div className="scrim" onClick={onClose} aria-hidden="true" />
+      <div
+        ref={box}
+        className="card modal"
+        role="alertdialog"
+        aria-modal="true"
+        aria-label={title}
+        tabIndex={-1}
+      >
         {children}
       </div>
     </div>,

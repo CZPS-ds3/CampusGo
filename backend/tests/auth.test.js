@@ -185,3 +185,21 @@ describe('profile pictures (R-37)', () => {
     expect(res.status).toBe(413);
   });
 });
+
+describe('avatar preset (player card)', () => {
+  it('a preset chosen at sign-up is stored and can be changed; presets outside 0-5 are refused', async () => {
+    const email = `card@${DOMAIN}`;
+    await requestOtp(email);
+    await ctx.mailer.idle();
+    const otp = ctx.mailer.lastTo(email).text.match(/\b(\d{6})\b/)[1];
+    const agent = request.agent(ctx.app);
+    const res = await agent
+      .post('/api/auth/verify')
+      .send({ email, otp, firstName: 'Cara', lastName: 'Card', avatarPreset: 3 });
+    expect(res.status).toBe(201);
+    expect(res.body.student.avatarPreset).toBe(3);
+    await agent.post('/api/me/avatar-preset').send({ preset: 5 }).expect(204);
+    expect((await agent.get('/api/me')).body.student.avatarPreset).toBe(5);
+    await agent.post('/api/me/avatar-preset').send({ preset: 6 }).expect(400);
+  });
+});

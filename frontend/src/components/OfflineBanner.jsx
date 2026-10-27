@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { copy } from '../i18n.js';
+import { t } from '../i18n.js';
 import { Icon } from './icons.jsx';
 
-/** Shows a banner while the browser reports that it is offline. */
+/** True while the browser reports a connection. */
 export function useOnline() {
   const [online, setOnline] = useState(() =>
     typeof navigator === 'undefined' ? true : navigator.onLine,
@@ -20,13 +20,14 @@ export function useOnline() {
   return online;
 }
 
-export function OfflineBanner({ message = copy.errors.offline }) {
+/** Shows a banner while the browser is offline. */
+export function OfflineBanner({ message }) {
   const online = useOnline();
   if (online) return null;
   return (
     <div className="banner" role="status">
       <Icon name="wifiOff" />
-      {message}
+      {message ?? t('You are offline.')}
     </div>
   );
 }

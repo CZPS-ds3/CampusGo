@@ -49,6 +49,17 @@ export function createQuizService({ pool, config, clock }) {
       [studentId],
     );
     const byId = new Map(stats.map((s) => [s.checkpoint_id, s]));
+    const [best] = await pool.query(
+      'SELECT checkpoint_id, MAX(points_earned) AS best FROM attempts WHERE student_id = ? GROUP BY checkpoint_id',
+      [studentId],
+    );
+    const bestById = new Map(best.map((b) => [b.checkpoint_id, Number(b.best)]));
+    const [factRows] = await pool.query(
+      'SELECT checkpoint_id, fact_text FROM checkpoint_facts ORDER BY checkpoint_id, position',
+    );
+    const facts = new Map();
+    for (const f of factRows)
+      facts.set(f.checkpoint_id, [...(facts.get(f.checkpoint_id) ?? []), f.fact_text]);
     return rows.map((c) => {
       const s = byId.get(c.checkpoint_id);
       const used = Number(s?.used ?? 0);
@@ -56,6 +67,8 @@ export function createQuizService({ pool, config, clock }) {
         completed: Number(s?.passed ?? 0) > 0,
         attemptsUsed: used,
         nextAttemptNumber: used + 1,
+        bestScore: bestById.get(c.checkpoint_id) ?? 0,
+        facts: facts.get(c.checkpoint_id) ?? [],
       });
     });
   }
@@ -514,6 +527,15 @@ export function createQuizService({ pool, config, clock }) {
     return buildAttemptView(pool, attemptId);
   }
 
+  /** Solo rank a student with this total would hold (the student's own row is not counted against itself). */
+  async function rankAmong(total, studentId) {
+    const [[row]] = await pool.query(
+      'SELECT COUNT(*) AS higher FROM students WHERE total_points > ? AND student_id <> ?',
+      [total, studentId],
+    );
+    return Number(row.higher) + 1;
+  }
+
   async function getResult(studentId, attemptId) {
     await finalizeIfExpired(attemptId);
     const [[attempt]] = await pool.query(
@@ -523,15 +545,22 @@ export function createQuizService({ pool, config, clock }) {
     if (!attempt) throw notFound('Attempt not found.');
     if (attempt.status === 'active')
       throw new AppError(409, 'ATTEMPT_NOT_FINISHED', 'This attempt is still running.');
-    const [[student]] = await pool.query('SELECT total_points FROM students WHERE student_id = ?', [
-      studentId,
-    ]);
+    const [[student]] = await pool.query(
+      'SELECT total_points, points_exact_x100 FROM students WHERE student_id = ?',
+      [studentId],
+    );
+    const rules = await loadRules(pool);
+    // Total before this attempt: exact sum minus this attempt's exact points, rounded up once (R-02).
+    const totalBefore = ceilDiv(
+      Math.max(0, Number(student.points_exact_x100) - Number(attempt.points_exact)),
+      100,
+    );
     const [[{ passed }]] = await pool.query(
       "SELECT COUNT(*) AS passed FROM attempts WHERE student_id = ? AND checkpoint_id = ? AND status = 'passed'",
       [studentId, attempt.checkpoint_id],
     );
     const [[checkpoint]] = await pool.query(
-      'SELECT question_count FROM checkpoints WHERE checkpoint_id = ?',
+      'SELECT question_count, pass_threshold FROM checkpoints WHERE checkpoint_id = ?',
       [attempt.checkpoint_id],
     );
     const [[{ used }]] = await pool.query(
@@ -547,12 +576,16 @@ export function createQuizService({ pool, config, clock }) {
       endReason: attempt.end_reason,
       correctCount: attempt.correct_count,
       questionCount: checkpoint.question_count,
+      passThreshold: checkpoint.pass_threshold,
       basePoints: attempt.base_points,
       timeBonus: attempt.time_bonus,
       fullClearBonus: attempt.full_clear_bonus,
       multiplierPercent: attempt.multiplier_percent,
       pointsEarned: attempt.points_earned,
       totalPoints: student.total_points,
+      rankBefore: await rankAmong(totalBefore, studentId),
+      rankAfter: await rankAmong(student.total_points, studentId),
+      nextMultiplierPercent: multiplierFor(rules.multipliers, used + 1),
       checkpointCompleted: passed > 0,
       nextAttemptNumber: used + 1,
     };

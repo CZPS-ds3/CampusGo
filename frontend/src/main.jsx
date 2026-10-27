@@ -1,7 +1,8 @@
-import '@fontsource/anton/400.css';
-import '@fontsource/rubik/400.css';
-import '@fontsource/rubik/500.css';
-import '@fontsource/jetbrains-mono/700.css';
+import '@fontsource/source-sans-3/400.css';
+import '@fontsource/source-sans-3/500.css';
+import '@fontsource/source-sans-3/600.css';
+import '@fontsource/source-sans-3/700.css';
+import '@fontsource/source-sans-3/800.css';
 import 'leaflet/dist/leaflet.css';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
@@ -13,8 +14,6 @@ import { ToastProvider } from './hooks/useToast.jsx';
 import './styles/tokens.css';
 import './styles/base.css';
 import './styles/components.css';
-import './styles/menu.css';
-import './styles/quiz.css';
 import './styles/screens.css';
 import './App.css';
 

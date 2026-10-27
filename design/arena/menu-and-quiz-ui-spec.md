@@ -1,5 +1,7 @@
 # Campus & City Quest: Menu and Quiz Screen, UI Specification
 
+> **Status (2026-10-27):** the look in this document (slanted trail menu, arcade colours) was replaced by the campusGO prototype, see [decisions.md](decisions.md) D5. The behaviour rules (focus trap, inert page, keyboard, timer, states, responsive classes) are still valid.
+
 ## 0. Assumptions
 - Menu, quiz card, hard-offer sheet and the expired/error layers are dark game surfaces. The quiz score panel, the phone score strip and the hard-offer risk note are light DHBW panels (reading content).
 - The server returns `{ deadlineAt, serverNow }` on every attempt response. The client stores `offset = serverNow - Date.now()` and uses it only to draw. Expiry and correctness are decided by the server.
