@@ -1,0 +1,18 @@
+# Design and technology decisions
+
+| # | Decision | Why |
+|---|---|---|
+| D1 | Frontend: React + Vite (JSX), React Router, plain CSS with tokens | Small, fast to build, no CSS framework needed; matches the team's JavaScript-only rule. |
+| D2 | Backend: Node 20 + Express 4, mysql2, zod | Same language as the frontend; zod validates every external input (CLAUDE.md). |
+| D3 | Database: MySQL 8.4 in Docker Compose (host port 3307) | MySQL is not installed on the team's machines; `npm install` + `npm run dev` start it automatically. |
+| D4 | Map: Leaflet with OpenStreetMap tiles darkened with a CSS filter, placeholder checkpoint coordinates | CARTO Dark Matter was planned, but its free tiles now answer with an "API KEY REQUIRED" watermark. OpenStreetMap needs no key; `VITE_MAP_TILE_URL` and `VITE_MAP_DARKEN` switch to another provider. Real coordinates are calibrated on site (WBS 4.1). |
+| D5 | Visual direction (revised 2026-10-27): the app follows the second Figma Make prototype ("campusGO after prompt"): DHBW signal red and anthracite grey, light and dark theme, Source Sans 3, soft shadows, a red hexagon "GO" badge as menu button, full-width menu bars, red page-change stripe, diamond map pins, radar location check, read-first info page, player cards with six avatars, German and English, font size setting | The project manager preferred how this prototype feels. It replaces the first mix of "Arcade Night Campus" tokens and light panels. |
+| D6 | The location-based game is only "inspired" by location games: no ball motif, no Pokémon or Persona imagery | Decision by the project manager. |
+| D7 | Menu and quiz behaviour: the arena winner (a002, 86 to 73.5) gave the accessibility rules that are still used: page behind the menu is inert, Tab stays inside, arrow keys walk the bars, Escape closes, one server deadline with a timer that never shows "expired" for a frame, answers locked after one tap, no auto-advance. Its look (slanted trail, arcade tokens) was replaced by D5. Spec: [arena/menu-and-quiz-ui-spec.md](arena/menu-and-quiz-ui-spec.md) | The rules came from attack and defend rounds and are tested in `frontend/tests/menu.test.jsx` and `frontend/e2e/`. |
+| D8 | Server authority for time, location and correctness; exact points kept in hundredths, rounded up once per user | BR22, R-02. |
+| D9 | Resend cooldown for OTP is 30 s (was 60 s in the first spec) | Value in the build prompt; R-33 updated. |
+| D10 | City expansion is a Could item only | Out of scope for the pilot. |
+| D11 | Language (German or English), dark mode and font size (S to XL) are stored in the browser (`localStorage`) and applied through `data-theme`, `lang` and a `--fs` scale factor | Taken from the prototype; texts are written in English and translated by key (`frontend/src/de.js`, `de-extra.js`); a test fails when a text has no German translation. |
+| D12 | The read-first info page is built (a Should item): three facts per checkpoint in the table `checkpoint_facts`, shown after the location is verified and before the timer starts (R-62) | In the prototype; the start gate already allowed it. Facts in the seed are PLACEHOLDERs. |
+| D13 | Not taken over from the prototype: replaying a cleared checkpoint (BR21 says a passed checkpoint is final), leaving a team (OP-06), the distance to a checkpoint (location is only read when a quest starts, BR12), error texts that reveal whether an invitee exists or is in a team (R-43), demo accounts and the browser mock-up frame | Business rules and privacy come first. |
+| D14 | The city map zone is a locked tab on the map ("City zones: coming soon") instead of a separate page | Same Could item as D10, shown the way the prototype does. |

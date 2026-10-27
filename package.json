@@ -1,26 +1,49 @@
 {
   "name": "campus-city-quest",
-  "version": "0.1.0",
-  "description": "Gamified live-location onboarding web app for incoming international students at DHBW Heilbronn",
+  "version": "0.2.0",
+  "description": "Location-based onboarding game for incoming international students at DHBW Heilbronn",
   "private": true,
   "type": "module",
   "engines": {
     "node": ">=20"
   },
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
   "scripts": {
-    "lint": "eslint .",
+    "postinstall": "node scripts/setup.mjs",
+    "setup": "node scripts/setup.mjs && node scripts/ensure-db.mjs",
+    "predev": "node scripts/ensure-db.mjs",
+    "dev": "concurrently -k -n api,web -c cyan,magenta \"npm run dev --prefix backend\" \"npm run dev --prefix frontend\"",
+    "dev:mock": "npm run dev:mock --prefix frontend",
+    "build": "npm run build --prefix frontend",
+    "start": "npm run start --prefix backend",
+    "db:up": "docker compose up -d --wait",
+    "db:down": "docker compose down",
+    "db:reset": "node scripts/ensure-db.mjs --reset",
+    "db:migrate": "npm run migrate --prefix backend",
+    "db:seed": "npm run seed --prefix backend",
+    "pretest": "node scripts/ensure-db.mjs --test",
+    "test": "npm test --prefix backend && npm test --prefix frontend",
+    "pretest:e2e": "npm run e2e:install --prefix frontend",
+    "test:e2e": "npm run e2e --prefix frontend",
+    "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "vitest run --passWithNoTests",
-    "check": "npm run lint && npm run format:check && npm test"
+    "check": "npm run lint && npm run format:check && npm test && npm run build",
+    "test:e2e:full": "npm run e2e:fullstack --prefix frontend",
+    "screenshots": "cross-env SCREENSHOTS=1 npm run e2e --prefix frontend"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
-    "eslint": "^10.12.0",
-    "eslint-config-prettier": "^10.1.8",
-    "globals": "^17.13.0",
-    "prettier": "^3.9.10",
-    "vitest": "^5.0.4"
+    "@eslint/js": "^9.17.0",
+    "concurrently": "^9.1.0",
+    "eslint": "^9.17.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-react": "^7.37.0",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "globals": "^15.14.0",
+    "prettier": "^3.4.2"
   }
 }

@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "src/styles/components.css"
+        ],
+        "createdAt": "2026-10-27T10:33:39.197Z",
+        "reason": "project manager's chosen campusGO prototype uses a 6px red left edge on the question and title cards (SlantPanel in design/prototype/after-prompt/src/ui.tsx); the manager asked to follow that design, but did not single out this detail"
+      }
+    ]
+  }
+}
