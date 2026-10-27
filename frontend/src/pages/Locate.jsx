@@ -15,8 +15,9 @@ const FAKE_ALLOWED = import.meta.env.DEV && import.meta.env.VITE_DEV_FAKE_LOCATI
 const SUCCESS_PAUSE_MS = 900;
 
 /**
- * Location check (BR12). One position sample is sent to the server when the player starts the quest;
- * poor accuracy, a refusal or being outside the radius uses no attempt and starts no timer.
+ * Location check and unlock (BR12). One fresh position sample is sent to the server when the player
+ * starts the quest; inside the circle the quiz unlocks at once. Poor accuracy, an old reading, a refusal
+ * or being outside the radius uses no attempt and starts no timer.
  */
 export default function Locate() {
   const { id } = useParams();
@@ -26,6 +27,8 @@ export default function Locate() {
   const { locate } = useGeolocation();
   const [checkpoint, setCheckpoint] = useState(null);
   const [phase, setPhase] = useState('idle');
+  const [elsewhere, setElsewhere] = useState(null);
+  const [weakWhy, setWeakWhy] = useState('accuracy'); // accuracy | stale | device
   const [asking, setAsking] = useState(false);
   const [pretend, setPretend] = useState(false);
   const [run, setRun] = useState(0);
@@ -59,28 +62,48 @@ export default function Locate() {
       : undefined;
     const { sample, failure } = await locate(fake);
     if (failure) {
+      setWeakWhy('device');
       setPhase(failure === 'denied' ? 'denied' : 'weak');
       return;
     }
     try {
-      const { outcome } = await api.locationCheck(checkpoint.id, sample);
-      if (outcome === 'verified') {
+      // Inside the circle the server unlocks the quiz right away: this is when the timer starts (BR13).
+      const result = await api.verifyLocation(checkpoint.id, sample);
+      if (result.status === 'OK') {
         setPhase('success');
-        setTimeout(() => navigate(`/info/${checkpoint.id}`, { replace: true }), SUCCESS_PAUSE_MS);
+        setTimeout(
+          () => navigate(`/quiz/${result.attempt.id}`, { replace: true }),
+          SUCCESS_PAUSE_MS,
+        );
       } else {
-        setPhase(outcome === 'outside_radius' ? 'far' : 'weak');
+        setElsewhere(result.elsewhere ?? null);
+        setPhase('far');
       }
     } catch (error) {
       if (error.code === 'ACTIVE_ATTEMPT_EXISTS') {
         navigate(`/quiz/${error.details.attemptId}`, { replace: true });
         return;
       }
-      if (error.code === 'CHECKPOINT_COMPLETED') {
+      if (error.code === 'ALREADY_COMPLETED') {
         toast.info(t('Checkpoint cleared'));
         navigate('/map', { replace: true });
         return;
       }
-      toast.error(errorText(error));
+      if (error.code === 'NOT_AVAILABLE') {
+        toast.error(errorText(error));
+        navigate('/map', { replace: true });
+        return;
+      }
+      if (error.code === 'CONSENT_REQUIRED') {
+        setPhase('idle');
+        setAsking(true);
+        return;
+      }
+      // ACCURACY_TOO_LOW and STALE_POSITION are plain retries; anything else is shown as well.
+      if (error.code !== 'ACCURACY_TOO_LOW' && error.code !== 'STALE_POSITION') {
+        toast.error(errorText(error));
+      }
+      setWeakWhy(error.code === 'STALE_POSITION' ? 'stale' : 'accuracy');
       setPhase('weak');
     }
   }, [checkpoint, locate, navigate, pretend, toast]);
@@ -120,14 +143,23 @@ export default function Locate() {
     },
     weak: {
       title: t('Weak signal'),
-      body: t('GPS signal weak — try again. No attempt used.'),
+      body: {
+        accuracy: t('GPS signal weak — try again. No attempt used.'),
+        stale: t('Your location reading was too old — try again. No attempt used.'),
+        device: t('Your browser could not find a position — try again. No attempt used.'),
+      }[weakWhy],
       color: 'var(--warn)',
     },
     far: {
       title: t('Not there yet'),
-      body: t('You are not at {name} yet. Walk closer and check again. No attempt used.', {
-        name: checkpoint?.name ?? '',
-      }),
+      body: elsewhere
+        ? t('You are at {other}, not at {name}. Walk to {name} and check again. No attempt used.', {
+            other: elsewhere,
+            name: checkpoint?.name ?? '',
+          })
+        : t('You are not at {name} yet. Walk closer and check again. No attempt used.', {
+            name: checkpoint?.name ?? '',
+          }),
       color: 'var(--warn)',
     },
     denied: {
@@ -155,7 +187,7 @@ export default function Locate() {
         </Display>
       </div>
       <p className="small muted mt">
-        {checkpoint?.name} · {t('timer starts only after the quiz begins')}
+        {checkpoint?.name} · {t('the timer starts once your location is confirmed')}
       </p>
 
       <div className="radar" aria-hidden="true">

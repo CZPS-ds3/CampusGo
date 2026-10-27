@@ -67,19 +67,20 @@ export async function createTestContext(envOverrides = {}) {
     return body.checkpoints.find((c) => c.name === name);
   }
 
-  /** Consent, location check at the checkpoint centre, then start. Returns the attempt view. */
+  /** One reading sent to the verify endpoint; `offset` moves it north in degrees (invented positions only). */
+  function verify(agent, checkpoint, { accuracy = 10, offset = 0, ageMs = 0 } = {}) {
+    return agent
+      .post(`/api/checkpoints/${checkpoint.id}/verify`)
+      .send({ lat: checkpoint.latitude + offset, lng: checkpoint.longitude, accuracy, ageMs });
+  }
+
+  /** Consent, then a fresh reading at the checkpoint centre, which unlocks the quiz. Returns the attempt view. */
   async function startAttempt(agent, checkpointName) {
     await agent.post('/api/me/location-consent').expect(204);
     const checkpoint = await checkpointByName(agent, checkpointName);
-    const check = await agent
-      .post(`/api/checkpoints/${checkpoint.id}/location-check`)
-      .send({ latitude: checkpoint.latitude, longitude: checkpoint.longitude, accuracy: 10 })
-      .expect(200);
-    if (check.body.outcome !== 'verified')
-      throw new Error(`location not verified: ${check.body.outcome}`);
-    const res = await agent.post('/api/attempts').send({ checkpointId: checkpoint.id });
-    if (res.status !== 201)
-      throw new Error(`start failed: ${res.status} ${JSON.stringify(res.body)}`);
+    const res = await verify(agent, checkpoint);
+    if (res.status !== 200 || res.body.status !== 'OK')
+      throw new Error(`unlock failed: ${res.status} ${JSON.stringify(res.body)}`);
     return res.body.attempt;
   }
 
@@ -124,6 +125,7 @@ export async function createTestContext(envOverrides = {}) {
     reset,
     login,
     checkpointByName,
+    verify,
     startAttempt,
     answer,
     answerPattern,

@@ -162,7 +162,7 @@ export const CPS: CP[] = [
   },
   {
     id: "containers",
-    name: "Containers",
+    name: "Sensoricum",
     x: 76,
     y: 76,
     dist: 310,

@@ -26,14 +26,12 @@ sequenceDiagram
     participant F as Frontend
     participant B as Backend
     participant D as MySQL
-    S->>F: Tap "Check location"
-    F->>F: navigator.geolocation (accuracy, 10 s timeout)
-    F->>B: POST /checkpoints/:id/location-check
-    B->>D: insert Location_Check (inside yes/no + time)
-    B-->>F: verified
-    S->>F: Tap "Start quiz"
-    F->>B: POST /attempts
+    S->>F: Read the facts, tap "I'm ready"
+    F->>F: navigator.geolocation (one fresh reading, 10 s timeout)
+    F->>B: POST /checkpoints/:id/verify {lat, lng, accuracy, ageMs}
+    B->>B: fresh (<= 30 s)? accuracy <= 50 m? Haversine distance <= radius?
     B->>D: lock student, create Attempt + draw questions, expires_at = now + n minutes
+    B->>D: insert Location_Check (inside yes/no + time)
     B-->>F: attempt (questions, expiresAt, serverNow)
     loop each question
         S->>F: choose an option

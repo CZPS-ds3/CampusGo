@@ -4,14 +4,37 @@ const int = (value, fallback) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const DEV_SECRETS = new Set([
+  '',
+  'dev-session-secret',
+  'dev-otp-secret',
+  'change-me-session-secret',
+  'change-me-otp-secret',
+]);
+const MIN_SECRET_LENGTH = 32;
+
+/**
+ * "trust proxy" must match the real deployment: trusting X-Forwarded-For without a proxy lets any client
+ * pick its own IP and slip past the rate limits. Default: trust nothing. Set TRUST_PROXY=1 behind one proxy.
+ */
+function trustProxy(value) {
+  if (value === undefined || value === '' || value === 'false') return false;
+  if (value === 'true') return true;
+  const hops = Number.parseInt(value, 10);
+  return Number.isFinite(hops) ? hops : value;
+}
+
 export function loadConfig(env = process.env) {
   const nodeEnv = env.NODE_ENV ?? 'development';
+  const smtpPort = int(env.SMTP_PORT, 587);
   return {
     nodeEnv,
     isDev: nodeEnv === 'development',
     isTest: nodeEnv === 'test',
+    isProd: nodeEnv === 'production',
     port: int(env.PORT, 3000),
     frontendOrigin: env.FRONTEND_ORIGIN ?? 'http://localhost:5173',
+    trustProxy: trustProxy(env.TRUST_PROXY),
     databaseUrl:
       env.NODE_ENV === 'test'
         ? (env.TEST_DATABASE_URL ?? 'mysql://cq:cq_dev_password@127.0.0.1:3307/campusquest_test')
@@ -25,17 +48,44 @@ export function loadConfig(env = process.env) {
     otpResendMaxPerHour: int(env.OTP_RESEND_MAX_PER_HOUR, 5),
     sessionInactivityMinutes: int(env.SESSION_INACTIVITY_MINUTES, 30),
     invitationTtlHours: int(env.INVITATION_TTL_HOURS, 24),
+    // Geofencing settings (Main Project Document, section 5 "Settings kept in one config file").
     maxAccuracyM: int(env.MAX_ACCURACY_M, 50),
-    locationVerificationValidMinutes: int(env.LOCATION_VERIFICATION_VALID_MINUTES, 5),
+    maxPositionAgeMs: int(env.MAX_POSITION_AGE_MS, 30_000),
+    secondsPerQuestion: int(env.SECONDS_PER_QUESTION, 60), // BR13
+    verifyLimitPerMin: int(env.VERIFY_LIMIT_PER_MIN, 10),
     locationRetentionDays: int(env.LOCATION_RETENTION_DAYS, 7),
     maxProfilePictureBytes: int(env.MAX_PROFILE_PICTURE_MB, 2) * 1024 * 1024,
     smtp: {
       host: env.SMTP_HOST ?? '',
-      port: int(env.SMTP_PORT, 587),
+      port: smtpPort,
+      // Port 465 is implicit TLS; 587 upgrades with STARTTLS, which we then require.
+      secure: env.SMTP_SECURE ? env.SMTP_SECURE === 'true' : smtpPort === 465,
       user: env.SMTP_USER ?? '',
       password: env.SMTP_PASSWORD ?? '',
       from: env.SMTP_FROM ?? 'Campus & City Quest <no-reply@localhost>',
     },
     uploadDir: env.UPLOAD_DIR ?? 'uploads',
   };
+}
+
+/**
+ * Refuses to start production with development defaults: guessable secrets would let anyone forge
+ * OTP hashes, and without SMTP no student could ever receive a login code. Returns a list of problems.
+ */
+export function productionProblems(config) {
+  if (!config.isProd) return [];
+  const problems = [];
+  for (const [name, value] of [
+    ['SESSION_SECRET', config.sessionSecret],
+    ['OTP_SECRET', config.otpSecret],
+  ]) {
+    if (DEV_SECRETS.has(value) || value.length < MIN_SECRET_LENGTH) {
+      problems.push(`${name} must be a random value of at least ${MIN_SECRET_LENGTH} characters.`);
+    }
+  }
+  if (!config.smtp.host) problems.push('SMTP_HOST is required so that OTP e-mails can be sent.');
+  if (!config.frontendOrigin.startsWith('https://')) {
+    problems.push('FRONTEND_ORIGIN must be an https:// address (geolocation needs HTTPS).');
+  }
+  return problems;
 }

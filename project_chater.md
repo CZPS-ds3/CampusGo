@@ -30,7 +30,7 @@
 
 ### Overall Project Objective
 
-To develop a gamified, mobile-responsive web application for incoming international students at DHBW Heilbronn. Students log in with a one-time password sent to their school e-mail (address ending with `heilbronn.dhbw.de`), may form teams, verify their live location at one of **8 pilot checkpoints** (Mensa, Library, CAS Cafe, Campus Garden, Care.box and Shop.box, Building B, Building C, Containers) and take a timed multiple-choice quiz (3 or 5 questions, 1 minute per question; pass at 2/3 or 4/5). Points (question points, time bonus, full-clear bonus, attempt multipliers, optional hard question) feed solo and team leaderboards.
+To develop a gamified, mobile-responsive web application for incoming international students at DHBW Heilbronn. Students log in with a one-time password sent to their school e-mail (address ending with `heilbronn.dhbw.de`), may form teams, verify their live location at one of **8 pilot checkpoints** (Mensa, Library, CAS Cafe, Campus Garden, Care.box and Shop.box, Building B, Building C, Sensoricum) and take a timed multiple-choice quiz (3 or 5 questions, 1 minute per question; pass at 2/3 or 4/5). Points (question points, time bonus, full-clear bonus, attempt multipliers, optional hard question) feed solo and team leaderboards.
 
 ### Sub-objectives and Measurable Results
 

@@ -59,7 +59,7 @@ describe('BR14 BR16 BR17 BR18 BR19 BR21 worked examples (section 3.3)', () => {
     expect(r.pointsEarned).toBe(4150);
     expect(r.fullClearBonus).toBe(0);
   });
-  it('example 4: Containers 2 of 3, 100 s left = 2100', () => {
+  it('example 4: Sensoricum 2 of 3, 100 s left = 2100', () => {
     const r = run({
       slots: [N(true), N(true), N(false)],
       questionCount: 3,

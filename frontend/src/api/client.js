@@ -64,8 +64,9 @@ const realApi = {
   setAvatarPreset: (preset) => post('/me/avatar-preset', { preset }),
   consent: () => post('/me/location-consent'),
   checkpoints: () => request('GET', '/checkpoints'),
-  locationCheck: (id, sample) => post(`/checkpoints/${id}/location-check`, sample),
-  startAttempt: (checkpointId) => post('/attempts', { checkpointId }),
+  // One reading; the server decides and, when inside, unlocks the quiz (returns { status, attempt }).
+  verifyLocation: (id, { latitude, longitude, accuracy, ageMs }) =>
+    post(`/checkpoints/${id}/verify`, { lat: latitude, lng: longitude, accuracy, ageMs }),
   activeAttempt: () => request('GET', '/attempts/active'),
   attempt: (id) => request('GET', `/attempts/${id}`),
   answer: (id, optionId, questionNumber) =>

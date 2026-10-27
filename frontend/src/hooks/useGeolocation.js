@@ -9,17 +9,21 @@ function failureFrom(error) {
   return 'unavailable';
 }
 
-/** One position sample from the Geolocation API. Rejects with 'denied' | 'timeout' | 'unavailable'. */
+/**
+ * One position sample from the Geolocation API. Rejects with 'denied' | 'timeout' | 'unavailable'.
+ * `ageMs` is phone clock minus phone clock, so a phone whose clock is off is not blocked by the server.
+ */
 export function getPosition(fake) {
-  if (fake) return Promise.resolve(fake);
+  if (fake) return Promise.resolve({ ageMs: 0, ...fake });
   if (!('geolocation' in navigator)) return Promise.reject('unavailable');
   return new Promise((resolve, reject) => {
     navigator.geolocation.getCurrentPosition(
-      ({ coords }) =>
+      ({ coords, timestamp }) =>
         resolve({
           latitude: coords.latitude,
           longitude: coords.longitude,
           accuracy: coords.accuracy,
+          ageMs: Math.max(0, Date.now() - timestamp),
         }),
       (error) => reject(failureFrom(error)),
       GEO_OPTIONS,

@@ -10,7 +10,7 @@ class ApiError extends Error {
   }
 }
 
-const LIBRARY = { latitude: 49.1236, longitude: 9.2119 };
+const LIBRARY = { latitude: 49.149493, longitude: 9.216467, ageMs: 0 };
 let api;
 
 async function signIn() {
@@ -24,8 +24,7 @@ async function signIn() {
 }
 
 async function startLibrary() {
-  await api.locationCheck(2, { ...LIBRARY, accuracy: 10 });
-  return (await api.startAttempt(2)).attempt;
+  return (await api.verifyLocation(2, { ...LIBRARY, accuracy: 10 })).attempt;
 }
 
 /** The mock marks the right option in its text, so a test can answer without knowing internals. */
@@ -47,11 +46,47 @@ describe('mock API keeps the same rules as the server (BR12, BR13, BR14, BR18)',
     });
   });
 
-  it('BR12 poor accuracy does not verify and does not allow a start', async () => {
+  it('BR12 poor accuracy or an old reading starts nothing', async () => {
     await signIn();
-    const res = await api.locationCheck(2, { ...LIBRARY, accuracy: 51 });
-    expect(res.outcome).toBe('poor_accuracy');
-    await expect(api.startAttempt(2)).rejects.toMatchObject({ code: 'LOCATION_NOT_VERIFIED' });
+    await expect(api.verifyLocation(2, { ...LIBRARY, accuracy: 51 })).rejects.toMatchObject({
+      code: 'ACCURACY_TOO_LOW',
+    });
+    await expect(
+      api.verifyLocation(2, { ...LIBRARY, accuracy: 5, ageMs: 30_001 }),
+    ).rejects.toMatchObject({ code: 'STALE_POSITION' });
+    expect((await api.activeAttempt()).attempt).toBeNull();
+  });
+
+  it('BR12 outside the circle reports a rounded distance; inside unlocks, a second tap resumes', async () => {
+    await signIn();
+    const far = await api.verifyLocation(2, { ...LIBRARY, latitude: 49.151493, accuracy: 5 });
+    expect(far).toMatchObject({ status: 'OUTSIDE', distanceM: 220 });
+    const first = await api.verifyLocation(2, { ...LIBRARY, accuracy: 5 });
+    const again = await api.verifyLocation(2, { ...LIBRARY, accuracy: 5 });
+    expect(first.status).toBe('OK');
+    expect(again).toMatchObject({ status: 'OK', resumed: true });
+    expect(again.attempt.id).toBe(first.attempt.id);
+  });
+
+  it('BR12 standing in Building C does not unlock the Sensoricum, and the other way round', async () => {
+    await signIn();
+    const c = { latitude: 49.147316, longitude: 9.2179, accuracy: 5, ageMs: 0 };
+    const s = { latitude: 49.14762, longitude: 9.217807, accuracy: 5, ageMs: 0 };
+    const wrong = await api.verifyLocation(8, c);
+    expect(wrong).toMatchObject({ status: 'OUTSIDE', elsewhere: 'Building C' });
+    expect((await api.activeAttempt()).attempt).toBeNull();
+    const reverse = await api.verifyLocation(7, s);
+    expect(reverse).toMatchObject({ status: 'OUTSIDE', elsewhere: 'Sensoricum' });
+    expect((await api.verifyLocation(8, s)).status).toBe('OK');
+  });
+
+  it('BR07 BR08 all eight pilot checkpoints are listed; an unknown one cannot be started', async () => {
+    await signIn();
+    const { checkpoints } = await api.checkpoints();
+    expect(checkpoints).toHaveLength(8);
+    await expect(api.verifyLocation(99, { ...LIBRARY, accuracy: 5 })).rejects.toMatchObject({
+      code: 'NOT_AVAILABLE',
+    });
   });
 
   it('BR12 a location check needs the consent notice first', async () => {
@@ -61,7 +96,7 @@ describe('mock API keeps the same rules as the server (BR12, BR13, BR14, BR18)',
       firstName: 'Ada',
       lastName: 'L',
     });
-    await expect(api.locationCheck(2, { ...LIBRARY, accuracy: 5 })).rejects.toMatchObject({
+    await expect(api.verifyLocation(2, { ...LIBRARY, accuracy: 5 })).rejects.toMatchObject({
       code: 'CONSENT_REQUIRED',
     });
   });
@@ -111,8 +146,8 @@ describe('mock API keeps the same rules as the server (BR12, BR13, BR14, BR18)',
     await signIn();
     let attempt = await startLibrary();
     for (let i = 0; i < 5; i += 1) attempt = (await api.answer(attempt.id, right(attempt))).attempt;
-    await expect(api.locationCheck(2, { ...LIBRARY, accuracy: 5 })).rejects.toMatchObject({
-      code: 'CHECKPOINT_COMPLETED',
+    await expect(api.verifyLocation(2, { ...LIBRARY, accuracy: 5 })).rejects.toMatchObject({
+      code: 'ALREADY_COMPLETED',
     });
   });
 

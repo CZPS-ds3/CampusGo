@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { SESSION_COOKIE, requireAuth, sessionCookieOptions } from './middleware/auth.js';
 import { AppError, errorHandler, handle, notFound } from './middleware/errors.js';
 import { createLimiters } from './middleware/rate-limit.js';
+import { requireSameOrigin } from './middleware/same-origin.js';
 import { GENERIC_OTP_MESSAGE, createAuthService, publicStudent } from './services/auth.js';
 import { createLeaderboardService } from './services/leaderboards.js';
 import { storeProfilePicture } from './services/pictures.js';
@@ -27,12 +28,16 @@ const schemas = {
     nickname: z.string().trim().max(20).optional(),
     avatarPreset: z.number().int().min(0).max(5).optional(),
   }),
-  location: z.object({
-    latitude: z.number().min(-90).max(90),
-    longitude: z.number().min(-180).max(180),
-    accuracy: z.number().min(0).max(100000),
+  // One location reading (Main Project Document 6.2). Never logged or stored.
+  reading: z.object({
+    lat: z.number().finite().min(-90).max(90),
+    lng: z.number().finite().min(-180).max(180),
+    accuracy: z.number().finite().min(0).max(100000),
+    ageMs: z
+      .number()
+      .finite()
+      .max(24 * 3600 * 1000),
   }),
-  startAttempt: z.object({ checkpointId: id }),
   answer: z.object({ optionId: id, questionNumber: z.number().int().min(1).max(5).optional() }),
   team: z.object({ name: z.string().trim().min(2).max(30) }),
   invite: z.object({ email }),
@@ -57,11 +62,12 @@ export function createApp({ pool, config, mailer, clock }) {
   const uploadDir = resolve(config.uploadDir);
 
   app.disable('x-powered-by');
-  app.set('trust proxy', 1);
+  app.set('trust proxy', config.trustProxy);
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
   app.use(cors({ origin: config.frontendOrigin, credentials: true }));
   app.use(express.json({ limit: '10kb' }));
   app.use(cookieParser());
+  app.use(requireSameOrigin(config.frontendOrigin));
   app.use('/uploads', express.static(uploadDir, { maxAge: '1h', index: false }));
 
   const api = express.Router();
@@ -102,7 +108,8 @@ export function createApp({ pool, config, mailer, clock }) {
       res.status(204).end();
     }),
   );
-  if (config.isDev) {
+  // Development only, and only while no real SMTP server is configured (codes are then kept in memory).
+  if (config.isDev && !config.smtp.host) {
     api.get('/dev/last-otp', (req, res) => {
       const mail = mailer.lastTo?.(
         String(req.query.email ?? '')
@@ -167,25 +174,18 @@ export function createApp({ pool, config, mailer, clock }) {
       res.json({ checkpoints: await quiz.listCheckpoints(req.student.student_id) }),
     ),
   );
+  // Geofence check and unlock in one call (Main Project Document 6.2, Figure 3).
   api.post(
-    '/checkpoints/:id/location-check',
-    limits.location,
+    '/checkpoints/:id/verify',
+    limits.verify,
     handle(async (req, res) => {
-      const outcome = await quiz.locationCheck(
-        req.student.student_id,
-        id.parse(req.params.id),
-        schemas.location.parse(req.body),
+      res.json(
+        await quiz.verifyAndStart(
+          req.student.student_id,
+          id.parse(req.params.id),
+          schemas.reading.parse(req.body),
+        ),
       );
-      res.json({ outcome });
-    }),
-  );
-  api.post(
-    '/attempts',
-    handle(async (req, res) => {
-      const body = schemas.startAttempt.parse(req.body);
-      res
-        .status(201)
-        .json({ attempt: await quiz.startAttempt(req.student.student_id, body.checkpointId) });
     }),
   );
   api.get(
