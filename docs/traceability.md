@@ -13,7 +13,7 @@ Keep this file up to date: every merge request names the BR IDs it implements (i
 | BR05 | Teams of 1-5; one team per user; ≥2 members active; name required | 3.2, 3.6 | Team, Student | API; acceptance checks 16, 19 |
 | BR06 | Invitations: accept/reject, invalid on reject/full, 24 h expiry, not for users in a team | 3.2, 3.6 | Team_Invitation, Team, Student | API + concurrency; acceptance checks 16, 17, 18 |
 | BR07 | Eight pilot checkpoints | 4.1 | Checkpoint (seed) | Seed validation |
-| BR08 | Checkpoint: unique name, GPS, positive radius, is_active; only active unlock quizzes | 3.5, 4.1 | Checkpoint | DB constraints; API (`CHECKPOINT_INACTIVE`) |
+| BR08 | Checkpoint: unique name, GPS, positive radius, is_active; only active unlock quizzes | 3.5, 4.1 | Checkpoint | DB constraints; API (`NOT_AVAILABLE`) |
 | BR09 | Random 3 or 5 distinct questions; bank size; fresh draw per attempt | 3.3, 4.2 | Checkpoint, Question, Attempt_Question | Unit (distinctness); seed validation; acceptance check 25 |
 | BR10 | One checkpoint per question; 4 options; 1 correct | 3.3, 4.2 | Question, Option | DB constraints; seed validation |
 | BR11 | Content and points maintained in the database, not in code | 2.2, 3.3, 3.4, 4.2 | Difficulty, Bonus, Scoring_Multiplier, Question, Option | Test: change a value in the DB, no code change |

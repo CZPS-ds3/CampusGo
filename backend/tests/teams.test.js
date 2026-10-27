@@ -19,7 +19,7 @@ async function teamWithInvites(leader, members, teamName = 'Night Owls') {
   return ids;
 }
 
-async function earnPoints(who, checkpointName = 'Containers', pattern = [true, true, true]) {
+async function earnPoints(who, checkpointName = 'Sensoricum', pattern = [true, true, true]) {
   const attempt = await ctx.startAttempt(who.agent, checkpointName);
   await ctx.answerPattern(who.agent, attempt, pattern);
 }
@@ -183,7 +183,7 @@ describe('BR04 BR06 BR24 team leaderboard', () => {
     const m2 = await ctx.login('m2');
     const ids = await teamWithInvites(lead, [m1, m2]);
     await earnPoints(lead);
-    await earnPoints(m1, 'Containers', [true, true, false]);
+    await earnPoints(m1, 'Sensoricum', [true, true, false]);
     await m1.agent.post(`/api/invitations/${ids[0]}/accept`).expect(200);
     await m2.agent.post(`/api/invitations/${ids[1]}/accept`).expect(200);
     const mine = await lead.agent.get('/api/teams/me').expect(200);

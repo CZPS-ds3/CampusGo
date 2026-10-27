@@ -35,12 +35,12 @@ export async function openCheckpoint(page, name) {
   await expect(page.getByRole('dialog')).toBeVisible();
 }
 
-/** From an open checkpoint sheet to a running quiz: start, accept the location notice, read, go. */
+/** From an open checkpoint sheet to a running quiz: start, read, accept the location notice, unlock. */
 export async function startQuiz(page) {
   await page.getByRole('link', { name: /Start quest|Retry quest/ }).click();
+  await page.getByRole('button', { name: "I'm ready" }).click();
   await page.getByRole('button', { name: 'I agree' }).click();
   await expect(page.getByText('Locked on!')).toBeVisible();
-  await page.getByRole('button', { name: "I'm ready" }).click();
   await expect(page.getByRole('timer')).toBeVisible();
 }
 

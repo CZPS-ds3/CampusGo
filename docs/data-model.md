@@ -273,7 +273,7 @@ Content changes while attempts are running follow R-24. Seed files contain no re
 | Library | 5 | 4 | true | 10 normal, 3 hard |
 | Building B | 5 | 4 | true | 10 normal, 3 hard |
 | Building C | 5 | 4 | true | 10 normal, 3 hard |
-| Containers | 3 | 2 | false | 6 normal |
+| Sensoricum | 3 | 2 | false | 6 normal |
 | CAS Cafe | 3 | 2 | false | 6 normal |
 | Care.box and Shop.box | 3 | 2 | false | 6 normal |
 | Campus Garden | 3 | 2 | false | 6 normal |

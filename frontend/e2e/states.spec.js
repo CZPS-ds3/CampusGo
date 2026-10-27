@@ -8,7 +8,7 @@ import {
   startQuiz,
 } from './helpers.js';
 
-const LIBRARY = { latitude: 49.1236, longitude: 9.2119, accuracy: 10 };
+const LIBRARY = { latitude: 49.149493, longitude: 9.216467, accuracy: 10 };
 
 async function startLibrary(page, context) {
   await login(page);

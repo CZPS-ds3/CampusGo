@@ -12,7 +12,7 @@
 Key rules in short (read the file before implementing):
 - **Login (BR01-03):** OTP by e-mail only, no passwords. The e-mail must end with `heilbronn.dhbw.de`. Login responds generically ("If the account exists, an email containing the OTP has been sent."). One active session per student; sessions expire after inactivity. OTP codes and session tokens are stored only as hashes.
 - **Teams (BR05, BR06):** 1-5 members, one team per user, invitations by e-mail (accept/reject, 24 h expiry). Team leaderboard = ceil(average of members' total points), only teams with >= 2 members, visible only to users in a team.
-- **Checkpoints (BR07-08):** 8 pilot checkpoints (Mensa, Library, CAS Cafe, Campus Garden, Care.box and Shop.box, Building B, Building C, Containers). Only active ones unlock quizzes.
+- **Checkpoints (BR07-08):** 8 pilot checkpoints (Mensa, Library, CAS Cafe, Campus Garden, Care.box and Shop.box, Building B, Building C, Sensoricum). Only active ones unlock quizzes.
 - **Location (BR12):** verified by the server when an attempt starts (browser Geolocation API). Poor accuracy or denied permission = check again, without consuming an attempt or starting the timer. Leaving the geofence afterwards does NOT end the attempt. There is no 30-second leave rule.
 - **Quiz (BR09-10, 13-15, 20-23, 25):** random 3 or 5 distinct questions, 4 options each, 1 minute per question (one deadline per attempt, server clock), no retry, right answer revealed after a wrong answer, pass at 4/5 or 2/3, a passed checkpoint is final, every attempt is a new record, question set and state survive refresh/reconnect.
 - **Scoring (BR14, 16-21):** normal 1,000, hard 2,000, time bonus 1 per whole remaining second, full clear 200, attempt multipliers 100/85/70/55/40/0 % applied after bonuses, hard-question option only on attempt 1 of the 4 large checkpoints, fractions rounded up. **Points, bonuses and multipliers are read from database tables (BR11), never hard-coded.**
@@ -31,6 +31,7 @@ ai-logs/<member>/     Per-member AI session logs (catalina, yuri, ryan, yi_heng,
 backend/              Express API (index.js, src/routes|services|db|middleware, tests/, .env.example)
 frontend/             React + Vite app (src/api|components|hooks|pages|styles, tests/, e2e/, .env.example)
 design/               Architecture, ER diagram, API docs, decisions, UI spec, prototype reference, screenshots
+testing/              location-testing-guide.md + checkpoint-coordinates.json (test positions for all checkpoints, DevTools steps)
 docs/                 business-rules.md (SOURCE OF TRUTH), data-model, geofencing, question-bank, traceability, git-workflow, project_handbook
 docker-compose.yml    MySQL 8.4 for development and tests
 scripts/              setup.mjs (after npm install), ensure-db.mjs (starts the database)

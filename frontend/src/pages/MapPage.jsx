@@ -58,7 +58,7 @@ function CheckpointSheet({ checkpoint, active, onClose }) {
           {t('Continue the quiz')} <Icon name="arrow" />
         </Button>
       ) : state === 'open' ? (
-        <Button className="mt" to={`/locate/${checkpoint.id}`} data-autofocus>
+        <Button className="mt" to={`/info/${checkpoint.id}`} data-autofocus>
           {checkpoint.attemptsUsed ? t('Retry quest') : t('Start quest')} <Icon name="arrow" />
         </Button>
       ) : (

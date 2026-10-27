@@ -50,6 +50,21 @@ export function publicStudent(row) {
   };
 }
 
+/** The login e-mail. `code` is six digits and `ttlMinutes` a number, so nothing here needs HTML escaping. */
+export function otpEmail(to, code, ttlMinutes) {
+  return {
+    to,
+    subject: 'Your Campus & City Quest login code',
+    text: `Your one-time code is ${code}. It is valid for ${ttlMinutes} minutes.\nIf you did not ask for it, ignore this message.`,
+    html:
+      '<div style="font-family:Arial,sans-serif;font-size:16px;color:#1a1a1a">' +
+      '<p>Your Campus &amp; City Quest login code:</p>' +
+      `<p style="font-size:28px;font-weight:bold;letter-spacing:6px">${code}</p>` +
+      `<p>It is valid for ${ttlMinutes} minutes. Never share it with anyone.</p>` +
+      '<p style="color:#666;font-size:13px">If you did not ask for it, ignore this message.</p></div>',
+  };
+}
+
 export function createAuthService({ pool, config, mailer, clock }) {
   const hashCode = (email, code) =>
     createHmac('sha256', config.otpSecret).update(`${email}:${code}`).digest('hex');
@@ -88,11 +103,7 @@ export function createAuthService({ pool, config, mailer, clock }) {
         [email, hashCode(email, code), at(now), at(now + config.otpTtlMinutes * 60 * 1000)],
       );
     });
-    mailer.send({
-      to: email,
-      subject: 'Your Campus & City Quest login code',
-      text: `Your one-time code is ${code}. It is valid for ${config.otpTtlMinutes} minutes.\nIf you did not ask for it, ignore this message.`,
-    });
+    mailer.send(otpEmail(email, code, config.otpTtlMinutes));
   }
 
   async function createSession(conn, studentId, now) {
@@ -207,5 +218,13 @@ export function createAuthService({ pool, config, mailer, clock }) {
     ]);
   }
 
-  return { requestOtp, verifyOtp, authenticate, logout, purgeOldOtps };
+  /** Ended or expired sessions are of no use after a day; their token hashes should not pile up. */
+  async function purgeOldSessions() {
+    await pool.query(
+      'DELETE FROM sessions WHERE (is_active = 0 OR expires_at < ?) AND created_at < ?',
+      [at(clock.now()), at(clock.now() - 24 * 3600 * 1000)],
+    );
+  }
+
+  return { requestOtp, verifyOtp, authenticate, logout, purgeOldOtps, purgeOldSessions };
 }

@@ -97,3 +97,6 @@ playwright-report/
 test-results/
 blob-report/
 frontend/dist/
+
+# ---------- User uploads (profile pictures are personal data) ----------
+backend/uploads/

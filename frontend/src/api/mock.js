@@ -6,23 +6,25 @@ const SECOND = 1000;
 const OTP = '123456';
 const DOMAIN = 'heilbronn.dhbw.de';
 const MAX_ACCURACY_M = 50;
+const MAX_POSITION_AGE_MS = 30_000;
 
+// Same centres, radii and status as backend/src/db/seed.js (Bildungscampus Heilbronn).
 const CHECKPOINTS = [
-  ['Mensa', 49.1231, 9.2108, 5, 4, true],
-  ['Library', 49.1236, 9.2119, 5, 4, true],
-  ['CAS Cafe', 49.1228, 9.2102, 3, 2, false],
-  ['Campus Garden', 49.1224, 9.2114, 3, 2, false],
-  ['Care.box and Shop.box', 49.1233, 9.2096, 3, 2, false],
-  ['Building B', 49.1239, 9.2106, 5, 4, true],
-  ['Building C', 49.1241, 9.2115, 5, 4, true],
-  ['Containers', 49.1221, 9.2121, 3, 2, false],
-].map(([name, latitude, longitude, questionCount, passThreshold, hard], i) => ({
+  ['Mensa', 49.148464, 9.215808, 60, 5, 4, true, true],
+  ['Library', 49.149493, 9.216467, 60, 5, 4, true, true],
+  ['CAS Cafe', 49.148951, 9.216205, 40, 3, 2, false, true],
+  ['Campus Garden', 49.147082, 9.217206, 50, 3, 2, false, true],
+  ['Care.box and Shop.box', 49.149088, 9.21727, 40, 3, 2, false, true],
+  ['Building B', 49.147126, 9.218486, 60, 5, 4, true, true],
+  ['Building C', 49.147316, 9.2179, 60, 5, 4, true, true],
+  ['Sensoricum', 49.14762, 9.217807, 40, 3, 2, false, true],
+].map(([name, latitude, longitude, radius, questionCount, passThreshold, hard, isActive], i) => ({
   id: i + 1,
   name,
   latitude,
   longitude,
-  radius: 60,
-  isActive: true,
+  radius,
+  isActive,
   questionCount,
   passThreshold,
   hardQuestionEnabled: hard,
@@ -40,7 +42,6 @@ const fresh = () => ({
   loggedIn: false,
   student: null,
   consent: false,
-  checks: [],
   attempts: [],
   nextId: 1,
   team: null,
@@ -339,7 +340,7 @@ export function createMockApi(ApiError, getUnauthorized) {
       needLogin();
       sweep();
       return {
-        checkpoints: CHECKPOINTS.map((c) => {
+        checkpoints: CHECKPOINTS.filter((c) => c.isActive).map((c) => {
           const mine = state.attempts.filter((a) => a.checkpointId === c.id);
           return {
             ...c,
@@ -352,41 +353,50 @@ export function createMockApi(ApiError, getUnauthorized) {
         }),
       };
     },
-    async locationCheck(id, { latitude, longitude, accuracy }) {
+    async verifyLocation(id, { latitude, longitude, accuracy, ageMs }) {
       needLogin();
       sweep();
       const cp = checkpoint(id);
-      if (!cp) throw fail(404, 'NOT_FOUND', 'Checkpoint not found.');
-      if (!state.consent)
-        throw fail(403, 'CONSENT_REQUIRED', 'Please accept the location notice first.');
+      if (!cp?.isActive) throw fail(404, 'NOT_AVAILABLE', 'This checkpoint is not available.');
       if (state.attempts.some((a) => a.checkpointId === cp.id && a.status === 'passed')) {
-        throw fail(409, 'CHECKPOINT_COMPLETED', 'You already completed this checkpoint.');
+        throw fail(409, 'ALREADY_COMPLETED', 'You already completed this checkpoint.');
       }
       const active = activeAttempt();
+      if (active?.checkpointId === cp.id)
+        return { status: 'OK', resumed: true, attempt: view(active) };
       if (active)
         throw fail(409, 'ACTIVE_ATTEMPT_EXISTS', 'You have a quiz in progress.', {
           attemptId: active.id,
         });
-      if (accuracy > MAX_ACCURACY_M) return { outcome: 'poor_accuracy' };
-      const inside = distance(latitude, longitude, cp.latitude, cp.longitude) <= cp.radius;
-      if (inside) state.checks.push({ checkpointId: cp.id, at: Date.now(), used: false });
-      save();
-      return { outcome: inside ? 'verified' : 'outside_radius' };
-    },
-    async startAttempt(checkpointId) {
-      needLogin();
-      sweep();
-      const cp = checkpoint(checkpointId);
-      const active = activeAttempt();
-      if (active)
-        throw fail(409, 'ACTIVE_ATTEMPT_EXISTS', 'You have a quiz in progress.', {
-          attemptId: active.id,
-        });
-      const check = state.checks.find(
-        (c) => c.checkpointId === cp.id && !c.used && Date.now() - c.at <= 5 * 60 * 1000,
-      );
-      if (!check) throw fail(409, 'LOCATION_NOT_VERIFIED', 'Please check your location first.');
-      check.used = true;
+      if (!state.consent)
+        throw fail(403, 'CONSENT_REQUIRED', 'Please accept the location notice first.');
+      if (ageMs < 0 || ageMs > MAX_POSITION_AGE_MS)
+        throw fail(422, 'STALE_POSITION', 'Your location reading is too old. Please try again.');
+      if (accuracy > MAX_ACCURACY_M)
+        throw fail(422, 'ACCURACY_TOO_LOW', 'Your location is not precise enough.');
+      const metres = distance(latitude, longitude, cp.latitude, cp.longitude);
+      const distanceM = Math.round(metres / 10) * 10;
+      if (metres > cp.radius) {
+        return {
+          status: 'OUTSIDE',
+          distanceM,
+          elsewhere: null,
+          message: `You are about ${distanceM} m from ${cp.name}. Walk closer and try again.`,
+        };
+      }
+      // Overlapping circles: a reading belongs to the checkpoint with the nearest centre only.
+      const nearer = CHECKPOINTS.filter((c) => c.isActive && c.id !== cp.id)
+        .map((c) => ({ c, d: distance(latitude, longitude, c.latitude, c.longitude) }))
+        .filter(({ c, d }) => d <= c.radius && (d < metres || (d === metres && c.id < cp.id)))
+        .sort((a, b) => a.d - b.d)[0];
+      if (nearer) {
+        return {
+          status: 'OUTSIDE',
+          distanceM,
+          elsewhere: nearer.c.name,
+          message: `You are at ${nearer.c.name}, not at ${cp.name}. Walk to ${cp.name} and try again.`,
+        };
+      }
       const used = state.attempts.filter((a) => a.checkpointId === cp.id).length;
       const now = Date.now();
       const attempt = {
@@ -402,7 +412,7 @@ export function createMockApi(ApiError, getUnauthorized) {
       state.nextId += 1;
       state.attempts.push(attempt);
       save();
-      return { attempt: view(attempt) };
+      return { status: 'OK', resumed: false, attempt: view(attempt) };
     },
     async activeAttempt() {
       needLogin();

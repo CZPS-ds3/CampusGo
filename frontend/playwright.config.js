@@ -1,7 +1,7 @@
 import { defineConfig } from '@playwright/test';
 
 const PORT = 5174;
-const LIBRARY = { latitude: 49.1236, longitude: 9.2119, accuracy: 10 };
+const LIBRARY = { latitude: 49.149493, longitude: 9.216467, accuracy: 10 };
 
 const viewports = {
   'phone-360': { width: 360, height: 740 },

@@ -74,6 +74,18 @@ export const DE_EXTRA = new Map([
     'Du hast schon 4 von 5 richtig und damit bestanden. Eine schwere Frage ist 2.000 statt 1.000 Punkte wert. Bei einer falschen Antwort verlierst du die 1.000 Punkte für Frage 5 und den Bonus von 200 Punkten für alle richtigen Antworten. Du kannst nicht zurückwechseln, und die Uhr läuft weiter.',
   ],
   [
+    'Your location reading was too old — try again. No attempt used.',
+    'Deine Standortmessung war zu alt – versuche es erneut. Kein Versuch verbraucht.',
+  ],
+  [
+    'Your browser could not find a position — try again. No attempt used.',
+    'Dein Browser konnte keine Position finden – versuche es erneut. Kein Versuch verbraucht.',
+  ],
+  [
+    'You are at {other}, not at {name}. Walk to {name} and check again. No attempt used.',
+    'Du bist bei {other}, nicht bei {name}. Geh zu {name} und prüfe erneut. Es wurde kein Versuch verbraucht.',
+  ],
+  [
     'You are not at {name} yet. Walk closer and check again. No attempt used.',
     'Du bist noch nicht bei {name}. Geh näher heran und prüfe erneut. Es wurde kein Versuch verbraucht.',
   ],
