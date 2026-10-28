@@ -41,6 +41,7 @@ export function loadConfig(env = process.env) {
         : (env.DATABASE_URL ?? 'mysql://cq:cq_dev_password@127.0.0.1:3307/campusquest'),
     sessionSecret: env.SESSION_SECRET ?? 'dev-session-secret',
     otpSecret: env.OTP_SECRET ?? 'dev-otp-secret',
+    adminEmail: (env.ADMIN_EMAIL ?? 'sekretariat.dski@heilbronn.dhbw.de').trim().toLowerCase(),
     allowedEmailDomain: (env.ALLOWED_EMAIL_DOMAIN ?? 'heilbronn.dhbw.de').toLowerCase(),
     otpTtlMinutes: int(env.OTP_TTL_MINUTES, 10),
     otpMaxFailedAttempts: int(env.OTP_MAX_FAILED_ATTEMPTS, 5),
@@ -49,7 +50,9 @@ export function loadConfig(env = process.env) {
     sessionInactivityMinutes: int(env.SESSION_INACTIVITY_MINUTES, 30),
     invitationTtlHours: int(env.INVITATION_TTL_HOURS, 24),
     // Geofencing settings (Main Project Document, section 5 "Settings kept in one config file").
-    maxAccuracyM: int(env.MAX_ACCURACY_M, 50),
+    maxAccuracyM: int(env.MAX_ACCURACY_M, 100),
+    geofenceSlackM: int(env.GEOFENCE_SLACK_M, 25), // grace zone added to every radius
+    nearerMarginM: int(env.NEARER_MARGIN_M, 20), // another checkpoint must be this much nearer to win
     maxPositionAgeMs: int(env.MAX_POSITION_AGE_MS, 30_000),
     secondsPerQuestion: int(env.SECONDS_PER_QUESTION, 60), // BR13
     verifyLimitPerMin: int(env.VERIFY_LIMIT_PER_MIN, 10),

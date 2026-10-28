@@ -25,7 +25,7 @@ export const roundedDistance = (metres) => Math.round(metres / 10) * 10;
  * 'elsewhere' names that nearer checkpoint (a tie goes to the lower id).
  * @param {{ lat: number, lng: number, accuracy: number, ageMs: number }} reading
  * @param {{ checkpoint_id?: number, latitude: number|string, longitude: number|string, radius: number }} checkpoint
- * @param {{ maxAccuracyM: number, maxPositionAgeMs: number }} limits
+ * @param {{ maxAccuracyM: number, maxPositionAgeMs: number, geofenceSlackM?: number, nearerMarginM?: number }} limits
  * @param {{ checkpoint_id: number, checkpoint_name: string, latitude: number|string, longitude: number|string, radius: number }[]} others
  *   the other ACTIVE checkpoints
  */
@@ -36,15 +36,21 @@ export function evaluateLocation(reading, checkpoint, limits, others = []) {
     distanceMeters(reading.lat, reading.lng, Number(c.latitude), Number(c.longitude));
   const distance = distanceTo(checkpoint);
   const distanceM = roundedDistance(distance);
-  if (distance > checkpoint.radius) return { outcome: 'outside', distanceM };
+  // Phones are rarely exact indoors, so the circle gets a grace zone (GEOFENCE_SLACK_M) on top of its radius.
+  if (distance > checkpoint.radius + (limits.geofenceSlackM ?? 0)) {
+    return { outcome: 'outside', distanceM };
+  }
 
+  // Another checkpoint only wins when its centre is clearly nearer (NEARER_MARGIN_M), so GPS jitter between
+  // two close checkpoints does not send a student away.
+  const margin = limits.nearerMarginM ?? 0;
   let nearer = null;
   let nearerDistance = distance;
   for (const other of others) {
     const d = distanceTo(other);
     const wins =
-      d < nearerDistance ||
-      (d === nearerDistance && other.checkpoint_id < checkpoint.checkpoint_id);
+      d + margin < nearerDistance ||
+      (margin === 0 && d === nearerDistance && other.checkpoint_id < checkpoint.checkpoint_id);
     if (d <= other.radius && wins) {
       nearer = other;
       nearerDistance = d;

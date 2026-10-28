@@ -1,6 +1,7 @@
 // Loads reference data (BR11), the 8 pilot checkpoints and PLACEHOLDER questions. Idempotent. Usage: node seed.js
 // WARNING: questions and facts are placeholders. Before the pilot, check the coordinates and radii on site
 // (WBS 4.1, WP13) and replace the questions with verified ones (docs/question-bank.md).
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { loadConfig } from '../config.js';
 import { createPool } from './pool.js';
@@ -64,7 +65,8 @@ export async function seedReference(conn, { activateCheckpoints = true } = {}) {
     await conn.query(
       `INSERT INTO checkpoints (checkpoint_name, latitude, longitude, radius, is_active, question_count, pass_threshold, hard_question_enabled)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE question_count = VALUES(question_count), pass_threshold = VALUES(pass_threshold),
+       ON DUPLICATE KEY UPDATE
+         question_count = VALUES(question_count), pass_threshold = VALUES(pass_threshold),
          hard_question_enabled = VALUES(hard_question_enabled)`,
       [
         name,
@@ -121,6 +123,64 @@ export async function seedPlaceholderQuestions(conn) {
   }
 }
 
+const PLACE_SLUGS = {
+  Mensa: 'mensa',
+  Library: 'library',
+  'CAS Cafe': 'cas-cafe',
+  'Campus Garden': 'campus-garden',
+  'Care.box and Shop.box': 'carebox-shopbox',
+  'Building B': 'building-b',
+  'Building C': 'building-c',
+  Sensoricum: 'sensoricum',
+};
+const PLACES_JSON = new URL('../../../frontend/src/api/places.json', import.meta.url);
+
+/** Photos for the carousel (files in frontend/public/places, list in frontend/src/api/places.json). Skipped when the list is missing. */
+export async function seedImages(conn) {
+  let places;
+  try {
+    places = JSON.parse(readFileSync(PLACES_JSON, 'utf8'));
+  } catch {
+    return;
+  }
+  const [checkpoints] = await conn.query('SELECT checkpoint_id, checkpoint_name FROM checkpoints');
+  for (const checkpoint of checkpoints) {
+    const images = places[PLACE_SLUGS[checkpoint.checkpoint_name]] ?? [];
+    await conn.query('DELETE FROM checkpoint_images WHERE checkpoint_id = ?', [
+      checkpoint.checkpoint_id,
+    ]);
+    for (const [index, image] of images.entries()) {
+      await conn.query(
+        'INSERT INTO checkpoint_images (checkpoint_id, position, url, alt_text, credit) VALUES (?, ?, ?, ?, ?)',
+        [checkpoint.checkpoint_id, index + 1, `/places/${image.file}`, image.alt, image.credit],
+      );
+    }
+  }
+}
+
+/**
+ * The administrator account exists from the first seed on (no sign-up step). It takes id 1 when that id is
+ * free, otherwise the next id. An existing account with the address is promoted instead of duplicated.
+ */
+export async function seedAdmin(conn, email) {
+  const [[existing]] = await conn.query('SELECT student_id FROM students WHERE email = ?', [email]);
+  if (existing) {
+    await conn.query("UPDATE students SET role = 'admin', status = 'active' WHERE student_id = ?", [
+      existing.student_id,
+    ]);
+    return existing.student_id;
+  }
+  const [[idOne]] = await conn.query('SELECT student_id FROM students WHERE student_id = 1');
+  const now = new Date();
+  const [inserted] = await conn.query(
+    `INSERT INTO students (student_id, email, role, first_name, last_name, nickname, total_points, points_exact_x100,
+       points_updated_at, created_at)
+     VALUES (?, ?, 'admin', 'Study', 'Office', 'Admin', 0, 0, ?, ?)`,
+    [idOne ? null : 1, email, now, now],
+  );
+  return inserted.insertId;
+}
+
 /** Three placeholder "read first" facts per checkpoint (replace with verified texts before the pilot). */
 export async function seedPlaceholderFacts(conn) {
   const [checkpoints] = await conn.query('SELECT checkpoint_id, checkpoint_name FROM checkpoints');
@@ -150,6 +210,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     await seedReference(pool);
     await seedPlaceholderQuestions(pool);
     await seedPlaceholderFacts(pool);
+    await seedImages(pool);
+    await seedAdmin(pool, config.adminEmail);
     console.log(
       '[seed] reference data, the 8 Bildungscampus checkpoints and placeholder questions are in place',
     );

@@ -3,9 +3,12 @@ import { expect } from '@playwright/test';
 export const OTP = '123456';
 
 /** Logs a brand-new student in through the screens (mock mode accepts the code 123456). */
-export async function login(page, { first = 'Ada', last = 'Lovelace' } = {}) {
+export async function login(
+  page,
+  { first = 'Ada', last = 'Lovelace', email = 'ada@heilbronn.dhbw.de' } = {},
+) {
   await page.goto('/login');
-  await page.getByLabel('School email').fill('ada@heilbronn.dhbw.de');
+  await page.getByLabel('School email').fill(email);
   await page.getByRole('button', { name: 'Send code' }).click();
   await expect(page.getByRole('heading', { name: /6-digit code/ })).toBeVisible();
   await page.getByLabel('Digit 1 of 6').click();

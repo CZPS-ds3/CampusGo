@@ -125,6 +125,19 @@ A mobile-responsive **web app** (no app-store download, no extra hardware — ju
 
 `points = (correct-answer points + time bonus + full clear) × multiplier`. Hard question: on attempt 1 only, if questions 1–4 are correct you may swap question 5 for a hard one. Points are credited only when the attempt ends. All point values live in database tables, not in code (BR11).
 
+### Demo data, admin area, photos and route
+
+- `npm run dev` also loads **fictional demo data** (24 players, 6 teams, quests over several days, a pending invitation, a blocked, an archived and a reported account) so the ranks and the admin pages have something to show. It is never loaded in production (`npm run db:seed:demo` runs it alone; `npm run db:reset` starts from an empty database).
+- **Admin area** (`/admin`): sign in with `sekretariat.dski@heilbronn.dhbw.de` (the same e-mail code login; the address is set in `ADMIN_EMAIL`). Users (create, edit, block, archive, report, delete, sessions, quests and activity log), teams, and name rules. In development the code is printed in the terminal, or use *Open mock inbox* on the code screen.
+- **Name rules:** German and English banned words, whole-word matching so "Cass" is fine. List: [docs/banned-terms.md](docs/banned-terms.md).
+- **Photos** of the places are in `frontend/public/places/` with credits in `CREDITS.md`. They are generic Bildungscampus photos from Wikimedia Commons, **not** pictures of the single places; replace them with the team's own photos before the pilot (list: `frontend/src/api/places.json`, then `npm run db:seed`).
+- **Walking route:** the *Show walking route* button in a checkpoint draws the way with OpenStreetMap data; your position is used in the browser only.
+- **Delete my account:** in the profile (the person, their picture and e-mail are removed; the e-mail can be used again).
+- **Admin menu and testing:** administrators get an *Admin* bar above *Map* in the round menu, and otherwise use the app like a student. *Admin → Test quests* starts any quiz from anywhere (no location, no points). The admin account is created by the seed (id 1) and cannot be deleted.
+- **Player profiles:** a name in the solo ranking opens that player's profile (points, ranks, team, members). Team members can invite from there.
+- **GitLab pipeline:** `.gitlab-ci.yml` runs lint, format check, backend tests (MySQL 8.4 service), frontend tests and the build on every push and merge request. The browser tests are a manual job. It replaces Auto DevOps, which cannot build this project.
+- Backend handover for Yuri: [design/yi_heng/backend-handover.md](design/yi_heng/backend-handover.md).
+
 ### Leaderboards
 
 - **Solo:** total points per student. **Team:** average of the members' totals (only teams with ≥ 2 members; only visible to students in a team).
@@ -143,7 +156,7 @@ A mobile-responsive **web app** (no app-store download, no extra hardware — ju
 - **Must:** everything in BR01–BR25 — login and sessions, sign-up, teams and invitations, 8 checkpoints, location verification, quiz engine, scoring, leaderboards, content in the database, privacy.
 - **Should:** read-first info page per checkpoint.
 - **Could:** weekly streak reminders, random time-based events.
-- **Won't:** supermarket/clothing-store locators, native apps, NFC/student-card readers, duo and nationality leaderboards, admin UI, leaving/removing team members.
+- **Won't:** supermarket/clothing-store locators, native apps, NFC/student-card readers, duo and nationality leaderboards. (An admin area and "delete my account" were added as proposals, see docs/business-rules.md section 9.)
 
 Details: [docs/project_handbook.md §1](docs/project_handbook.md).
 

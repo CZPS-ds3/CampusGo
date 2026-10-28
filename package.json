@@ -14,7 +14,7 @@
   "scripts": {
     "postinstall": "node scripts/setup.mjs",
     "setup": "node scripts/setup.mjs && node scripts/ensure-db.mjs",
-    "predev": "node scripts/ensure-db.mjs",
+    "predev": "node scripts/ensure-db.mjs --demo",
     "dev": "concurrently -k -n api,web -c cyan,magenta \"npm run dev --prefix backend\" \"npm run dev --prefix frontend\"",
     "dev:mock": "npm run dev:mock --prefix frontend",
     "build": "npm run build --prefix frontend",
@@ -24,6 +24,7 @@
     "db:reset": "node scripts/ensure-db.mjs --reset",
     "db:migrate": "npm run migrate --prefix backend",
     "db:seed": "npm run seed --prefix backend",
+    "db:seed:demo": "npm run seed:demo --prefix backend",
     "pretest": "node scripts/ensure-db.mjs --test",
     "test": "npm test --prefix backend && npm test --prefix frontend",
     "pretest:e2e": "npm run e2e:install --prefix frontend",

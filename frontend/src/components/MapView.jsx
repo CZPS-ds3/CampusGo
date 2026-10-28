@@ -7,6 +7,10 @@ const TILE_URL =
 const ATTRIBUTION = import.meta.env.VITE_MAP_ATTRIBUTION || '&copy; OpenStreetMap contributors';
 // The default tiles are light; in the dark theme a CSS filter darkens them (VITE_MAP_DARKEN=false for tiles that are dark already).
 const DARKEN = import.meta.env.VITE_MAP_DARKEN !== 'false';
+// The map may not leave the Heilbronn area (a few kilometres around the Bildungscampus).
+const CAMPUS_CENTER = [49.1485, 9.2165];
+const MAX_BOUNDS = L.latLngBounds([49.12, 9.17], [49.18, 9.26]);
+const MIN_ZOOM = 14;
 
 const stateOf = (checkpoint) => {
   if (checkpoint.completed) return 'done';
@@ -41,11 +45,12 @@ const pinIcon = (checkpoint, selected) =>
  * Leaflet map with one diamond pin per checkpoint: ringed = open, green tick = done, padlock = closed.
  * The map owns no data; the page passes checkpoints and the selected id.
  */
-export function MapView({ checkpoints, selectedId, onSelect }) {
+export function MapView({ checkpoints, selectedId, onSelect, route = null, from = null }) {
   const container = useRef(null);
   const map = useRef(null);
   const markers = useRef(new Map());
   const fitted = useRef(false);
+  const routeLayer = useRef(null);
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
 
@@ -53,9 +58,13 @@ export function MapView({ checkpoints, selectedId, onSelect }) {
     map.current = L.map(container.current, {
       zoomControl: false,
       attributionControl: true,
-    }).setView([49.1233, 9.2108], 17);
+      minZoom: MIN_ZOOM,
+      maxBounds: MAX_BOUNDS,
+      maxBoundsViscosity: 1,
+    }).setView(CAMPUS_CENTER, 17);
     L.tileLayer(TILE_URL, {
       attribution: ATTRIBUTION,
+      minZoom: MIN_ZOOM,
       maxZoom: 19,
       subdomains: 'abcd',
       crossOrigin: true,
@@ -66,6 +75,7 @@ export function MapView({ checkpoints, selectedId, onSelect }) {
       map.current.remove();
       map.current = null;
       markerStore.clear();
+      routeLayer.current = null;
       fitted.current = false;
     };
   }, []);
@@ -98,6 +108,42 @@ export function MapView({ checkpoints, selectedId, onSelect }) {
       fitted.current = true;
     }
   }, [checkpoints, selectedId]);
+
+  // The walking route and the visitor's own position (kept only in the browser).
+  useEffect(() => {
+    if (!map.current) return undefined;
+    routeLayer.current?.remove();
+    routeLayer.current = null;
+    if (!route) return undefined;
+    const group = L.layerGroup();
+    L.polyline(route.points, {
+      color: '#e2001a',
+      weight: 5,
+      opacity: 0.9,
+      dashArray: route.straight ? '2 10' : undefined,
+      lineCap: 'round',
+    }).addTo(group);
+    if (from) {
+      L.circleMarker(from, {
+        radius: 8,
+        color: '#ffffff',
+        weight: 3,
+        fillColor: '#1d6fe0',
+        fillOpacity: 1,
+        interactive: false,
+      }).addTo(group);
+    }
+    group.addTo(map.current);
+    routeLayer.current = group;
+    map.current.fitBounds(L.latLngBounds(route.points), {
+      paddingTopLeft: [50, 200],
+      paddingBottomRight: [50, 150],
+      maxZoom: 18,
+    });
+    return () => {
+      group.remove();
+    };
+  }, [route, from]);
 
   return (
     <div

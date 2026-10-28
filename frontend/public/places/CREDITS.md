@@ -1,0 +1,22 @@
+# Place photo credits
+
+All images from Wikimedia Commons, resized to max 1200 px. None shows the named place specifically: they are general Bildungscampus Heilbronn photos used as fallbacks (no free photo of the individual places was found). CC BY-SA requires attribution and share-alike; CC BY requires attribution.
+
+| file | what it shows | author | licence | source |
+|---|---|---|---|---|
+| mensa-1.jpg | Campus street between brick and glass buildings (general view) | Kiliansmännle | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Bildungscampus_Heilbronn_(1).jpg |
+| mensa-2.jpg | Glass building and trees in a round planter on the campus (general view) | Kiliansmännle | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Bildungscampus_Heilbronn_(2).jpg |
+| library-1.jpg | Bright glass-walled interior of a Bildungscampus building (general view) | Presse hhn | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:HHN_Am_Bildungscampus_N-Gebäude_.jpg |
+| library-2.jpg | Campus buildings and a grassy slope (general view) | Kiliansmännle | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Bildungscampus_Heilbronn_(4).jpg |
+| cas-cafe-1.jpg | Campus building with the BILDUNGSCAMPUS lettering and steps (general view) | Rosenzweig | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Heilbronn_Bildungscampus_2021-04-11_2.jpg |
+| cas-cafe-2.jpg | Campus buildings seen from the entrance road (general view) | Kiliansmännle | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Blick_auf_Bildungscampus_Heilbronn.jpg |
+| campus-garden-1.jpg | Glass building and trees in a round planter on the campus (general view) | Kiliansmännle | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Bildungscampus_Heilbronn_(2).jpg |
+| campus-garden-2.jpg | Campus buildings and a grassy slope (general view) | Kiliansmännle | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Bildungscampus_Heilbronn_(4).jpg |
+| carebox-shopbox-1.jpg | Row of Campusrad rental bikes on the Bildungscampus | Rosenzweig | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Heilbronn_Bildungscampus_Campusrad_2021-04-11_1.jpg |
+| carebox-shopbox-2.jpg | Close-up of a Campusrad rental bike on the Bildungscampus | Rosenzweig | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Heilbronn_Bildungscampus_Campusrad_2021-04-11_2.jpg |
+| building-b-1.jpg | Modern brick campus building with trees and DHBW banners (general view) | Peter Schmelzle | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Heilbronn-bildungscampus2015-2.JPG |
+| building-b-2.jpg | Brick campus building behind the BILDUNGSCAMPUS lettering (general view) | Rosenzweig | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Heilbronn_Bildungscampus_2021-04-11_1.jpg |
+| building-c-1.jpg | Western entrance of the Bildungscampus with banners and lettering (general view) | Kiliansmännle | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Bildungscampus_Heilbronn_Western_Entrance.jpg |
+| building-c-2.jpg | Campus buildings seen from a distance, one under scaffolding (general Bildungscampus view) | peter schmelzle | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:Hn-bildungscampus-im-bau.JPG |
+| containers-1.jpg | Brick campus building with construction machines in front, 2015 (general view) | Peter Schmelzle | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Heilbronn-bildungscampu2015-1.JPG |
+| containers-2.jpg | Aerial view of the Bildungscampus and Heilbronn (general view) | Bildungscampus Heilbronn | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Bildungscampus_der_Dieter_Schwarz_Stiftung.jpg |

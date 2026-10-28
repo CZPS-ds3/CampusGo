@@ -95,6 +95,58 @@ describe('BR05 teams and invitations', () => {
     expect(new Set(answers).size).toBe(1);
   });
 
+  it('BR05 a team with 5 members cannot send another invitation', async () => {
+    const lead = await ctx.login('lead');
+    const members = [];
+    for (const name of ['m1', 'm2', 'm3', 'm4', 'extra']) members.push(await ctx.login(name));
+    const ids = await teamWithInvites(lead, members.slice(0, 4));
+    for (let i = 0; i < 4; i += 1)
+      await members[i].agent.post(`/api/invitations/${ids[i]}/accept`).expect(200);
+    const res = await lead.agent
+      .post('/api/teams/me/invitations')
+      .send({ email: members[4].email });
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('TEAM_FULL');
+    const { body } = await members[4].agent.get('/api/invitations').expect(200);
+    expect(body.invitations).toHaveLength(0);
+  });
+
+  it('BR05 members plus open invitations may not pass 5, so no invitation is sent', async () => {
+    const lead = await ctx.login('lead');
+    const guests = [];
+    for (const name of ['g1', 'g2', 'g3', 'g4', 'g5']) guests.push(await ctx.login(name));
+    await teamWithInvites(lead, guests.slice(0, 4));
+    const res = await lead.agent.post('/api/teams/me/invitations').send({ email: guests[4].email });
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('TEAM_FULL');
+    const { body } = await guests[4].agent.get('/api/invitations').expect(200);
+    expect(body.invitations).toHaveLength(0);
+  });
+
+  it('BR05 an invitation is only created when the account exists (the reply stays generic)', async () => {
+    const lead = await ctx.login('lead');
+    await lead.agent.post('/api/teams').send({ name: 'Night Owls' }).expect(201);
+    const res = await lead.agent
+      .post('/api/teams/me/invitations')
+      .send({ email: `nobody@${DOMAIN}` })
+      .expect(202);
+    expect(res.body.message).toMatch(/If the user exists/);
+    const [rows] = await ctx.pool.query('SELECT invitation_id FROM team_invitations');
+    expect(rows).toHaveLength(0);
+  });
+
+  it('BR05 blocked accounts cannot be invited', async () => {
+    const lead = await ctx.login('lead');
+    const guest = await ctx.login('guest');
+    await ctx.pool.query("UPDATE students SET status = 'blocked' WHERE student_id = ?", [
+      guest.student.id,
+    ]);
+    await lead.agent.post('/api/teams').send({ name: 'Night Owls' }).expect(201);
+    await lead.agent.post('/api/teams/me/invitations').send({ email: guest.email }).expect(202);
+    const [rows] = await ctx.pool.query('SELECT invitation_id FROM team_invitations');
+    expect(rows).toHaveLength(0);
+  });
+
   it('R-43 an invitation to an address outside the school domain is invalid input', async () => {
     const lead = await ctx.login('lead');
     await lead.agent.post('/api/teams').send({ name: 'Night Owls' }).expect(201);
@@ -107,7 +159,24 @@ describe('BR05 teams and invitations', () => {
     const members = [];
     for (const name of ['m1', 'm2', 'm3', 'm4', 'late1', 'late2'])
       members.push(await ctx.login(name));
-    const ids = await teamWithInvites(lead, members);
+    // The API never lets members plus open invitations pass 5, so two surplus invitations are
+    // written directly to reproduce what an older version could have left behind.
+    const ids = await teamWithInvites(lead, members.slice(0, 4));
+    const [[{ team_id: teamId }]] = await ctx.pool.query('SELECT team_id FROM teams');
+    for (const late of members.slice(4)) {
+      await ctx.pool.query(
+        "INSERT INTO team_invitations (team_id, inviter_id, invitee_id, status, created_at, expires_at) VALUES (?, ?, ?, 'pending', ?, ?)",
+        [
+          teamId,
+          lead.student.id,
+          late.student.id,
+          new Date(ctx.clock.now()),
+          new Date(ctx.clock.now() + HOUR),
+        ],
+      );
+      const { body } = await late.agent.get('/api/invitations').expect(200);
+      ids.push(body.invitations.at(-1).id);
+    }
     for (let i = 0; i < 3; i += 1)
       await members[i].agent.post(`/api/invitations/${ids[i]}/accept`).expect(200);
     const [a, b] = await Promise.all([
@@ -246,14 +315,18 @@ describe('BR04 BR06 BR24 team leaderboard', () => {
 });
 
 describe('pending invitations on the team card', () => {
-  it('BR06 pending invitations show only an expiry, never the invitee address', async () => {
+  it('BR06 teammates see which address was invited; an outsider never sees the team or the address', async () => {
     const lead = await ctx.login('lead');
     const guest = await ctx.login('guest');
+    const outsider = await ctx.login('outsider');
     await lead.agent.post('/api/teams').send({ name: 'Night Owls' }).expect(201);
     await lead.agent.post('/api/teams/me/invitations').send({ email: guest.email }).expect(202);
     const { body } = await lead.agent.get('/api/teams/me').expect(200);
     expect(body.team.pending).toHaveLength(1);
-    expect(JSON.stringify(body)).not.toContain('guest@');
+    expect(body.team.pending[0].invitedEmail).toBe(guest.email);
     expect(Date.parse(body.team.pending[0].expiresAt)).toBeGreaterThan(ctx.clock.now());
+    const seen = await outsider.agent.get('/api/teams/me').expect(200);
+    expect(seen.body.team).toBeNull();
+    expect(JSON.stringify(seen.body)).not.toContain('guest@');
   });
 });

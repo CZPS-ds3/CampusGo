@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { errorText } from '../api/errorText.js';
 import { Button } from '../components/Button.jsx';
+import { Carousel } from '../components/Carousel.jsx';
 import { Icon, IconButton } from '../components/icons.jsx';
 import { Skeleton } from '../components/Screen.jsx';
 import { Display } from '../components/ui.jsx';
@@ -59,6 +60,12 @@ export default function Info() {
       <Display as="h1" size="h1" ref={heading} tabIndex={-1} className="mt block">
         {checkpoint.name}
       </Display>
+      <div className="mt">
+        <Carousel
+          images={checkpoint.images ?? []}
+          label={t('Photos of {name}', { name: checkpoint.name })}
+        />
+      </div>
       <p className="muted mt-s">{t('Read these first. No timer is running yet.')}</p>
       <ol className="facts">
         {checkpoint.facts.map((fact, i) => (

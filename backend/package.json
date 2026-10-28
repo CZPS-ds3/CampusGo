@@ -13,6 +13,7 @@
     "migrate": "node --env-file=.env src/db/migrate.js",
     "migrate:test": "node --env-file=.env src/db/migrate.js --test",
     "seed": "node --env-file=.env src/db/seed.js",
+    "seed:demo": "node --env-file=.env src/db/seed-demo.js",
     "test": "vitest run"
   },
   "dependencies": {

@@ -49,6 +49,13 @@ async function request(method, path, { body, form } = {}) {
 }
 
 const post = (path, body) => request('POST', path, { body: body ?? {} });
+const patch = (path, body) => request('PATCH', path, { body });
+const query = (params) => {
+  const text = new URLSearchParams(
+    Object.entries(params ?? {}).filter(([, v]) => v !== undefined && v !== ''),
+  ).toString();
+  return text ? `?${text}` : '';
+};
 
 const realApi = {
   requestOtp: (email) => post('/auth/request-otp', { email }),
@@ -56,6 +63,7 @@ const realApi = {
   logout: () => post('/auth/logout'),
   devLastOtp: (email) => request('GET', `/dev/last-otp?email=${encodeURIComponent(email)}`),
   me: () => request('GET', '/me'),
+  deleteAccount: () => request('DELETE', '/me'),
   uploadPicture: (file) => {
     const form = new FormData();
     form.append('file', file);
@@ -81,11 +89,35 @@ const realApi = {
     return request('POST', '/teams/me/picture', { form });
   },
   invite: (email) => post('/teams/me/invitations', { email }),
+  invitePlayer: (playerId) => post('/teams/me/invitations', { playerId }),
+  player: (id) => request('GET', `/players/${id}`),
   invitations: () => request('GET', '/invitations'),
   acceptInvitation: (id) => post(`/invitations/${id}/accept`),
   rejectInvitation: (id) => post(`/invitations/${id}/reject`),
   soloBoard: () => request('GET', '/leaderboards/solo'),
   teamBoard: () => request('GET', '/leaderboards/team'),
+  admin: {
+    overview: () => request('GET', '/admin/overview'),
+    stats: () => request('GET', '/admin/stats'),
+    users: (params) => request('GET', `/admin/users${query(params)}`),
+    user: (id) => request('GET', `/admin/users/${id}`),
+    createUser: (body) => post('/admin/users', body),
+    updateUser: (id, body) => patch(`/admin/users/${id}`, body),
+    setStatus: (id, status, reason) => post(`/admin/users/${id}/status`, { status, reason }),
+    report: (id, reason) => post(`/admin/users/${id}/report`, { reason }),
+    clearReport: (id) => request('DELETE', `/admin/users/${id}/report`),
+    forceLogout: (id) => post(`/admin/users/${id}/logout`),
+    deleteUser: (id) => request('DELETE', `/admin/users/${id}`),
+    teams: () => request('GET', '/admin/teams'),
+    renameTeam: (id, name) => patch(`/admin/teams/${id}`, { name }),
+    removeMember: (teamId, studentId) =>
+      request('DELETE', `/admin/teams/${teamId}/members/${studentId}`),
+    deleteTeam: (id) => request('DELETE', `/admin/teams/${id}`),
+    names: () => request('GET', '/admin/names'),
+    addTerm: (term, mode) => post('/admin/names', { term, mode }),
+    removeTerm: (term) => request('DELETE', `/admin/names/${encodeURIComponent(term)}`),
+    testName: (text) => post('/admin/names/test', { text }),
+  },
 };
 
 export const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
