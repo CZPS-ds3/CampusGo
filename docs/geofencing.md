@@ -79,3 +79,13 @@ A browser cannot stop a determined student with a fake-GPS app or developer tool
 - `backend/tests/quiz.test.js` (MySQL): section 9 tests 2–5 and 7–10 against the real endpoint.
 - `frontend/e2e/flow.spec.js`: full journey, poor accuracy, far away (mock API).
 - Tests and fixtures use invented positions or public map points only, never real student locations.
+
+## Lenient settings (2026-10-28, proposal)
+
+A student standing in Building B could not start the quiz, so the check was loosened (all values are in `backend/.env`, not in code):
+
+- `MAX_ACCURACY_M` 50 to **100**: a reading with a worse accuracy is still refused.
+- `GEOFENCE_SLACK_M` **25**: added to every radius, so a 60 m circle accepts up to 85 m from the centre.
+- `NEARER_MARGIN_M` **20**: another checkpoint only wins ("You are at X, not Y") when its centre is at least 20 m nearer, so GPS jitter between two close checkpoints no longer sends a student away.
+
+The stored radii and centres are unchanged (the on-site test WP13 can still tune them with plain UPDATEs). Tests: `backend/tests/geofence-lenient.test.js`.

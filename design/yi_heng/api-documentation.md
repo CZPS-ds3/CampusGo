@@ -53,6 +53,15 @@ Status codes: 400 invalid input · 401 no valid session · 403 not allowed · 40
 | `GET /leaderboards/solo?limit=` | `{ entries: [{ rank, id, displayName, pictureUrl, avatarPreset, points, isYou }], you: { rank, points } }` |
 | `GET /leaderboards/team` | `403 NO_TEAM` for students without a team; otherwise `{ entries: [{ rank, id, name, pictureUrl, points, members, isYourTeam }], yourTeam: { rank, points } \| null }` (only teams with ≥ 2 members are listed) |
 
+## Players and invitations (BR36, BR40)
+
+| Endpoint | Body | Result |
+|---|---|---|
+| `GET /players/:id` | none | `{ player: { id, displayName, pictureUrl, avatarPreset, totalPoints, rank, questsCleared, isYou, canInvite, team: { id, name, pictureUrl, score, rank, members: [{ id, displayName, pictureUrl, avatarPreset, totalPoints }] } \| null } }`; `404` for blocked, archived, deleted and admin accounts |
+| `POST /teams/me/invitations` | `{ email }` **or** `{ playerId }` (exactly one) | `202` with the generic message |
+
+`GET /teams/me` pending entries are now `{ expiresAt, invitedEmail \| null, displayName }`. `POST /checkpoints/:id/verify` and `GET /checkpoints` behave differently for admins (BR38): all checkpoints are listed and any quiz starts without a location.
+
 ## Account deletion (BR30)
 
 | Endpoint | Body | Result |
@@ -63,6 +72,7 @@ Status codes: 400 invalid input · 401 no valid session · 403 not allowed · 40
 
 | Endpoint | Body / query | Result |
 |---|---|---|
+| `GET /admin/stats` | none | dashboard numbers, see [admin-dashboard-spec.md](admin-dashboard-spec.md) section 2 |
 | `GET /admin/overview` | none | `{ users: { active, blocked, archived, deleted }, activeSessions, questsPassedToday, loginsToday, teams }` |
 | `GET /admin/users` | `?q=&status=active\|blocked\|archived\|deleted\|reported&limit=&offset=` | `{ users: [{ id, email, firstName, lastName, nickname, role, status, statusReason, reported, reportReason, teamName, totalPoints, questsPassed, createdAt, lastLoginAt }] }` |
 | `POST /admin/users` | `{ email, firstName, lastName, nickname? }` | `201 { user }`; `409 EMAIL_TAKEN`, `400 NAME_NOT_ALLOWED`, `400 INVALID_EMAIL` |

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useLocation } from 'react-router-dom';
+import { useSession } from '../hooks/useSession.jsx';
 import { t } from '../i18n.js';
 import { GoBadge, Icon } from './icons.jsx';
 
@@ -12,21 +13,26 @@ const ITEMS = [
   { id: 'profile', label: 'Profile', href: '/profile', icon: 'profile' },
 ];
 
+const ADMIN_ITEM = { id: 'admin', label: 'Admin', href: '/admin', icon: 'admin' };
+
 const CLOSE_MS = 260;
 const FOCUS_DELAY_MS = 320;
 
 /** Which menu entry a path belongs to: the map, locate and info screens all sit under "Map". */
-function sectionOf(pathname) {
-  const hit = ITEMS.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
+function sectionOf(pathname, items) {
+  const hit = items.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
   return hit ? hit.id : 'map';
 }
 
 /**
- * The red GO badge opens five full-width bars (Map, Quests, Team, Ranks, Profile). While open the page
+ * The red GO badge opens five full-width bars (Map, Quests, Team, Ranks, Profile), and an Admin bar above them for administrators. While open the page
  * behind is inert, Tab cycles between the badge and the current bar, and the arrow keys walk the bars.
  * The badge shrinks while the page is scrolled down.
  */
 export function QuestMenu() {
+  const { student } = useSession();
+  // Administrators get one extra bar above Map; they see every other screen the way students do.
+  const items = student?.role === 'admin' ? [ADMIN_ITEM, ...ITEMS] : ITEMS;
   const [phase, setPhase] = useState('closed');
   const [focusIndex, setFocusIndex] = useState(0);
   const [spin, setSpin] = useState(0);
@@ -37,8 +43,8 @@ export function QuestMenu() {
   const lastY = useRef(0);
   const open = phase === 'open';
 
-  const activeId = sectionOf(pathname);
-  const activeIndex = ITEMS.findIndex((item) => item.id === activeId);
+  const activeId = sectionOf(pathname, items);
+  const activeIndex = items.findIndex((item) => item.id === activeId);
 
   const close = useCallback((returnFocus = true) => {
     setSpin((n) => n + 1);
@@ -89,7 +95,7 @@ export function QuestMenu() {
   }, [open]);
 
   const moveTo = (index) => {
-    const next = (index + ITEMS.length) % ITEMS.length;
+    const next = (index + items.length) % items.length;
     setFocusIndex(next);
     bars.current[next]?.focus();
   };
@@ -118,7 +124,7 @@ export function QuestMenu() {
         break;
       case 'End':
         event.preventDefault();
-        moveTo(ITEMS.length - 1);
+        moveTo(items.length - 1);
         break;
       case 'Tab':
         // Two stops by design: the badge and the current bar. Arrows walk the rest.
@@ -127,7 +133,7 @@ export function QuestMenu() {
         else trigger.current?.focus();
         break;
       default: {
-        const hit = ITEMS.findIndex(
+        const hit = items.findIndex(
           (item) => t(item.label)[0].toLowerCase() === event.key.toLowerCase(),
         );
         if (event.key.length === 1 && hit >= 0) moveTo(hit);
@@ -138,7 +144,7 @@ export function QuestMenu() {
   const onTriggerKeyDown = (event) => {
     if (phase === 'closed' && event.key === 'ArrowUp') {
       event.preventDefault();
-      openAt(ITEMS.length - 1);
+      openAt(items.length - 1);
     }
   };
 
@@ -155,21 +161,23 @@ export function QuestMenu() {
           />
           <nav className="menu__bars" aria-label={t('Main menu')}>
             <ul role="menu" aria-label={t('Main menu')}>
-              {ITEMS.map((item, index) => {
+              {items.map((item, index) => {
                 const here = item.id === activeId;
                 return (
                   <li
                     key={item.id}
                     role="none"
                     className={`menu__item${closing ? ' is-out' : ''}`}
-                    style={{ animationDelay: `${closing ? index * 20 : (4 - index) * 50}ms` }}
+                    style={{
+                      animationDelay: `${closing ? index * 20 : (items.length - 1 - index) * 50}ms`,
+                    }}
                   >
                     <Link
                       ref={(node) => {
                         bars.current[index] = node;
                       }}
                       role="menuitem"
-                      className={`bar${here ? ' is-here' : ''}`}
+                      className={`bar${here ? ' is-here' : ''}${item.id === 'admin' ? ' bar--admin' : ''}`}
                       to={item.href}
                       tabIndex={open && focusIndex === index ? 0 : -1}
                       aria-current={here ? 'page' : undefined}

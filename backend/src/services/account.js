@@ -1,7 +1,7 @@
 // Account removal. Used by "delete my account" and by the admin area.
 import { at } from '../clock.js';
 import { withTransaction } from '../db/pool.js';
-import { notFound } from '../middleware/errors.js';
+import { AppError, notFound } from '../middleware/errors.js';
 import { recordEvent } from './audit.js';
 import { refreshTeamScore } from './teams.js';
 
@@ -25,9 +25,12 @@ export function createAccountService({ pool, clock }) {
         ]);
       }
       const [[student]] = await conn.query(
-        'SELECT team_id, status FROM students WHERE student_id = ? FOR UPDATE',
+        'SELECT team_id, status, role FROM students WHERE student_id = ? FOR UPDATE',
         [studentId],
       );
+      if (student.role === 'admin') {
+        throw new AppError(403, 'FORBIDDEN', 'Administrator accounts cannot be deleted.');
+      }
       if (student.status === 'deleted') return;
       await conn.query('UPDATE sessions SET is_active = 0 WHERE student_id = ?', [studentId]);
       await conn.query(

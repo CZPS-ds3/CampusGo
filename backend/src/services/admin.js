@@ -6,6 +6,7 @@ import { createAccountService } from './account.js';
 import { recordEvent } from './audit.js';
 import { displayName, isSchoolEmail, normalizeEmail } from './auth.js';
 import { SUBSTRING_TERMS, TOKEN_TERMS } from './name-filter-terms.js';
+import { createStatsService } from './stats.js';
 import { refreshTeamScore } from './teams.js';
 
 const SETTABLE_STATUSES = ['active', 'blocked', 'archived'];
@@ -35,6 +36,7 @@ const duplicateEmail = () =>
 
 export function createAdminService({ pool, config, clock, nameRules }) {
   const accounts = createAccountService({ pool, clock });
+  const stats = createStatsService({ pool, clock });
 
   const SELECT_USER = `SELECT s.*, t.team_name,
       (SELECT MAX(created_at) FROM sessions WHERE student_id = s.student_id) AS last_login_at,
@@ -394,6 +396,7 @@ export function createAdminService({ pool, config, clock, nameRules }) {
   }
 
   return {
+    stats: stats.getStats,
     overview,
     listUsers,
     getUser,

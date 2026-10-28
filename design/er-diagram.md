@@ -125,6 +125,7 @@ erDiagram
         bigint inviter_id FK
         bigint invitee_id FK
         string status
+        string invited_email
         datetime expires_at
     }
     CHECKPOINT_FACTS {

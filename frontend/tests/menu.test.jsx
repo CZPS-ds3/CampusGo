@@ -1,8 +1,16 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { QuestMenu } from '../src/components/QuestMenu.jsx';
+
+const session = vi.hoisted(() => ({ role: 'student' }));
+vi.mock('../src/hooks/useSession.jsx', () => ({
+  useSession: () => ({ student: { role: session.role } }),
+}));
+beforeEach(() => {
+  session.role = 'student';
+});
 
 function setup(path = '/quests') {
   const root = document.createElement('div');
@@ -86,5 +94,33 @@ describe('GO badge menu', () => {
     await user.click(openButton());
     await user.click(baseElement.querySelector('.scrim'));
     await waitFor(() => expect(screen.queryAllByRole('menuitem')).toHaveLength(0));
+  });
+});
+
+describe('BR26 admin bar in the menu', () => {
+  it('an administrator gets an Admin bar above Map, a student does not', async () => {
+    const user = userEvent.setup();
+    session.role = 'admin';
+    setup('/map');
+    await user.click(openButton());
+    const names = screen.getAllByRole('menuitem').map((item) => item.textContent);
+    expect(names).toHaveLength(6);
+    expect(names[0]).toMatch(/Admin/);
+    expect(names[1]).toMatch(/Map/);
+  });
+
+  it('BR26 the admin pages belong to the Admin bar', async () => {
+    const user = userEvent.setup();
+    session.role = 'admin';
+    setup('/admin/users');
+    await user.click(openButton());
+    expect(screen.getByRole('menuitem', { name: /Admin/ })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('BR26 students never see an Admin bar', async () => {
+    const user = userEvent.setup();
+    setup('/map');
+    await user.click(openButton());
+    expect(screen.queryByRole('menuitem', { name: /Admin/ })).toBeNull();
   });
 });

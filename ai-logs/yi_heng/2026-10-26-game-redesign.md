@@ -59,3 +59,20 @@
 - **New rules:** BR26 to BR35 are proposals in `docs/business-rules.md` section 9 and need the team's approval. Backend work is isolated for Yuri: `design/yi_heng/backend-handover.md`.
 - **Tests:** backend 104, frontend unit tests, 24 new browser tests (invitations, carousel, admin, delete account) on six sizes, full-stack smoke test.
 - **Found and fixed:** the old race test for the last team place became impossible by design (surplus invitations are now written directly); the e2e invite loop raced with the form reset; the ranks smoke check assumed an empty database.
+
+## Fourth session: merge of Yuri's preproduction, admin test mode, profiles, dashboard, pipeline (2026-10-28)
+
+- **Objective:** Pull Yuri's `preproduction` into `wip/yi_heng/feature` (ours wins for design and photos, his database and backend kept), then: questions not reachable although the location is sensed; admin can test every quiz from anywhere; admin account pre-existing and undeletable; admin entry in the menu above Map; show the invited e-mail; player profiles from the solo ranking; admin dashboard with graphs; fix the GitLab pipeline.
+- **Prompts (summary):** "pull from preproduction and fix the merge conflicts, keep ours as main, keep their database", then the list of seven changes, with `/arena --2 agents`, the impeccable skill and agents allowed, and AI logs, `.arena`, README, CLAUDE.md and other docs to be updated. The AI staged the merge (`git add`) and the project manager commits and pushes.
+- **Merge:** the merge itself had no conflicts. Re-applying our uncommitted work conflicted in 11 files (seed, app, auth, geofencing doc, mock API, e2e and test files); Yuri's checkpoint data, rename Containers -> Sensoricum, mailer, geofence and security code were kept. Our migration became `005`; coordinates are Yuri's (OSM and on-site) instead of the Google Maps pins; the earlier stash `round3-before-yuri-merge` was kept as a backup.
+- **Arena:** two agents designed the admin dashboard and navigation; a001 won 83 to 75 (test-mode contract, Berlin-day statistics, per-section errors). Spec saved in `design/yi_heng/admin-dashboard-spec.md`; the `.arena/` folder (task, attacks, defences, verdict) stays local because it is git-ignored.
+- **Decisions:** admin id 1 instead of 0 (an AUTO_INCREMENT column does not take 0); the admin cannot be deleted in the services, no database trigger (needs SUPER privilege with binary logging); the invited address is shown to the team only (BR40); profile invitations show a display name; test mode is a server-side bypass; no shortcut chips in the menu.
+- **Bug "questions not reachable":** could not be reproduced without a phone. The server flow, questions and checkpoint data were checked; likely causes are overlapping circles (the app then says "You are at X"), weak accuracy or a stale reading. The admin test mode allows testing every quiz and the location rules separately.
+- **Pipeline:** the repository had no `.gitlab-ci.yml`, so GitLab used Auto DevOps, which cannot build an npm workspace project. A real pipeline was added (lint, format, backend tests with a MySQL service, frontend tests, build, manual browser job). It was validated locally only; GitLab itself was not run.
+- **Tests:** backend 156, frontend 34, browser tests on six sizes, full-stack smoke test with the admin. Found and fixed: the vitest forked worker crashed at random (now threads), the invite e2e raced, menu unit test needed a session.
+
+### Follow-up the same day: lenient geofence
+
+- **Problem:** a student standing at Building B could not start the quiz.
+- **Change:** accuracy limit 50 to 100 m, a 25 m grace zone on every radius, and a 20 m margin before the app says "you are at another checkpoint" (settings in `backend/.env`; the mock API follows). Tests updated and added (`geofence-lenient.test.js`).
+- **Open question:** Yuri's Building B position (OpenStreetMap, 49.147126 / 9.218486) is about 110 m from the Google Maps link position (49.1473112 / 9.2169587). If Building B is really at the second one, the circle is in the wrong place and the grace zone does not help; the centre must be corrected in the database.

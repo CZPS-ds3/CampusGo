@@ -49,9 +49,12 @@ export function createTeamService({ pool, config, clock, nameRules }) {
       'SELECT student_id, first_name, last_name, nickname, profile_picture, avatar_preset, total_points FROM students WHERE team_id = ? ORDER BY team_joined_at, student_id',
       [team.team_id],
     );
-    // Pending invitations are shown only as open slots with their expiry; the invitee's address stays private.
+    // Teammates see who is invited: the address the inviter typed, or the player's display name when the
+    // invitation came from a profile page (an address nobody typed is never shown).
     const [pending] = await pool.query(
-      "SELECT expires_at FROM team_invitations WHERE team_id = ? AND status = 'pending' AND expires_at > ? ORDER BY created_at",
+      `SELECT i.expires_at, i.invited_email, s.first_name, s.last_name, s.nickname
+       FROM team_invitations i JOIN students s ON s.student_id = i.invitee_id
+       WHERE i.team_id = ? AND i.status = 'pending' AND i.expires_at > ? ORDER BY i.created_at`,
       [team.team_id, at(clock.now())],
     );
     return {
@@ -65,7 +68,11 @@ export function createTeamService({ pool, config, clock, nameRules }) {
         avatarPreset: m.avatar_preset,
         totalPoints: m.total_points,
       })),
-      pending: pending.map((p) => ({ expiresAt: p.expires_at.toISOString() })),
+      pending: pending.map((p) => ({
+        expiresAt: p.expires_at.toISOString(),
+        invitedEmail: p.invited_email,
+        displayName: displayName(p),
+      })),
       size: members.length,
       score: team.team_score,
       active: members.length >= 2,
@@ -122,6 +129,13 @@ export function createTeamService({ pool, config, clock, nameRules }) {
         `Please enter a school e-mail address (ending with ${config.allowedEmailDomain}).`,
       );
     }
+    await createInvitation(inviterId, { email });
+  }
+
+  /** Invitation from a player's profile page: same rules, nobody's address is typed or shown. */
+  const invitePlayer = (inviterId, playerId) => createInvitation(inviterId, { playerId });
+
+  async function createInvitation(inviterId, lookup) {
     const now = clock.now();
     await withTransaction(pool, async (conn) => {
       const [[inviter]] = await conn.query(
@@ -149,8 +163,10 @@ export function createTeamService({ pool, config, clock, nameRules }) {
         );
       }
       const [[invitee]] = await conn.query(
-        'SELECT student_id, team_id, status, role FROM students WHERE email = ?',
-        [email],
+        `SELECT student_id, team_id, status, role FROM students WHERE ${
+          lookup.email ? 'email' : 'student_id'
+        } = ?`,
+        [lookup.email ?? lookup.playerId],
       );
       if (
         !invitee ||
@@ -167,7 +183,7 @@ export function createTeamService({ pool, config, clock, nameRules }) {
       );
       if (dup) return;
       await conn.query(
-        'INSERT INTO team_invitations (team_id, inviter_id, invitee_id, status, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)',
+        'INSERT INTO team_invitations (team_id, inviter_id, invitee_id, status, created_at, expires_at, invited_email) VALUES (?, ?, ?, ?, ?, ?, ?)',
         [
           inviter.team_id,
           inviterId,
@@ -175,6 +191,7 @@ export function createTeamService({ pool, config, clock, nameRules }) {
           'pending',
           at(now),
           at(now + config.invitationTtlHours * 3600 * 1000),
+          lookup.email ?? null,
         ],
       );
     });
@@ -289,6 +306,7 @@ export function createTeamService({ pool, config, clock, nameRules }) {
     createTeam,
     setTeamPicture,
     invite,
+    invitePlayer,
     listInvitations,
     accept,
     reject,

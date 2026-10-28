@@ -86,6 +86,7 @@ test.describe('admin area', () => {
     await expect(page.getByText(/already belongs to an account/)).toBeVisible();
 
     await page.getByRole('link', { name: 'Names' }).click();
+    await expect(page.getByRole('heading', { name: 'Name rules' })).toBeVisible();
     await page.getByLabel('Name', { exact: true }).fill('Cass');
     await page.getByRole('button', { name: 'Check' }).click();
     await expect(page.getByText('Allowed.')).toBeVisible();

@@ -49,9 +49,11 @@ export function createQuizService({ pool, config, clock }) {
   });
 
   async function listCheckpoints(studentId) {
-    // Only active checkpoints are shown on the map (BR08).
+    // Students see only active checkpoints on the map (BR08); administrators see all of them to test them.
+    const [[who]] = await pool.query('SELECT role FROM students WHERE student_id = ?', [studentId]);
     const [rows] = await pool.query(
-      'SELECT * FROM checkpoints WHERE is_active = 1 ORDER BY checkpoint_id',
+      'SELECT * FROM checkpoints WHERE is_active = 1 OR ? ORDER BY checkpoint_id',
+      [who?.role === 'admin' ? 1 : 0],
     );
     const [stats] = await pool.query(
       `SELECT checkpoint_id, COUNT(*) AS used, SUM(status = 'passed') AS passed
@@ -290,8 +292,27 @@ export function createQuizService({ pool, config, clock }) {
       [studentId, checkpointId, at(clock.now()), inside ? 1 : 0, attemptId],
     );
 
+  /** An administrator's earlier test attempts at a checkpoint are removed so that every test starts fresh. */
+  async function clearTestHistory(studentId, checkpointId) {
+    await withTransaction(pool, async (conn) => {
+      await conn.query(
+        `DELETE aq FROM attempt_questions aq JOIN attempts a ON a.attempt_id = aq.attempt_id
+         WHERE a.student_id = ? AND a.checkpoint_id = ?`,
+        [studentId, checkpointId],
+      );
+      await conn.query('DELETE FROM location_checks WHERE student_id = ? AND checkpoint_id = ?', [
+        studentId,
+        checkpointId,
+      ]);
+      await conn.query('DELETE FROM attempts WHERE student_id = ? AND checkpoint_id = ?', [
+        studentId,
+        checkpointId,
+      ]);
+    });
+  }
+
   /** The unlock: creates the attempt, starts the timer and draws the questions in one transaction. */
-  async function unlock(studentId, checkpoint) {
+  async function unlock(studentId, checkpoint, { testMode = false } = {}) {
     const now = clock.now();
     return withTransaction(pool, async (conn) => {
       await conn.query('SELECT student_id FROM students WHERE student_id = ? FOR UPDATE', [
@@ -302,7 +323,7 @@ export function createQuizService({ pool, config, clock }) {
         "SELECT attempt_id FROM attempts WHERE student_id = ? AND checkpoint_id = ? AND status = 'passed'",
         [studentId, checkpoint.checkpoint_id],
       );
-      if (passed)
+      if (passed && !testMode)
         throw new AppError(409, 'ALREADY_COMPLETED', 'You already completed this checkpoint.');
       const [[{ used }]] = await conn.query(
         'SELECT COUNT(*) AS used FROM attempts WHERE student_id = ? AND checkpoint_id = ?',
@@ -342,16 +363,22 @@ export function createQuizService({ pool, config, clock }) {
    * @param {{ lat: number, lng: number, accuracy: number, ageMs: number }} reading
    */
   async function verifyAndStart(studentId, checkpointId, reading) {
+    const [[who]] = await pool.query(
+      'SELECT location_consent_at, role FROM students WHERE student_id = ?',
+      [studentId],
+    );
+    // Administrators test the quizzes from anywhere: any checkpoint, active or not, as often as they like.
+    const testMode = who.role === 'admin';
     const [[checkpoint]] = await pool.query(
-      'SELECT * FROM checkpoints WHERE checkpoint_id = ? AND is_active = 1',
-      [checkpointId],
+      'SELECT * FROM checkpoints WHERE checkpoint_id = ? AND (is_active = 1 OR ?)',
+      [checkpointId, testMode ? 1 : 0],
     );
     if (!checkpoint) throw new AppError(404, 'NOT_AVAILABLE', 'This checkpoint is not available.');
     const [[passed]] = await pool.query(
       "SELECT attempt_id FROM attempts WHERE student_id = ? AND checkpoint_id = ? AND status = 'passed'",
       [studentId, checkpointId],
     );
-    if (passed)
+    if (passed && !testMode)
       throw new AppError(409, 'ALREADY_COMPLETED', 'You already completed this checkpoint.');
 
     // A refresh, reconnect or double tap gets the same attempt and timer back (BR25), before any location check.
@@ -364,11 +391,13 @@ export function createQuizService({ pool, config, clock }) {
       });
     }
 
-    const [[student]] = await pool.query(
-      'SELECT location_consent_at FROM students WHERE student_id = ?',
-      [studentId],
-    );
-    if (!student.location_consent_at)
+    if (testMode) {
+      await clearTestHistory(studentId, checkpointId);
+      const attemptId = await unlock(studentId, checkpoint, { testMode });
+      return { status: 'OK', resumed: false, attempt: await buildAttemptView(pool, attemptId) };
+    }
+
+    if (!who.location_consent_at)
       throw new AppError(403, 'CONSENT_REQUIRED', 'Please accept the location notice first.');
 
     const [others] = await pool.query(

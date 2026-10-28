@@ -28,3 +28,14 @@ Yuri is rewriting the backend. The frontend now expects the following from it; e
 ## Frontend contract
 
 See [api-documentation.md](api-documentation.md) (sections Account deletion and Admin). The browser mock in `frontend/src/api/mock.js` implements the same shapes.
+
+## Round 4 additions (2026-10-28)
+
+- Migration `006_invitation_email.sql` (`team_invitations.invited_email`); ours is `005_admin_and_media.sql` because Yuri's own `003` and `004` came first.
+- New: `services/players.js` (`GET /players/:id`), `services/stats.js` (`GET /admin/stats`), `tests/players.test.js`, `tests/stats.test.js`.
+- `services/quiz.js`: `verifyAndStart` and `listCheckpoints` treat `role = 'admin'` as test mode (BR38); `unlock` takes `{ testMode }`; `clearTestHistory`.
+- `services/teams.js`: `createInvitation` for `{ email }` or `{ playerId }`, `invitePlayer`, pending list with `invitedEmail` and `displayName`.
+- `services/account.js`: refuses to delete an admin. `db/seed.js`: `seedAdmin` (id 1).
+- `tests/helpers.js`: `loadConfig({ ...process.env, ... })` so CI can set `TEST_DATABASE_URL`.
+- `backend/vitest.config.js`: `pool: 'threads'` (the forked worker crashed now and then on Windows).
+- `.gitlab-ci.yml`: new pipeline.

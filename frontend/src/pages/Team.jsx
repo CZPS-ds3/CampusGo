@@ -303,6 +303,10 @@ export default function Team() {
                   {slot.kind === 'pending' ? (
                     <>
                       {t('Invite pending')} ·{' '}
+                      <strong className="break">
+                        {slot.pending.invitedEmail ?? slot.pending.displayName}
+                      </strong>{' '}
+                      ·{' '}
                       <span className="mono">
                         {hms(Date.parse(slot.pending.expiresAt) - Date.now())}
                       </span>{' '}
