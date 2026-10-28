@@ -25,6 +25,7 @@ export default function Locate() {
   const toast = useToast();
   const { student, refresh } = useSession();
   const { locate } = useGeolocation();
+  const isAdmin = student?.role === 'admin';
   const [checkpoint, setCheckpoint] = useState(null);
   const [phase, setPhase] = useState('idle');
   const [elsewhere, setElsewhere] = useState(null);
@@ -60,7 +61,17 @@ export default function Locate() {
     const fake = pretend
       ? { latitude: checkpoint.latitude, longitude: checkpoint.longitude, accuracy: 10 }
       : undefined;
-    const { sample, failure } = await locate(fake);
+    // Administrators test the quiz from anywhere: the server skips the location rule for them.
+    const { sample, failure } = isAdmin
+      ? {
+          sample: {
+            latitude: checkpoint.latitude,
+            longitude: checkpoint.longitude,
+            accuracy: 1,
+            ageMs: 0,
+          },
+        }
+      : await locate(fake);
     if (failure) {
       setWeakWhy('device');
       setPhase(failure === 'denied' ? 'denied' : 'weak');
@@ -106,14 +117,14 @@ export default function Locate() {
       setWeakWhy(error.code === 'STALE_POSITION' ? 'stale' : 'accuracy');
       setPhase('weak');
     }
-  }, [checkpoint, locate, navigate, pretend, toast]);
+  }, [checkpoint, isAdmin, locate, navigate, pretend, toast]);
 
   // Start scanning as soon as the checkpoint is known and the location notice has been accepted.
   useEffect(() => {
     if (!checkpoint || !student || phase !== 'idle') return;
-    if (!student.locationConsent) setAsking(true);
+    if (!student.locationConsent && !isAdmin) setAsking(true);
     else check();
-  }, [checkpoint, student, phase, check]);
+  }, [checkpoint, student, phase, check, isAdmin]);
 
   useEffect(() => {
     if (run > 0) check();
@@ -189,6 +200,11 @@ export default function Locate() {
       <p className="small muted mt">
         {checkpoint?.name} · {t('the timer starts once your location is confirmed')}
       </p>
+      {isAdmin && (
+        <p className="card card--flat small" role="note">
+          {t('Admin test mode: no location needed, no points.')}
+        </p>
+      )}
 
       <div className="radar" aria-hidden="true">
         {[0, 1, 2].map((i) => (

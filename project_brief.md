@@ -24,7 +24,7 @@ An interactive, gamified onboarding web app for incoming international students 
 - **Must:** BR01–BR25 (login/sessions, sign-up, teams, 8 checkpoints, location verification, quiz engine, scoring, leaderboards, content in the database, privacy).
 - **Should:** read-first info page per checkpoint (before the quiz, no timer).
 - **Could:** weekly streak reminders; random time-based events.
-- **Won't:** city locators (supermarkets, clothing stores), native apps, NFC/student-card readers, duo and nationality leaderboards, admin UI.
+- **Won't:** city locators (supermarkets, clothing stores), native apps, NFC/student-card readers, duo and nationality leaderboards. (A small admin area with test mode and a dashboard exists as a proposal, see docs/business-rules.md section 9.)
 
 ## 5. Success criteria
 All 25 rules implemented and traceable to tests; 15 worked scoring examples reproduce exactly; ≥ 50 simultaneous sessions; first question ≤ 1.5 s after the quiz starts; ≥ 90% of pilot students complete all checkpoints (pilot proxy: ≥ 9 of 10 volunteers).

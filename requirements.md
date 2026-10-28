@@ -86,3 +86,7 @@ npm run dev
 python -m pip install pylint
 pylint scripts/
 ```
+
+## CI (GitLab)
+
+`.gitlab-ci.yml` uses the `node:22` image and a `mysql:8.4` service for the backend tests (`TEST_DATABASE_URL` points at it, `SKIP_DOCKER=1`). The runner needs Docker (the shared GitLab runners have it). The manual browser job uses `mcr.microsoft.com/playwright:v1.64.1-noble`; keep that tag equal to the Playwright version in `package-lock.json`.

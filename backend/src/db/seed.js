@@ -158,6 +158,29 @@ export async function seedImages(conn) {
   }
 }
 
+/**
+ * The administrator account exists from the first seed on (no sign-up step). It takes id 1 when that id is
+ * free, otherwise the next id. An existing account with the address is promoted instead of duplicated.
+ */
+export async function seedAdmin(conn, email) {
+  const [[existing]] = await conn.query('SELECT student_id FROM students WHERE email = ?', [email]);
+  if (existing) {
+    await conn.query("UPDATE students SET role = 'admin', status = 'active' WHERE student_id = ?", [
+      existing.student_id,
+    ]);
+    return existing.student_id;
+  }
+  const [[idOne]] = await conn.query('SELECT student_id FROM students WHERE student_id = 1');
+  const now = new Date();
+  const [inserted] = await conn.query(
+    `INSERT INTO students (student_id, email, role, first_name, last_name, nickname, total_points, points_exact_x100,
+       points_updated_at, created_at)
+     VALUES (?, ?, 'admin', 'Study', 'Office', 'Admin', 0, 0, ?, ?)`,
+    [idOne ? null : 1, email, now, now],
+  );
+  return inserted.insertId;
+}
+
 /** Three placeholder "read first" facts per checkpoint (replace with verified texts before the pilot). */
 export async function seedPlaceholderFacts(conn) {
   const [checkpoints] = await conn.query('SELECT checkpoint_id, checkpoint_name FROM checkpoints');
@@ -188,6 +211,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     await seedPlaceholderQuestions(pool);
     await seedPlaceholderFacts(pool);
     await seedImages(pool);
+    await seedAdmin(pool, config.adminEmail);
     console.log(
       '[seed] reference data, the 8 Bildungscampus checkpoints and placeholder questions are in place',
     );

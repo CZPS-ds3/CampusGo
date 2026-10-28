@@ -133,6 +133,9 @@ A mobile-responsive **web app** (no app-store download, no extra hardware — ju
 - **Photos** of the places are in `frontend/public/places/` with credits in `CREDITS.md`. They are generic Bildungscampus photos from Wikimedia Commons, **not** pictures of the single places; replace them with the team's own photos before the pilot (list: `frontend/src/api/places.json`, then `npm run db:seed`).
 - **Walking route:** the *Show walking route* button in a checkpoint draws the way with OpenStreetMap data; your position is used in the browser only.
 - **Delete my account:** in the profile (the person, their picture and e-mail are removed; the e-mail can be used again).
+- **Admin menu and testing:** administrators get an *Admin* bar above *Map* in the round menu, and otherwise use the app like a student. *Admin → Test quests* starts any quiz from anywhere (no location, no points). The admin account is created by the seed (id 1) and cannot be deleted.
+- **Player profiles:** a name in the solo ranking opens that player's profile (points, ranks, team, members). Team members can invite from there.
+- **GitLab pipeline:** `.gitlab-ci.yml` runs lint, format check, backend tests (MySQL 8.4 service), frontend tests and the build on every push and merge request. The browser tests are a manual job. It replaces Auto DevOps, which cannot build this project.
 - Backend handover for Yuri: [design/yi_heng/backend-handover.md](design/yi_heng/backend-handover.md).
 
 ### Leaderboards

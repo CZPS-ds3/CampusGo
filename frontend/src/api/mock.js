@@ -7,7 +7,9 @@ const STORAGE_KEY = 'cq-mock-v2';
 const SECOND = 1000;
 const OTP = '123456';
 const DOMAIN = 'heilbronn.dhbw.de';
-const MAX_ACCURACY_M = 50;
+const MAX_ACCURACY_M = 100;
+const GEOFENCE_SLACK_M = 25; // grace zone added to every radius
+const NEARER_MARGIN_M = 20; // another checkpoint must be this much nearer to win
 const MAX_POSITION_AGE_MS = 30_000;
 const ADMIN_EMAIL = `sekretariat.dski@${DOMAIN}`;
 const PLACE_SLUGS = {
@@ -71,6 +73,7 @@ const CHECKPOINTS = [
 }));
 
 const MULTIPLIERS = [100, 85, 70, 55, 40, 0];
+const TEAM_OF = { 101: 'Campus Crew', 102: 'Campus Crew', 103: 'Campus Crew' };
 const OTHERS = [
   { id: 101, displayName: 'Mia K.', points: 6290, avatarPreset: 1 },
   { id: 102, displayName: 'Jonas', points: 5320, avatarPreset: 2 },
@@ -335,6 +338,25 @@ export function createMockApi(ApiError, getUnauthorized) {
       active: state.team.members.length >= 2,
     };
 
+  const startAttempt = (cp) => {
+    const used = state.attempts.filter((a) => a.checkpointId === cp.id).length;
+    const now = Date.now();
+    const attempt = {
+      id: state.nextId,
+      checkpointId: cp.id,
+      attemptNumber: used + 1,
+      startMs: now,
+      expiresMs: now + cp.questionCount * 60 * SECOND,
+      status: 'active',
+      hardUnlocked: false,
+      slots: slotsFor(cp, now % 10),
+    };
+    state.nextId += 1;
+    state.attempts.push(attempt);
+    save();
+    return { status: 'OK', resumed: false, attempt: view(attempt) };
+  };
+
   const rank = (list) =>
     list.map((e) => ({ ...e, rank: 1 + list.filter((o) => o.points > e.points).length }));
 
@@ -430,25 +452,33 @@ export function createMockApi(ApiError, getUnauthorized) {
       needLogin();
       sweep();
       return {
-        checkpoints: CHECKPOINTS.filter((c) => c.isActive).map((c) => {
-          const mine = state.attempts.filter((a) => a.checkpointId === c.id);
-          return {
-            ...c,
-            completed: mine.some((a) => a.status === 'passed'),
-            attemptsUsed: mine.length,
-            nextAttemptNumber: mine.length + 1,
-            bestScore: Math.max(0, ...mine.map((a) => a.pointsEarned ?? 0)),
-            facts: [1, 2, 3].map((n) => `PLACEHOLDER fact ${n} about ${c.name}.`),
-          };
-        }),
+        checkpoints: CHECKPOINTS.filter((c) => c.isActive || state.student?.role === 'admin').map(
+          (c) => {
+            const mine = state.attempts.filter((a) => a.checkpointId === c.id);
+            return {
+              ...c,
+              completed: mine.some((a) => a.status === 'passed'),
+              attemptsUsed: mine.length,
+              nextAttemptNumber: mine.length + 1,
+              bestScore: Math.max(0, ...mine.map((a) => a.pointsEarned ?? 0)),
+              facts: [1, 2, 3].map((n) => `PLACEHOLDER fact ${n} about ${c.name}.`),
+            };
+          },
+        ),
       };
     },
     async verifyLocation(id, { latitude, longitude, accuracy, ageMs }) {
       needLogin();
       sweep();
       const cp = checkpoint(id);
-      if (!cp?.isActive) throw fail(404, 'NOT_AVAILABLE', 'This checkpoint is not available.');
-      if (state.attempts.some((a) => a.checkpointId === cp.id && a.status === 'passed')) {
+      // Administrators test any quiz from anywhere, as often as they like.
+      const testMode = state.student?.role === 'admin';
+      if (!cp || (!cp.isActive && !testMode))
+        throw fail(404, 'NOT_AVAILABLE', 'This checkpoint is not available.');
+      if (
+        !testMode &&
+        state.attempts.some((a) => a.checkpointId === cp.id && a.status === 'passed')
+      ) {
         throw fail(409, 'ALREADY_COMPLETED', 'You already completed this checkpoint.');
       }
       const active = activeAttempt();
@@ -458,6 +488,10 @@ export function createMockApi(ApiError, getUnauthorized) {
         throw fail(409, 'ACTIVE_ATTEMPT_EXISTS', 'You have a quiz in progress.', {
           attemptId: active.id,
         });
+      if (testMode) {
+        state.attempts = state.attempts.filter((a) => a.checkpointId !== cp.id);
+        return startAttempt(cp);
+      }
       if (!state.consent)
         throw fail(403, 'CONSENT_REQUIRED', 'Please accept the location notice first.');
       if (ageMs < 0 || ageMs > MAX_POSITION_AGE_MS)
@@ -466,7 +500,7 @@ export function createMockApi(ApiError, getUnauthorized) {
         throw fail(422, 'ACCURACY_TOO_LOW', 'Your location is not precise enough.');
       const metres = distance(latitude, longitude, cp.latitude, cp.longitude);
       const distanceM = Math.round(metres / 10) * 10;
-      if (metres > cp.radius) {
+      if (metres > cp.radius + GEOFENCE_SLACK_M) {
         return {
           status: 'OUTSIDE',
           distanceM,
@@ -477,7 +511,7 @@ export function createMockApi(ApiError, getUnauthorized) {
       // Overlapping circles: a reading belongs to the checkpoint with the nearest centre only.
       const nearer = CHECKPOINTS.filter((c) => c.isActive && c.id !== cp.id)
         .map((c) => ({ c, d: distance(latitude, longitude, c.latitude, c.longitude) }))
-        .filter(({ c, d }) => d <= c.radius && (d < metres || (d === metres && c.id < cp.id)))
+        .filter(({ c, d }) => d <= c.radius && d + NEARER_MARGIN_M < metres)
         .sort((a, b) => a.d - b.d)[0];
       if (nearer) {
         return {
@@ -487,22 +521,7 @@ export function createMockApi(ApiError, getUnauthorized) {
           message: `You are at ${nearer.c.name}, not at ${cp.name}. Walk to ${cp.name} and try again.`,
         };
       }
-      const used = state.attempts.filter((a) => a.checkpointId === cp.id).length;
-      const now = Date.now();
-      const attempt = {
-        id: state.nextId,
-        checkpointId: cp.id,
-        attemptNumber: used + 1,
-        startMs: now,
-        expiresMs: now + cp.questionCount * 60 * SECOND,
-        status: 'active',
-        hardUnlocked: false,
-        slots: slotsFor(cp, now % 10),
-      };
-      state.nextId += 1;
-      state.attempts.push(attempt);
-      save();
-      return { status: 'OK', resumed: false, attempt: view(attempt) };
+      return startAttempt(cp);
     },
     async activeAttempt() {
       needLogin();
@@ -624,11 +643,83 @@ export function createMockApi(ApiError, getUnauthorized) {
       if (known) {
         state.team.pending = [
           ...(state.team.pending ?? []),
-          { expiresAt: new Date(Date.now() + 24 * 3600e3).toISOString() },
+          {
+            expiresAt: new Date(Date.now() + 24 * 3600e3).toISOString(),
+            invitedEmail: String(email).trim().toLowerCase(),
+            displayName: String(email).split('@')[0],
+          },
         ];
         save();
       }
       return { message: 'If the user exists and can be invited, an invitation has been sent.' };
+    },
+    async invitePlayer(playerId) {
+      needLogin();
+      if (!state.team) throw fail(403, 'NO_TEAM', 'Create a team first.');
+      if (state.team.members.length + (state.team.pending ?? []).length >= 5)
+        throw fail(
+          409,
+          'TEAM_FULL',
+          'Your team is full: members plus open invitations already make 5.',
+        );
+      const other = OTHERS.find((o) => o.id === Number(playerId));
+      if (other && !TEAM_OF[other.id]) {
+        state.team.pending = [
+          ...(state.team.pending ?? []),
+          {
+            expiresAt: new Date(Date.now() + 24 * 3600e3).toISOString(),
+            invitedEmail: null,
+            displayName: other.displayName,
+          },
+        ];
+        save();
+      }
+      return { message: 'If the user exists and can be invited, an invitation has been sent.' };
+    },
+    async player(id) {
+      needLogin();
+      const isYou = Number(id) === 1;
+      const other = OTHERS.find((o) => o.id === Number(id));
+      if (!isYou && !other) throw fail(404, 'NOT_FOUND', 'Player not found.');
+      const points = isYou ? totalPoints() : other.points;
+      const teamName = isYou ? (state.team?.name ?? null) : (TEAM_OF[other.id] ?? null);
+      const members = isYou
+        ? (teamView()?.members ?? [])
+        : OTHERS.filter((o) => TEAM_OF[o.id] === teamName).map((o) => ({
+            id: o.id,
+            displayName: o.displayName,
+            pictureUrl: null,
+            avatarPreset: o.avatarPreset,
+            totalPoints: o.points,
+          }));
+      const free = state.team && state.team.members.length + (state.team.pending ?? []).length < 5;
+      return {
+        player: {
+          id: Number(id),
+          displayName: isYou ? state.student.displayName : other.displayName,
+          pictureUrl: isYou ? state.student.pictureUrl : null,
+          avatarPreset: isYou ? state.student.avatarPreset : other.avatarPreset,
+          totalPoints: points,
+          rank: rankFor(points),
+          questsCleared: isYou
+            ? new Set(
+                state.attempts.filter((a) => a.status === 'passed').map((a) => a.checkpointId),
+              ).size
+            : Math.floor(points / 1500),
+          isYou,
+          canInvite: Boolean(!isYou && free && !teamName),
+          team: teamName
+            ? {
+                id: isYou ? 1 : 11,
+                name: teamName,
+                pictureUrl: null,
+                score: Math.round(members.reduce((n, m) => n + m.totalPoints, 0) / members.length),
+                rank: members.length >= 2 ? 1 : null,
+                members,
+              }
+            : null,
+        },
+      };
     },
     async invitations() {
       needLogin();
@@ -760,6 +851,74 @@ export function createMockApi(ApiError, getUnauthorized) {
   });
 
   methods.admin = {
+    async stats() {
+      needAdmin();
+      const day = (back) => new Date(Date.now() - back * 86400e3).toISOString().slice(0, 10);
+      const daily = Array.from({ length: 14 }, (_, i) => ({
+        date: day(13 - i),
+        logins: 6 + ((i * 7) % 11),
+        attempts: 3 + ((i * 5) % 9),
+        passed: 1 + ((i * 3) % 6),
+      }));
+      return {
+        generatedAt: new Date().toISOString(),
+        errors: {},
+        tiles: {
+          signedInNow: 3,
+          activeStudents: state.admin.users.filter((u) => u.status === 'active').length,
+          loginsToday: daily[13].logins,
+          loginsYesterday: daily[12].logins,
+          questsPassedToday: daily[13].passed,
+          questsPassedYesterday: daily[12].passed,
+        },
+        daily,
+        usersByStatus: { active: 4, blocked: 1, archived: 1, deleted: 0 },
+        checkpoints: CHECKPOINTS.map((c, i) => ({
+          id: c.id,
+          name: c.name,
+          isActive: c.isActive,
+          attempts: 12 - i,
+          passed: Math.max(0, 9 - i),
+          passRate: (9 - i > 0 ? 9 - i : 0) / (12 - i),
+        })),
+        topPlayers: OTHERS.map((o, i) => ({
+          rank: i + 1,
+          displayName: o.displayName,
+          points: o.points,
+        })),
+        topTeams: [{ rank: 1, name: 'Campus Crew', members: 3, points: 4100 }],
+        signedIn: [
+          {
+            displayName: 'Mia K.',
+            since: new Date(Date.now() - 50 * 60e3).toISOString(),
+            lastActiveAt: new Date().toISOString(),
+          },
+          {
+            displayName: 'Jonas',
+            since: new Date(Date.now() - 20 * 60e3).toISOString(),
+            lastActiveAt: new Date().toISOString(),
+          },
+        ],
+        recent: [
+          {
+            at: new Date().toISOString(),
+            type: 'login',
+            byAdmin: false,
+            studentId: 101,
+            studentName: 'Mia K.',
+            checkpointName: null,
+          },
+          {
+            at: new Date(Date.now() - 600e3).toISOString(),
+            type: 'passed',
+            byAdmin: false,
+            studentId: 102,
+            studentName: 'Jonas',
+            checkpointName: 'Mensa',
+          },
+        ],
+      };
+    },
     async overview() {
       needAdmin();
       const count = (s) => state.admin.users.filter((u) => u.status === s).length;

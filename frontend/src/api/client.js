@@ -89,6 +89,8 @@ const realApi = {
     return request('POST', '/teams/me/picture', { form });
   },
   invite: (email) => post('/teams/me/invitations', { email }),
+  invitePlayer: (playerId) => post('/teams/me/invitations', { playerId }),
+  player: (id) => request('GET', `/players/${id}`),
   invitations: () => request('GET', '/invitations'),
   acceptInvitation: (id) => post(`/invitations/${id}/accept`),
   rejectInvitation: (id) => post(`/invitations/${id}/reject`),
@@ -96,6 +98,7 @@ const realApi = {
   teamBoard: () => request('GET', '/leaderboards/team'),
   admin: {
     overview: () => request('GET', '/admin/overview'),
+    stats: () => request('GET', '/admin/stats'),
     users: (params) => request('GET', `/admin/users${query(params)}`),
     user: (id) => request('GET', `/admin/users/${id}`),
     createUser: (body) => post('/admin/users', body),

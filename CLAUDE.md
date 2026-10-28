@@ -18,7 +18,7 @@ Key rules in short (read the file before implementing):
 - **Scoring (BR14, 16-21):** normal 1,000, hard 2,000, time bonus 1 per whole remaining second, full clear 200, attempt multipliers 100/85/70/55/40/0 % applied after bonuses, hard-question option only on attempt 1 of the 4 large checkpoints, fractions rounded up. **Points, bonuses and multipliers are read from database tables (BR11), never hard-coded.**
 - **Server authority (BR22):** answers and submissions are accepted only while the attempt is active and before it expires, judged on the server clock. Never trust the client for time, location or correctness.
 - **Leaderboards (BR04, 24):** solo (total points) and team; equal scores share a rank, earlier achiever listed first.
-- Not in scope: city locators, Google Maps, native apps, NFC/student cards, duo/nationality leaderboards. A small admin area (BR26-BR31) exists as a proposal in `docs/business-rules.md` section 9.
+- Not in scope: city locators, Google Maps, native apps, NFC/student cards, duo/nationality leaderboards. A small admin area (BR26-BR40: admin role and test mode, dashboard, name filter, player profiles) exists as a proposal in `docs/business-rules.md` section 9. The admin account is pre-seeded and cannot be deleted; administrators never appear in rankings.
 - The read-first info page (before the quiz) is a Should item.
 
 Team: Catalina, Yuri, Ryan, Yi Heng (Project Manager), Akil.
@@ -55,6 +55,7 @@ The project uses Node.js (LTS, v20 or newer), **npm only** (no yarn/pnpm), npm w
 | Build the web app | `npm run build` |
 | Database | `npm run db:up`, `db:down`, `db:reset`, `db:migrate`, `db:seed` |
 | **All checks** (lint + format + tests + build) | `npm run check` |
+| CI (GitLab) | `.gitlab-ci.yml`: lint, backend tests with a MySQL service, frontend tests, build; browser tests are manual |
 
 Rules:
 - Use `npm ci` for a clean install; use `npm install <pkg>` only when deliberately adding a dependency, and commit `package-lock.json`.

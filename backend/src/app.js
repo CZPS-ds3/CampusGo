@@ -15,6 +15,7 @@ import { createAdminService } from './services/admin.js';
 import { GENERIC_OTP_MESSAGE, createAuthService, publicStudent } from './services/auth.js';
 import { createLeaderboardService } from './services/leaderboards.js';
 import { createNameRules } from './services/name-rules.js';
+import { createPlayerService } from './services/players.js';
 import { storeProfilePicture } from './services/pictures.js';
 import { createQuizService } from './services/quiz.js';
 import { GENERIC_INVITE_MESSAGE, createTeamService } from './services/teams.js';
@@ -44,7 +45,9 @@ const schemas = {
   }),
   answer: z.object({ optionId: id, questionNumber: z.number().int().min(1).max(5).optional() }),
   team: z.object({ name: z.string().trim().min(2).max(30) }),
-  invite: z.object({ email }),
+  invite: z
+    .object({ email: email.optional(), playerId: id.optional() })
+    .refine((body) => Boolean(body.email) !== Boolean(body.playerId)),
   adminUsers: z.object({
     q: z.string().trim().max(80).optional(),
     status: z.enum(['active', 'blocked', 'archived', 'deleted', 'reported']).optional(),
@@ -88,6 +91,7 @@ export function createApp({ pool, config, mailer, clock }) {
   const accounts = createAccountService({ pool, clock });
   const admin = createAdminService({ pool, config, clock, nameRules });
   const boards = createLeaderboardService({ pool });
+  const players = createPlayerService({ pool, clock, boards });
   const limits = createLimiters(config);
   const needLogin = requireAuth(auth);
   const upload = multer({
@@ -299,7 +303,8 @@ export function createApp({ pool, config, mailer, clock }) {
     '/teams/me/invitations',
     handle(async (req, res) => {
       const body = schemas.invite.parse(req.body);
-      await teams.invite(req.student.student_id, body.email);
+      if (body.playerId) await teams.invitePlayer(req.student.student_id, body.playerId);
+      else await teams.invite(req.student.student_id, body.email);
       res.status(202).json({ message: GENERIC_INVITE_MESSAGE });
     }),
   );
@@ -323,6 +328,14 @@ export function createApp({ pool, config, mailer, clock }) {
     }),
   );
 
+  // ----- player profiles -----
+  api.get(
+    '/players/:id',
+    handle(async (req, res) =>
+      res.json(await players.getPlayer(req.student.student_id, id.parse(req.params.id))),
+    ),
+  );
+
   // ----- leaderboards (BR04, BR24) -----
   api.get(
     '/leaderboards/solo',
@@ -337,6 +350,13 @@ export function createApp({ pool, config, mailer, clock }) {
   const adminApi = express.Router();
   adminApi.use(requireAdmin);
   const actor = (req) => req.student.student_id;
+  adminApi.get(
+    '/stats',
+    handle(async (_req, res) => {
+      res.set('Cache-Control', 'private, no-store');
+      res.json(await admin.stats());
+    }),
+  );
   adminApi.get(
     '/overview',
     handle(async (_req, res) => res.json(await admin.overview())),

@@ -260,11 +260,6 @@ export default function Profile() {
         </div>
         <div className="stack">
           <Preferences />
-          {student.role === 'admin' && (
-            <Button to="/admin" variant="dark">
-              <Icon name="compass" /> {t('Admin area')}
-            </Button>
-          )}
           <Button onClick={() => setConfirm(true)}>
             <Icon name="logout" /> {t('Sign out')}
           </Button>

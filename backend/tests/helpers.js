@@ -23,7 +23,7 @@ export const DOMAIN = 'heilbronn.dhbw.de';
 
 /** Builds the app against the test database with a fake clock and an in-memory mailer. */
 export async function createTestContext(envOverrides = {}) {
-  const config = { ...loadConfig({ NODE_ENV: 'test', ...envOverrides }) };
+  const config = { ...loadConfig({ ...process.env, NODE_ENV: 'test', ...envOverrides }) };
   const pool = createPool(config.databaseUrl);
   const clock = createFakeClock();
   const mailer = createTestMailer();

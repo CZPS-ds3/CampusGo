@@ -10,6 +10,7 @@ import Locate from './pages/Locate.jsx';
 import Login from './pages/Login.jsx';
 import MapPage from './pages/MapPage.jsx';
 import NotFound from './pages/NotFound.jsx';
+import PlayerProfile from './pages/PlayerProfile.jsx';
 import Profile from './pages/Profile.jsx';
 import Quests from './pages/Quests.jsx';
 import Quiz from './pages/Quiz.jsx';
@@ -21,6 +22,7 @@ import AdminLayout from './pages/admin/AdminLayout.jsx';
 import AdminNames from './pages/admin/AdminNames.jsx';
 import AdminOverview from './pages/admin/AdminOverview.jsx';
 import AdminTeams from './pages/admin/AdminTeams.jsx';
+import AdminTestQuests from './pages/admin/AdminTestQuests.jsx';
 import AdminUser from './pages/admin/AdminUser.jsx';
 import AdminUsers from './pages/admin/AdminUsers.jsx';
 
@@ -71,12 +73,14 @@ export default function App() {
           <Route path="/team" element={<Team />} />
           <Route path="/ranks" element={<Ranks />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/player/:id" element={<PlayerProfile />} />
           <Route path="/admin" element={<AdminOnly />}>
             <Route index element={<AdminOverview />} />
             <Route path="users" element={<AdminUsers />} />
             <Route path="users/:id" element={<AdminUser />} />
             <Route path="teams" element={<AdminTeams />} />
             <Route path="names" element={<AdminNames />} />
+            <Route path="test-quests" element={<AdminTestQuests />} />
           </Route>
         </Route>
         <Route path="*" element={<NotFound />} />

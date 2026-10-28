@@ -50,7 +50,9 @@ export function loadConfig(env = process.env) {
     sessionInactivityMinutes: int(env.SESSION_INACTIVITY_MINUTES, 30),
     invitationTtlHours: int(env.INVITATION_TTL_HOURS, 24),
     // Geofencing settings (Main Project Document, section 5 "Settings kept in one config file").
-    maxAccuracyM: int(env.MAX_ACCURACY_M, 50),
+    maxAccuracyM: int(env.MAX_ACCURACY_M, 100),
+    geofenceSlackM: int(env.GEOFENCE_SLACK_M, 25), // grace zone added to every radius
+    nearerMarginM: int(env.NEARER_MARGIN_M, 20), // another checkpoint must be this much nearer to win
     maxPositionAgeMs: int(env.MAX_POSITION_AGE_MS, 30_000),
     secondsPerQuestion: int(env.SECONDS_PER_QUESTION, 60), // BR13
     verifyLimitPerMin: int(env.VERIFY_LIMIT_PER_MIN, 10),

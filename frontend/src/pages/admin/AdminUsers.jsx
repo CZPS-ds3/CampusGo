@@ -136,6 +136,11 @@ export default function AdminUsers() {
           </select>
         </div>
       </div>
+      {users && (
+        <p className="small muted" aria-live="polite">
+          {users.length} {t('users')}
+        </p>
+      )}
       {!users && <Skeleton rows={4} height={88} />}
       {users?.length === 0 && (
         <EmptyState icon="team" title={t('No users found')} body={t('Try another search.')} />

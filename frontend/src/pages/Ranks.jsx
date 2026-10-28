@@ -14,7 +14,7 @@ import { formatNumber, t } from '../i18n.js';
 const PODIUM_ORDER = [1, 0, 2]; // silver, gold, bronze as displayed left to right
 const PODIUM_TONE = ['accent', 'sub', 'ok'];
 
-function Podium({ entries, nameOf }) {
+function Podium({ entries, nameOf, linkOf }) {
   const top = entries.slice(0, 3);
   if (top.length === 0) return null;
   return (
@@ -23,7 +23,15 @@ function Podium({ entries, nameOf }) {
         <li key={top[i].id} className={`podium__spot podium__spot--${i + 1}`}>
           <div className={`card podium__card podium__card--${PODIUM_TONE[i]}`}>
             <span className="display h2">{top[i].rank}</span>
-            <span className="podium__name">{nameOf(top[i])}</span>
+            <span className="podium__name">
+              {linkOf ? (
+                <Link to={linkOf(top[i])} className="namelink">
+                  {nameOf(top[i])}
+                </Link>
+              ) : (
+                nameOf(top[i])
+              )}
+            </span>
             <span className="mono small">{formatNumber(top[i].points)}</span>
           </div>
         </li>
@@ -32,7 +40,7 @@ function Podium({ entries, nameOf }) {
   );
 }
 
-function Rows({ entries, mine, nameOf, detailOf }) {
+function Rows({ entries, mine, nameOf, detailOf, linkOf }) {
   return (
     <ol className="board">
       {entries.map((entry) => (
@@ -48,7 +56,13 @@ function Rows({ entries, mine, nameOf, detailOf }) {
             avatar={{ url: entry.pictureUrl, preset: entry.avatarPreset }}
           />
           <span className="board__name">
-            {nameOf(entry)}
+            {linkOf ? (
+              <Link to={linkOf(entry)} className="namelink">
+                {nameOf(entry)}
+              </Link>
+            ) : (
+              nameOf(entry)
+            )}
             {mine(entry) && <span className="chip chip--accent">{t('you')}</span>}
             {detailOf && <span className="small muted">{detailOf(entry)}</span>}
           </span>
@@ -148,12 +162,14 @@ export default function Ranks() {
             <Podium
               entries={data.entries}
               nameOf={(e) => (tab === 'solo' ? e.displayName : e.name)}
+              linkOf={tab === 'solo' ? (e) => `/player/${e.id}` : undefined}
             />
             <Rows
               entries={data.entries.slice(3)}
               mine={(e) => (tab === 'solo' ? e.isYou : e.isYourTeam)}
               nameOf={(e) => (tab === 'solo' ? e.displayName : e.name)}
               detailOf={tab === 'team' ? (e) => t('{n} members', { n: e.members }) : undefined}
+              linkOf={tab === 'solo' ? (e) => `/player/${e.id}` : undefined}
             />
             {standing &&
               !data.entries.slice(3).some((e) => (tab === 'solo' ? e.isYou : e.isYourTeam)) && (
