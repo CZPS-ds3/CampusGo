@@ -1,0 +1,72 @@
+/* DHBW corporate palette: signal red and anthracite grey. Roles are semantic, so light and dark share class names. */
+:root,
+:root[data-theme='light'] {
+  --fs: 1;
+  --page: #f2f3f4;
+  --surface: #ffffff;
+  --surface2: #e8eaec;
+  --line: #d3d7db;
+  --line2: #aab1b8;
+  --fg: #1d2327;
+  --mute: #55606a;
+  --on: #ffffff;
+  --signal: #e2001a;
+  --on-signal: #ffffff;
+  --accent: #c20017;
+  --sub: #4d5861;
+  --ok: #137a4e;
+  --warn: #b04e00;
+  --shadow: 0 1px 2px rgba(29, 35, 39, 0.08), 0 4px 12px rgba(29, 35, 39, 0.08);
+  --scrim: rgba(29, 35, 39, 0.5);
+  --dot: rgba(91, 103, 112, 0.16);
+  --logo-bg: #ffffff;
+  --map-bg: #eef0f2;
+  --map-filter: none;
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  --page: #14181c;
+  --surface: #1e252b;
+  --surface2: #2a333a;
+  --line: #3a454d;
+  --line2: #66727c;
+  --fg: #f2f3f4;
+  --mute: #a3aeb7;
+  --on: #14181c;
+  --accent: #ff6b7d;
+  --sub: #b4bec6;
+  --ok: #3ddc97;
+  --warn: #ffa64d;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 16px rgba(0, 0, 0, 0.35);
+  --scrim: rgba(8, 10, 12, 0.7);
+  --dot: rgba(242, 243, 244, 0.07);
+  --logo-bg: #ffffff;
+  --map-bg: #181d22;
+  --map-filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9) saturate(0.45);
+  color-scheme: dark;
+}
+
+:root {
+  --font: 'Source Sans 3', 'Frutiger', 'Segoe UI', Arial, sans-serif;
+
+  --r-1: 10px;
+  --r-2: 14px;
+  --r-3: 24px;
+
+  --ease-pop: cubic-bezier(0.2, 0.9, 0.3, 1.2);
+
+  --z-banner: 45;
+  --z-map-ui: 20;
+  --z-scrim: 60;
+  --z-menu: 65;
+  --z-trigger: 70;
+  --z-sheet: 75;
+  --z-toast: 90;
+  --z-wipe: 100;
+
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --ball: 72px;
+  --menu-clearance: calc(var(--ball) + 64px + var(--safe-b));
+}

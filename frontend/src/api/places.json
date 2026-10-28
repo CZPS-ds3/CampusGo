@@ -1,0 +1,98 @@
+{
+  "mensa": [
+    {
+      "file": "mensa-1.jpg",
+      "alt": "Campus street between brick and glass buildings (general view)",
+      "credit": "Kiliansmännle, CC BY-SA 4.0, Wikimedia Commons"
+    },
+    {
+      "file": "mensa-2.jpg",
+      "alt": "Glass building and trees in a round planter on the campus (general view)",
+      "credit": "Kiliansmännle, CC BY-SA 4.0, Wikimedia Commons"
+    }
+  ],
+  "library": [
+    {
+      "file": "library-1.jpg",
+      "alt": "Bright glass-walled interior of a Bildungscampus building (general view)",
+      "credit": "Presse hhn, CC BY-SA 4.0, Wikimedia Commons"
+    },
+    {
+      "file": "library-2.jpg",
+      "alt": "Campus buildings and a grassy slope (general view)",
+      "credit": "Kiliansmännle, CC BY-SA 4.0, Wikimedia Commons"
+    }
+  ],
+  "cas-cafe": [
+    {
+      "file": "cas-cafe-1.jpg",
+      "alt": "Campus building with the BILDUNGSCAMPUS lettering and steps (general view)",
+      "credit": "Rosenzweig, CC BY-SA 4.0, Wikimedia Commons"
+    },
+    {
+      "file": "cas-cafe-2.jpg",
+      "alt": "Campus buildings seen from the entrance road (general view)",
+      "credit": "Kiliansmännle, CC BY-SA 4.0, Wikimedia Commons"
+    }
+  ],
+  "campus-garden": [
+    {
+      "file": "campus-garden-1.jpg",
+      "alt": "Glass building and trees in a round planter on the campus (general view)",
+      "credit": "Kiliansmännle, CC BY-SA 4.0, Wikimedia Commons"
+    },
+    {
+      "file": "campus-garden-2.jpg",
+      "alt": "Campus buildings and a grassy slope (general view)",
+      "credit": "Kiliansmännle, CC BY-SA 4.0, Wikimedia Commons"
+    }
+  ],
+  "carebox-shopbox": [
+    {
+      "file": "carebox-shopbox-1.jpg",
+      "alt": "Row of Campusrad rental bikes on the Bildungscampus",
+      "credit": "Rosenzweig, CC BY-SA 4.0, Wikimedia Commons"
+    },
+    {
+      "file": "carebox-shopbox-2.jpg",
+      "alt": "Close-up of a Campusrad rental bike on the Bildungscampus",
+      "credit": "Rosenzweig, CC BY-SA 4.0, Wikimedia Commons"
+    }
+  ],
+  "building-b": [
+    {
+      "file": "building-b-1.jpg",
+      "alt": "Modern brick campus building with trees and DHBW banners (general view)",
+      "credit": "Peter Schmelzle, CC BY-SA 4.0, Wikimedia Commons"
+    },
+    {
+      "file": "building-b-2.jpg",
+      "alt": "Brick campus building behind the BILDUNGSCAMPUS lettering (general view)",
+      "credit": "Rosenzweig, CC BY-SA 4.0, Wikimedia Commons"
+    }
+  ],
+  "building-c": [
+    {
+      "file": "building-c-1.jpg",
+      "alt": "Western entrance of the Bildungscampus with banners and lettering (general view)",
+      "credit": "Kiliansmännle, CC BY-SA 4.0, Wikimedia Commons"
+    },
+    {
+      "file": "building-c-2.jpg",
+      "alt": "Campus buildings seen from a distance, one under scaffolding (general Bildungscampus view)",
+      "credit": "peter schmelzle, CC BY-SA 3.0, Wikimedia Commons"
+    }
+  ],
+  "sensoricum": [
+    {
+      "file": "containers-1.jpg",
+      "alt": "Brick campus building with construction machines in front, 2015 (general view)",
+      "credit": "Peter Schmelzle, CC BY-SA 4.0, Wikimedia Commons"
+    },
+    {
+      "file": "containers-2.jpg",
+      "alt": "Aerial view of the Bildungscampus and Heilbronn (general view)",
+      "credit": "Bildungscampus Heilbronn, CC BY-SA 4.0, Wikimedia Commons"
+    }
+  ]
+}

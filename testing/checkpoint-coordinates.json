@@ -1,0 +1,208 @@
+{
+  "_note": "Test positions for the 8 checkpoints (public map points, never real student locations). Generated from backend/src/db/seed.js; backend/tests/geofence.test.js fails if this file and the seed disagree. Use accuracy 10 and reading age 0.",
+  "accuracyM": 10,
+  "checkpoints": [
+    {
+      "name": "Mensa",
+      "radiusM": 60,
+      "questions": 5,
+      "passNeeded": 4,
+      "centre": {
+        "lat": 49.148464,
+        "lng": 9.215808
+      },
+      "inside": {
+        "lat": 49.148464,
+        "lng": 9.216303,
+        "metresFromCentre": 36
+      },
+      "outside": {
+        "lat": 49.149363,
+        "lng": 9.215808,
+        "metresFromCentre": 100
+      }
+    },
+    {
+      "name": "Library",
+      "radiusM": 60,
+      "questions": 5,
+      "passNeeded": 4,
+      "centre": {
+        "lat": 49.149493,
+        "lng": 9.216467
+      },
+      "inside": {
+        "lat": 49.149817,
+        "lng": 9.216467,
+        "metresFromCentre": 36
+      },
+      "outside": {
+        "lat": 49.150392,
+        "lng": 9.216467,
+        "metresFromCentre": 100
+      }
+    },
+    {
+      "name": "CAS Cafe",
+      "radiusM": 40,
+      "questions": 3,
+      "passNeeded": 2,
+      "centre": {
+        "lat": 49.148951,
+        "lng": 9.216205
+      },
+      "inside": {
+        "lat": 49.149167,
+        "lng": 9.216205,
+        "metresFromCentre": 24
+      },
+      "outside": {
+        "lat": 49.14967,
+        "lng": 9.216205,
+        "metresFromCentre": 80
+      }
+    },
+    {
+      "name": "Campus Garden",
+      "radiusM": 50,
+      "questions": 3,
+      "passNeeded": 2,
+      "centre": {
+        "lat": 49.147082,
+        "lng": 9.217206
+      },
+      "inside": {
+        "lat": 49.147352,
+        "lng": 9.217206,
+        "metresFromCentre": 30
+      },
+      "outside": {
+        "lat": 49.147891,
+        "lng": 9.217206,
+        "metresFromCentre": 90
+      }
+    },
+    {
+      "name": "Care.box and Shop.box",
+      "radiusM": 40,
+      "questions": 3,
+      "passNeeded": 2,
+      "centre": {
+        "lat": 49.149088,
+        "lng": 9.21727
+      },
+      "inside": {
+        "lat": 49.149304,
+        "lng": 9.21727,
+        "metresFromCentre": 24
+      },
+      "outside": {
+        "lat": 49.149807,
+        "lng": 9.21727,
+        "metresFromCentre": 80
+      }
+    },
+    {
+      "name": "Building B",
+      "radiusM": 60,
+      "questions": 5,
+      "passNeeded": 4,
+      "centre": {
+        "lat": 49.147126,
+        "lng": 9.218486
+      },
+      "inside": {
+        "lat": 49.14745,
+        "lng": 9.218486,
+        "metresFromCentre": 36
+      },
+      "outside": {
+        "lat": 49.148025,
+        "lng": 9.218486,
+        "metresFromCentre": 100
+      }
+    },
+    {
+      "name": "Building C",
+      "radiusM": 60,
+      "questions": 5,
+      "passNeeded": 4,
+      "centre": {
+        "lat": 49.147316,
+        "lng": 9.2179
+      },
+      "inside": {
+        "lat": 49.146992,
+        "lng": 9.2179,
+        "metresFromCentre": 36
+      },
+      "outside": {
+        "lat": 49.148215,
+        "lng": 9.2179,
+        "metresFromCentre": 100
+      }
+    },
+    {
+      "name": "Sensoricum",
+      "radiusM": 40,
+      "questions": 3,
+      "passNeeded": 2,
+      "centre": {
+        "lat": 49.14762,
+        "lng": 9.217807
+      },
+      "inside": {
+        "lat": 49.147836,
+        "lng": 9.217807,
+        "metresFromCentre": 24
+      },
+      "outside": {
+        "lat": 49.148339,
+        "lng": 9.217807,
+        "metresFromCentre": 80
+      }
+    }
+  ],
+  "overlaps": [
+    {
+      "standAt": "Campus Garden",
+      "tap": "Building C",
+      "lat": 49.147082,
+      "lng": 9.217206,
+      "expectedMessage": "You are at Campus Garden, not at Building C.",
+      "centresApartM": 57
+    },
+    {
+      "standAt": "Building B",
+      "tap": "Building C",
+      "lat": 49.147126,
+      "lng": 9.218486,
+      "expectedMessage": "You are at Building B, not at Building C.",
+      "centresApartM": 48
+    },
+    {
+      "standAt": "Building C",
+      "tap": "Building B",
+      "lat": 49.147316,
+      "lng": 9.2179,
+      "expectedMessage": "You are at Building C, not at Building B.",
+      "centresApartM": 48
+    },
+    {
+      "standAt": "Building C",
+      "tap": "Sensoricum",
+      "lat": 49.147316,
+      "lng": 9.2179,
+      "expectedMessage": "You are at Building C, not at Sensoricum.",
+      "centresApartM": 34
+    },
+    {
+      "standAt": "Sensoricum",
+      "tap": "Building C",
+      "lat": 49.14762,
+      "lng": 9.217807,
+      "expectedMessage": "You are at Sensoricum, not at Building C.",
+      "centresApartM": 34
+    }
+  ]
+}

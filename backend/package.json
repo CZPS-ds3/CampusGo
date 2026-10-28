@@ -1,0 +1,35 @@
+{
+  "name": "@campus-city-quest/backend",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "index.js",
+  "scripts": {
+    "dev": "node --watch --env-file=.env index.js",
+    "start": "node --env-file=.env index.js",
+    "migrate": "node --env-file=.env src/db/migrate.js",
+    "migrate:test": "node --env-file=.env src/db/migrate.js --test",
+    "seed": "node --env-file=.env src/db/seed.js",
+    "seed:demo": "node --env-file=.env src/db/seed-demo.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.0.0",
+    "multer": "^2.5.0",
+    "mysql2": "^3.11.5",
+    "nodemailer": "^10.2.1",
+    "sharp": "^0.35.5",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "supertest": "^7.0.0",
+    "vitest": "^5.0.5"
+  }
+}
