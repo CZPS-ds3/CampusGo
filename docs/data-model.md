@@ -225,6 +225,7 @@ erDiagram
 - `Student.avatar_preset` (0 to 5, nullable): the drawn avatar picked at sign-up; an uploaded picture wins over it.
 - `Checkpoint_Fact (checkpoint_id, position 1-5, fact_text)`: the "read these first" facts of the info page (Should item). Seeded with PLACEHOLDER texts.
 - `Location_Check` (see R-62 and R-63) holds only inside yes/no and a time.
+- `Student.role` (student/admin), `Student.status` (active/blocked/archived/deleted) with `status_reason`, `reported_at`, `report_reason`, `deleted_at` (BR26, BR28, BR30); table `Audit_Event` (BR29); table `Banned_Term` (admin additions to the built-in list, BR27); table `Checkpoint_Image` (photo url, alt text, credit). Migration `005_admin_and_media.sql`.
 
 ## 4. Seed data for BR11 (no admin UI)
 
@@ -273,7 +274,7 @@ Content changes while attempts are running follow R-24. Seed files contain no re
 | Library | 5 | 4 | true | 10 normal, 3 hard |
 | Building B | 5 | 4 | true | 10 normal, 3 hard |
 | Building C | 5 | 4 | true | 10 normal, 3 hard |
-| Containers | 3 | 2 | false | 6 normal |
+| Sensoricum | 3 | 2 | false | 6 normal |
 | CAS Cafe | 3 | 2 | false | 6 normal |
 | Care.box and Shop.box | 3 | 2 | false | 6 normal |
 | Campus Garden | 3 | 2 | false | 6 normal |

@@ -8,8 +8,8 @@ import {
   startQuiz,
 } from './helpers.js';
 
-const LIBRARY = { latitude: 49.1236, longitude: 9.2119, accuracy: 10 };
-const CONTAINERS = { latitude: 49.1221, longitude: 9.2121, accuracy: 10 };
+const LIBRARY = { latitude: 49.149493, longitude: 9.216467, accuracy: 10 };
+const CAMPUS_GARDEN = { latitude: 49.147082, longitude: 9.217206, accuracy: 10 };
 
 test.describe('full player journey (mock API)', () => {
   test('login, check in, read, pass a quiz, see the ranking', async ({
@@ -30,20 +30,22 @@ test.describe('full player journey (mock API)', () => {
     await expectNoHorizontalScroll(page);
     await shot(page, testInfo, '03-map');
 
-    await context.setGeolocation(CONTAINERS);
-    await openCheckpoint(page, 'Containers');
+    await context.setGeolocation(CAMPUS_GARDEN);
+    await openCheckpoint(page, 'Campus Garden');
     await shot(page, testInfo, '04-checkpoint-sheet');
     await page.getByRole('link', { name: 'Start quest' }).click();
-    await page.getByRole('button', { name: 'I agree' }).click();
-    await expect(page.getByText('Locked on!')).toBeVisible();
-    await shot(page, testInfo, '05-locked-on');
 
-    await expect(page.getByRole('heading', { name: 'Containers' })).toBeVisible();
+    // Read first: no location is asked for and no timer runs yet.
+    await expect(page.getByRole('heading', { name: 'Campus Garden' })).toBeVisible();
     await expect(page.getByText('Read these first. No timer is running yet.')).toBeVisible();
     await expectNoHorizontalScroll(page);
     await shot(page, testInfo, '06-info');
 
+    // One fresh reading inside the circle unlocks the quiz and starts the timer.
     await page.getByRole('button', { name: "I'm ready" }).click();
+    await page.getByRole('button', { name: 'I agree' }).click();
+    await expect(page.getByText('Locked on!')).toBeVisible();
+    await shot(page, testInfo, '05-locked-on');
     await expect(page.getByRole('timer')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Open menu' })).toHaveCount(0);
     await expectNoHorizontalScroll(page);
@@ -102,6 +104,7 @@ test.describe('location problems never use an attempt', () => {
     await context.setGeolocation({ ...LIBRARY, accuracy: 200 });
     await openCheckpoint(page, 'Library');
     await page.getByRole('link', { name: 'Start quest' }).click();
+    await page.getByRole('button', { name: "I'm ready" }).click();
     await page.getByRole('button', { name: 'I agree' }).click();
     await expect(page.getByText('Weak signal')).toBeVisible();
     await expect(page.getByText(/No attempt used/)).toBeVisible();
@@ -113,6 +116,7 @@ test.describe('location problems never use an attempt', () => {
     await context.setGeolocation({ latitude: 49.14, longitude: 9.25, accuracy: 10 });
     await openCheckpoint(page, 'Library');
     await page.getByRole('link', { name: 'Start quest' }).click();
+    await page.getByRole('button', { name: "I'm ready" }).click();
     await page.getByRole('button', { name: 'I agree' }).click();
     await expect(page.getByText('Not there yet')).toBeVisible();
   });

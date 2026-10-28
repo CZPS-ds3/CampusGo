@@ -22,13 +22,13 @@ Then open **http://localhost:5173** (the API runs on http://localhost:3000). The
 
 **How to use it**
 
-1. Press *Start* and enter an address that ends with `heilbronn.dhbw.de`. In development no e-mail is sent: the code is printed in the terminal that runs `npm run dev`, and the code screen has an *Open mock inbox* button that shows it and fills it in for you. The sixth digit logs you in.
+1. Press *Start* and enter an address that ends with `heilbronn.dhbw.de`. In development without SMTP settings no e-mail is sent: the code is printed in the terminal that runs `npm run dev`, and the code screen has an *Open mock inbox* button that shows it and fills it in for you. To receive real e-mails, fill in the `SMTP_*` values in `backend/.env` (examples are in `backend/.env.example`); the server prints `[mail] SMTP ready` when the login works. The sixth digit logs you in.
 2. New address: create your player card (name, nickname, one of six avatars or your own photo). Then you are on the map.
 3. Tap a checkpoint pin, then *Start quest*. Accept the location notice once; the phone is asked for its position (the *radar* screen). To test without walking across campus, set `VITE_DEV_FAKE_LOCATION=true` in `frontend/.env` and tick *Pretend I am here*, or use your browser's location override (Chrome DevTools → Sensors).
 4. Read the three facts on the info page (no timer yet), press *I'm ready*, answer the quiz, see the result and your rank change.
 5. The red hexagon at the bottom opens the menu: Map, Quests, Team, Ranks, Profile. In the profile you can switch dark mode, font size (S to XL) and the language (Deutsch / English).
 
-The questions and the checkpoint coordinates in the seed data are **placeholders** (marked "PLACEHOLDER"); the real ones are added before the pilot (see [docs/question-bank.md](docs/question-bank.md) and [docs/geofencing.md](docs/geofencing.md)).
+The questions in the seed data are **placeholders** (marked "PLACEHOLDER"); the real ones are added before the pilot (see [docs/question-bank.md](docs/question-bank.md)). The checkpoint centres are on the Bildungscampus Heilbronn (from OpenStreetMap) and still need the on-site check; the "Sensoricum" centre is an estimate next to Building C and must be confirmed on site (see [docs/geofencing.md](docs/geofencing.md); how to test the location check at a PC: [testing/location-testing-guide.md](testing/location-testing-guide.md)).
 
 | I want to… | Command |
 |---|---|
@@ -56,7 +56,7 @@ The questions and the checkpoint coordinates in the seed data are **placeholders
 | No Docker allowed on your machine | Install MySQL 8 yourself, set `DATABASE_URL` in `backend/.env`, run `SKIP_DOCKER=1 npm run dev` |
 | The map is grey | The map tiles need internet; the pins and the rest still work |
 | "Please check your location" never succeeds | Allow location for `localhost`, or use the fake location above |
-| Login code does not arrive | Development prints it in the terminal; production needs the `SMTP_*` values in `backend/.env` |
+| Login code does not arrive | Development without SMTP prints it in the terminal. Otherwise check the `[mail]` line at server start: `SMTP check failed` means wrong host, port or password (Gmail and Microsoft 365 need an app password). Production refuses to start without `SMTP_HOST` |
 | Something is odd after pulling | `npm install` again; `npm run db:reset` if the database structure changed |
 
 ---
@@ -95,7 +95,7 @@ A mobile-responsive **web app** (no app-store download, no extra hardware — ju
 
 1. **Log in** with a one-time password (OTP) sent to the school e-mail (must end with `heilbronn.dhbw.de`). First-time users enter first/last name (optional picture and nickname). Optionally join or create a **team** (1–5 members) by invitation.
 2. **Go to a checkpoint.** The app verifies the location when you start an attempt. Poor GPS accuracy or denied permission? Just check again — it costs no attempt and starts no timer.
-3. **Take the quiz:** 5 questions (Mensa, Library, Building B, Building C) or 3 questions (Containers, CAS Cafe, Care.box and Shop.box, Campus Garden); **1 minute per question**; a wrong answer shows the right one on the spot; no retries.
+3. **Take the quiz:** 5 questions (Mensa, Library, Building B, Building C) or 3 questions (Sensoricum, CAS Cafe, Care.box and Shop.box, Campus Garden); **1 minute per question**; a wrong answer shows the right one on the spot; no retries.
 4. **Pass** with 4 of 5 or 2 of 3 correct. If you fail or time runs out you can try again; a checkpoint is done for good once passed.
 5. **Earn points** (below) and see the **solo** and **team leaderboards**.
 
@@ -107,7 +107,7 @@ A mobile-responsive **web app** (no app-store download, no extra hardware — ju
 | Library | 5 | yes | 4/5 |
 | Building B | 5 | yes | 4/5 |
 | Building C | 5 | yes | 4/5 |
-| Containers | 3 | no | 2/3 |
+| Sensoricum | 3 | no | 2/3 |
 | CAS Cafe | 3 | no | 2/3 |
 | Care.box and Shop.box | 3 | no | 2/3 |
 | Campus Garden | 3 | no | 2/3 |
@@ -124,6 +124,16 @@ A mobile-responsive **web app** (no app-store download, no extra hardware — ju
 | Rounding | Fractions are rounded up (BR04) |
 
 `points = (correct-answer points + time bonus + full clear) × multiplier`. Hard question: on attempt 1 only, if questions 1–4 are correct you may swap question 5 for a hard one. Points are credited only when the attempt ends. All point values live in database tables, not in code (BR11).
+
+### Demo data, admin area, photos and route
+
+- `npm run dev` also loads **fictional demo data** (24 players, 6 teams, quests over several days, a pending invitation, a blocked, an archived and a reported account) so the ranks and the admin pages have something to show. It is never loaded in production (`npm run db:seed:demo` runs it alone; `npm run db:reset` starts from an empty database).
+- **Admin area** (`/admin`): sign in with `sekretariat.dski@heilbronn.dhbw.de` (the same e-mail code login; the address is set in `ADMIN_EMAIL`). Users (create, edit, block, archive, report, delete, sessions, quests and activity log), teams, and name rules. In development the code is printed in the terminal, or use *Open mock inbox* on the code screen.
+- **Name rules:** German and English banned words, whole-word matching so "Cass" is fine. List: [docs/banned-terms.md](docs/banned-terms.md).
+- **Photos** of the places are in `frontend/public/places/` with credits in `CREDITS.md`. They are generic Bildungscampus photos from Wikimedia Commons, **not** pictures of the single places; replace them with the team's own photos before the pilot (list: `frontend/src/api/places.json`, then `npm run db:seed`).
+- **Walking route:** the *Show walking route* button in a checkpoint draws the way with OpenStreetMap data; your position is used in the browser only.
+- **Delete my account:** in the profile (the person, their picture and e-mail are removed; the e-mail can be used again).
+- Backend handover for Yuri: [design/yi_heng/backend-handover.md](design/yi_heng/backend-handover.md).
 
 ### Leaderboards
 
@@ -143,7 +153,7 @@ A mobile-responsive **web app** (no app-store download, no extra hardware — ju
 - **Must:** everything in BR01–BR25 — login and sessions, sign-up, teams and invitations, 8 checkpoints, location verification, quiz engine, scoring, leaderboards, content in the database, privacy.
 - **Should:** read-first info page per checkpoint.
 - **Could:** weekly streak reminders, random time-based events.
-- **Won't:** supermarket/clothing-store locators, native apps, NFC/student-card readers, duo and nationality leaderboards, admin UI, leaving/removing team members.
+- **Won't:** supermarket/clothing-store locators, native apps, NFC/student-card readers, duo and nationality leaderboards. (An admin area and "delete my account" were added as proposals, see docs/business-rules.md section 9.)
 
 Details: [docs/project_handbook.md §1](docs/project_handbook.md).
 

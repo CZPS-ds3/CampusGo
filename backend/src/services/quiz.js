@@ -7,7 +7,14 @@ import { evaluateLocation } from './geo.js';
 import { ceilDiv, multiplierFor, remainingWholeSeconds, scoreAttempt } from './scoring.js';
 import { refreshTeamScore } from './teams.js';
 
-const SECONDS_PER_QUESTION = 60; // BR13
+/**
+ * Questions that may be drawn: active, from this checkpoint's bank, with exactly four options of which
+ * exactly one is correct (BR10). A broken question in the bank is skipped instead of reaching a student.
+ */
+const DRAWABLE_QUESTIONS = `SELECT q.question_id FROM questions q JOIN options o ON o.question_id = q.question_id
+  WHERE q.checkpoint_id = ? AND q.difficulty = ? AND q.is_active = 1
+  GROUP BY q.question_id HAVING COUNT(*) = 4 AND SUM(o.is_correct) = 1
+  ORDER BY RAND() LIMIT ?`;
 
 export function createQuizService({ pool, config, clock }) {
   // ---------- reference data ----------
@@ -42,7 +49,10 @@ export function createQuizService({ pool, config, clock }) {
   });
 
   async function listCheckpoints(studentId) {
-    const [rows] = await pool.query('SELECT * FROM checkpoints ORDER BY checkpoint_id');
+    // Only active checkpoints are shown on the map (BR08).
+    const [rows] = await pool.query(
+      'SELECT * FROM checkpoints WHERE is_active = 1 ORDER BY checkpoint_id',
+    );
     const [stats] = await pool.query(
       `SELECT checkpoint_id, COUNT(*) AS used, SUM(status = 'passed') AS passed
        FROM attempts WHERE student_id = ? GROUP BY checkpoint_id`,
@@ -60,6 +70,14 @@ export function createQuizService({ pool, config, clock }) {
     const facts = new Map();
     for (const f of factRows)
       facts.set(f.checkpoint_id, [...(facts.get(f.checkpoint_id) ?? []), f.fact_text]);
+    const [imageRows] = await pool.query(
+      'SELECT checkpoint_id, url, alt_text, credit FROM checkpoint_images ORDER BY checkpoint_id, position',
+    );
+    const images = new Map();
+    for (const i of imageRows) {
+      const image = { url: i.url, alt: i.alt_text, credit: i.credit };
+      images.set(i.checkpoint_id, [...(images.get(i.checkpoint_id) ?? []), image]);
+    }
     return rows.map((c) => {
       const s = byId.get(c.checkpoint_id);
       const used = Number(s?.used ?? 0);
@@ -69,6 +87,7 @@ export function createQuizService({ pool, config, clock }) {
         nextAttemptNumber: used + 1,
         bestScore: bestById.get(c.checkpoint_id) ?? 0,
         facts: facts.get(c.checkpoint_id) ?? [],
+        images: images.get(c.checkpoint_id) ?? [],
       });
     });
   }
@@ -245,106 +264,159 @@ export function createQuizService({ pool, config, clock }) {
     return rows.length;
   }
 
-  // ---------- location check (BR12, R-60 .. R-65) ----------
-  async function checkGuards(studentId, checkpointId) {
-    const [[checkpoint]] = await pool.query('SELECT * FROM checkpoints WHERE checkpoint_id = ?', [
-      checkpointId,
-    ]);
-    if (!checkpoint) throw notFound('Checkpoint not found.');
-    if (!checkpoint.is_active)
-      throw new AppError(409, 'CHECKPOINT_INACTIVE', 'This checkpoint is not active right now.');
+  // ---------- geofence verification and unlock (BR08, BR12, BR13, BR23, BR25) ----------
+  // Main Project Document, "Geofencing Architecture", Figure 3. Every refusal before the unlock is a retry:
+  // no attempt is used and no timer starts. Coordinates are only used inside this request and never stored.
+
+  async function runningAttempt(studentId) {
+    await finalizeExpiredFor(studentId);
+    const [[active]] = await pool.query(
+      "SELECT attempt_id, checkpoint_id FROM attempts WHERE student_id = ? AND status = 'active'",
+      [studentId],
+    );
+    return active ?? null;
+  }
+
+  const resumed = async (attemptId) => ({
+    status: 'OK',
+    resumed: true,
+    attempt: await buildAttemptView(pool, attemptId),
+  });
+
+  /** Only "inside radius yes/no" and the time are kept (privacy rule, R-63). */
+  const recordCheck = (conn, studentId, checkpointId, inside, attemptId = null) =>
+    conn.query(
+      'INSERT INTO location_checks (student_id, checkpoint_id, checked_at, inside_radius, used_by_attempt_id) VALUES (?, ?, ?, ?, ?)',
+      [studentId, checkpointId, at(clock.now()), inside ? 1 : 0, attemptId],
+    );
+
+  /** The unlock: creates the attempt, starts the timer and draws the questions in one transaction. */
+  async function unlock(studentId, checkpoint) {
+    const now = clock.now();
+    return withTransaction(pool, async (conn) => {
+      await conn.query('SELECT student_id FROM students WHERE student_id = ? FOR UPDATE', [
+        studentId,
+      ]);
+      // Re-checked under the lock: an attempt may have been passed since the first check (BR23).
+      const [[passed]] = await conn.query(
+        "SELECT attempt_id FROM attempts WHERE student_id = ? AND checkpoint_id = ? AND status = 'passed'",
+        [studentId, checkpoint.checkpoint_id],
+      );
+      if (passed)
+        throw new AppError(409, 'ALREADY_COMPLETED', 'You already completed this checkpoint.');
+      const [[{ used }]] = await conn.query(
+        'SELECT COUNT(*) AS used FROM attempts WHERE student_id = ? AND checkpoint_id = ?',
+        [studentId, checkpoint.checkpoint_id],
+      );
+      const [drawn] = await conn.query(DRAWABLE_QUESTIONS, [
+        checkpoint.checkpoint_id,
+        'NORMAL',
+        checkpoint.question_count,
+      ]);
+      if (drawn.length < checkpoint.question_count) {
+        throw new AppError(
+          503,
+          'DRAW_IMPOSSIBLE',
+          'This checkpoint has too few questions right now.',
+        );
+      }
+      const expires = now + checkpoint.question_count * config.secondsPerQuestion * 1000;
+      const [inserted] = await conn.query(
+        "INSERT INTO attempts (student_id, checkpoint_id, attempt_number, start_time, expires_at, status) VALUES (?, ?, ?, ?, ?, 'active')",
+        [studentId, checkpoint.checkpoint_id, Number(used) + 1, at(now), at(expires)],
+      );
+      for (let i = 0; i < drawn.length; i += 1) {
+        await conn.query(
+          'INSERT INTO attempt_questions (attempt_id, question_number, question_id) VALUES (?, ?, ?)',
+          [inserted.insertId, i + 1, drawn[i].question_id],
+        );
+      }
+      await recordCheck(conn, studentId, checkpoint.checkpoint_id, true, inserted.insertId);
+      return inserted.insertId;
+    });
+  }
+
+  /**
+   * POST /checkpoints/:id/verify. Returns { status: 'OK', attempt } on unlock or resume, or
+   * { status: 'OUTSIDE', distanceM, message }. Every other refusal is thrown as an AppError.
+   * @param {{ lat: number, lng: number, accuracy: number, ageMs: number }} reading
+   */
+  async function verifyAndStart(studentId, checkpointId, reading) {
+    const [[checkpoint]] = await pool.query(
+      'SELECT * FROM checkpoints WHERE checkpoint_id = ? AND is_active = 1',
+      [checkpointId],
+    );
+    if (!checkpoint) throw new AppError(404, 'NOT_AVAILABLE', 'This checkpoint is not available.');
     const [[passed]] = await pool.query(
       "SELECT attempt_id FROM attempts WHERE student_id = ? AND checkpoint_id = ? AND status = 'passed'",
       [studentId, checkpointId],
     );
     if (passed)
-      throw new AppError(409, 'CHECKPOINT_COMPLETED', 'You already completed this checkpoint.');
-    await finalizeExpiredFor(studentId);
-    const [[active]] = await pool.query(
-      "SELECT attempt_id FROM attempts WHERE student_id = ? AND status = 'active'",
-      [studentId],
-    );
-    if (active)
-      throw new AppError(409, 'ACTIVE_ATTEMPT_EXISTS', 'You have a quiz in progress.', {
-        attemptId: active.attempt_id,
-      });
-    return checkpoint;
-  }
+      throw new AppError(409, 'ALREADY_COMPLETED', 'You already completed this checkpoint.');
 
-  async function locationCheck(studentId, checkpointId, sample) {
-    const checkpoint = await checkGuards(studentId, checkpointId);
+    // A refresh, reconnect or double tap gets the same attempt and timer back (BR25), before any location check.
+    const running = await runningAttempt(studentId);
+    if (running && Number(running.checkpoint_id) === checkpointId)
+      return resumed(running.attempt_id);
+    if (running) {
+      throw new AppError(409, 'ACTIVE_ATTEMPT_EXISTS', 'You have a quiz in progress.', {
+        attemptId: running.attempt_id,
+      });
+    }
+
     const [[student]] = await pool.query(
       'SELECT location_consent_at FROM students WHERE student_id = ?',
       [studentId],
     );
     if (!student.location_consent_at)
       throw new AppError(403, 'CONSENT_REQUIRED', 'Please accept the location notice first.');
-    const outcome = evaluateLocation(sample, checkpoint, config.maxAccuracyM);
-    if (outcome !== 'poor_accuracy') {
-      // Only "inside radius yes/no" and the time are stored. The coordinates are discarded here (R-63).
-      await pool.query(
-        'INSERT INTO location_checks (student_id, checkpoint_id, checked_at, inside_radius) VALUES (?, ?, ?, ?)',
-        [studentId, checkpointId, at(clock.now()), outcome === 'verified' ? 1 : 0],
+
+    const [others] = await pool.query(
+      'SELECT checkpoint_id, checkpoint_name, latitude, longitude, radius FROM checkpoints WHERE is_active = 1 AND checkpoint_id <> ?',
+      [checkpointId],
+    );
+    const { outcome, distanceM, elsewhere } = evaluateLocation(reading, checkpoint, config, others);
+    if (outcome === 'stale') {
+      throw new AppError(
+        422,
+        'STALE_POSITION',
+        'Your location reading is too old. Please try again.',
       );
     }
-    return outcome;
-  }
+    if (outcome === 'poor_accuracy') {
+      throw new AppError(
+        422,
+        'ACCURACY_TOO_LOW',
+        'Your location is not precise enough. Move near a window or outside and try again.',
+      );
+    }
+    if (outcome === 'outside' || outcome === 'elsewhere') {
+      await recordCheck(pool, studentId, checkpointId, false);
+      const name = checkpoint.checkpoint_name;
+      return {
+        status: 'OUTSIDE',
+        distanceM,
+        elsewhere: elsewhere ?? null,
+        // Overlapping circles: standing at another checkpoint (for example Building C) never unlocks this one.
+        message:
+          outcome === 'elsewhere'
+            ? `You are at ${elsewhere}, not at ${name}. Walk to ${name} and try again.`
+            : `You are about ${distanceM} m from ${name}. Walk closer and try again.`,
+      };
+    }
 
-  // ---------- starting an attempt (BR09, BR13, BR23) ----------
-  async function startAttempt(studentId, checkpointId) {
-    const checkpoint = await checkGuards(studentId, checkpointId);
-    const now = clock.now();
     try {
-      const attemptId = await withTransaction(pool, async (conn) => {
-        await conn.query('SELECT student_id FROM students WHERE student_id = ? FOR UPDATE', [
-          studentId,
-        ]);
-        const [[check]] = await conn.query(
-          `SELECT check_id FROM location_checks
-           WHERE student_id = ? AND checkpoint_id = ? AND inside_radius = 1 AND used_by_attempt_id IS NULL AND checked_at >= ?
-           ORDER BY checked_at DESC LIMIT 1 FOR UPDATE`,
-          [studentId, checkpointId, at(now - config.locationVerificationValidMinutes * 60 * 1000)],
-        );
-        if (!check)
-          throw new AppError(409, 'LOCATION_NOT_VERIFIED', 'Please check your location first.');
-        const [[{ used }]] = await conn.query(
-          'SELECT COUNT(*) AS used FROM attempts WHERE student_id = ? AND checkpoint_id = ?',
-          [studentId, checkpointId],
-        );
-        const [drawn] = await conn.query(
-          "SELECT question_id FROM questions WHERE checkpoint_id = ? AND difficulty = 'NORMAL' AND is_active = 1 ORDER BY RAND() LIMIT ?",
-          [checkpointId, checkpoint.question_count],
-        );
-        if (drawn.length < checkpoint.question_count) {
-          throw new AppError(
-            503,
-            'DRAW_IMPOSSIBLE',
-            'This checkpoint has too few questions right now.',
-          );
-        }
-        const expires = now + checkpoint.question_count * SECONDS_PER_QUESTION * 1000;
-        const [inserted] = await conn.query(
-          "INSERT INTO attempts (student_id, checkpoint_id, attempt_number, start_time, expires_at, status) VALUES (?, ?, ?, ?, ?, 'active')",
-          [studentId, checkpointId, used + 1, at(now), at(expires)],
-        );
-        for (let i = 0; i < drawn.length; i += 1) {
-          await conn.query(
-            'INSERT INTO attempt_questions (attempt_id, question_number, question_id) VALUES (?, ?, ?)',
-            [inserted.insertId, i + 1, drawn[i].question_id],
-          );
-        }
-        await conn.query('UPDATE location_checks SET used_by_attempt_id = ? WHERE check_id = ?', [
-          inserted.insertId,
-          check.check_id,
-        ]);
-        return inserted.insertId;
-      });
-      return await buildAttemptView(pool, attemptId);
+      const attemptId = await unlock(studentId, checkpoint);
+      return { status: 'OK', resumed: false, attempt: await buildAttemptView(pool, attemptId) };
     } catch (error) {
-      if (error?.code === 'ER_DUP_ENTRY') {
-        throw new AppError(409, 'ACTIVE_ATTEMPT_EXISTS', 'You have a quiz in progress.');
-      }
-      throw error;
+      if (error?.code !== 'ER_DUP_ENTRY') throw error;
+      // Two taps raced and the unique keys stopped the second one: hand back the attempt that won.
+      const winner = await runningAttempt(studentId);
+      if (winner && Number(winner.checkpoint_id) === checkpointId)
+        return resumed(winner.attempt_id);
+      throw new AppError(409, 'ACTIVE_ATTEMPT_EXISTS', 'You have a quiz in progress.', {
+        attemptId: winner?.attempt_id,
+      });
     }
   }
 
@@ -384,11 +456,7 @@ export function createQuizService({ pool, config, clock }) {
 
   async function answer(studentId, attemptId, optionId, questionNumber) {
     // If the deadline passed, close the attempt first (its own transaction) so the points are not lost.
-    const [[owned]] = await pool.query(
-      'SELECT attempt_id FROM attempts WHERE attempt_id = ? AND student_id = ?',
-      [attemptId, studentId],
-    );
-    if (!owned) throw notFound('Attempt not found.');
+    await assertOwned(studentId, attemptId);
     await finalizeIfExpired(attemptId);
 
     const now = clock.now();
@@ -441,11 +509,8 @@ export function createQuizService({ pool, config, clock }) {
           checkpoint.question_count === 5 &&
           firstFourCorrect
         ) {
-          const [[{ hard }]] = await conn.query(
-            "SELECT COUNT(*) AS hard FROM questions WHERE checkpoint_id = ? AND difficulty = 'HARD' AND is_active = 1",
-            [attempt.checkpoint_id],
-          );
-          if (hard > 0)
+          const [hard] = await conn.query(DRAWABLE_QUESTIONS, [attempt.checkpoint_id, 'HARD', 1]);
+          if (hard.length > 0)
             await conn.query('UPDATE attempts SET hard_unlocked = 1 WHERE attempt_id = ?', [
               attemptId,
             ]);
@@ -482,11 +547,7 @@ export function createQuizService({ pool, config, clock }) {
 
   async function acceptHard(studentId, attemptId) {
     const now = clock.now();
-    const [[owned]] = await pool.query(
-      'SELECT attempt_id FROM attempts WHERE attempt_id = ? AND student_id = ?',
-      [attemptId, studentId],
-    );
-    if (!owned) throw notFound('Attempt not found.');
+    await assertOwned(studentId, attemptId);
     await finalizeIfExpired(attemptId);
     await withTransaction(pool, async (conn) => {
       const attempt = await lockAttempt(conn, studentId, attemptId);
@@ -503,10 +564,7 @@ export function createQuizService({ pool, config, clock }) {
       ) {
         throw new AppError(409, 'HARD_NOT_AVAILABLE', 'The hard question is not available.');
       }
-      const [[hard]] = await conn.query(
-        "SELECT question_id FROM questions WHERE checkpoint_id = ? AND difficulty = 'HARD' AND is_active = 1 ORDER BY RAND() LIMIT 1",
-        [attempt.checkpoint_id],
-      );
+      const [[hard]] = await conn.query(DRAWABLE_QUESTIONS, [attempt.checkpoint_id, 'HARD', 1]);
       if (!hard)
         throw new AppError(409, 'HARD_NOT_AVAILABLE', 'The hard question is not available.');
       await conn.query(
@@ -517,13 +575,18 @@ export function createQuizService({ pool, config, clock }) {
     return buildAttemptView(pool, attemptId);
   }
 
-  async function getAttempt(studentId, attemptId) {
-    await finalizeIfExpired(attemptId);
+  /** Ownership is checked before anything else touches the attempt (OWASP A01). */
+  async function assertOwned(studentId, attemptId) {
     const [[owned]] = await pool.query(
       'SELECT attempt_id FROM attempts WHERE attempt_id = ? AND student_id = ?',
       [attemptId, studentId],
     );
     if (!owned) throw notFound('Attempt not found.');
+  }
+
+  async function getAttempt(studentId, attemptId) {
+    await assertOwned(studentId, attemptId);
+    await finalizeIfExpired(attemptId);
     return buildAttemptView(pool, attemptId);
   }
 
@@ -537,6 +600,7 @@ export function createQuizService({ pool, config, clock }) {
   }
 
   async function getResult(studentId, attemptId) {
+    await assertOwned(studentId, attemptId);
     await finalizeIfExpired(attemptId);
     const [[attempt]] = await pool.query(
       'SELECT * FROM attempts WHERE attempt_id = ? AND student_id = ?',
@@ -601,8 +665,7 @@ export function createQuizService({ pool, config, clock }) {
   return {
     purgeOldLocationChecks,
     listCheckpoints,
-    locationCheck,
-    startAttempt,
+    verifyAndStart,
     getActiveAttempt,
     answer,
     acceptHard,

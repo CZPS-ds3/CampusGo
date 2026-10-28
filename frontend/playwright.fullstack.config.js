@@ -11,7 +11,7 @@ export default defineConfig({
     baseURL: 'http://localhost:5173',
     locale: 'en-US',
     permissions: ['geolocation'],
-    geolocation: { latitude: 49.1221, longitude: 9.2121, accuracy: 10 },
+    geolocation: { latitude: 49.147082, longitude: 9.217206, accuracy: 10 }, // Campus Garden
     viewport: { width: 390, height: 844 },
   },
   webServer: {

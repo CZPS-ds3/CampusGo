@@ -89,6 +89,7 @@ export default function Team() {
   const [picture, setPicture] = useState(null);
   const [busy, setBusy] = useState('');
   const [fieldError, setFieldError] = useState('');
+  const [notice, setNotice] = useState('');
   const [, tick] = useState(0);
   const fileInput = useRef(null);
 
@@ -105,6 +106,17 @@ export default function Team() {
 
   useEffect(() => {
     load();
+  }, [load]);
+
+  // Invitations from other teams show up without a reload: check again every 30 s and when the tab returns.
+  useEffect(() => {
+    const again = () => !document.hidden && load();
+    const id = setInterval(again, 30000);
+    document.addEventListener('visibilitychange', again);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', again);
+    };
   }, [load]);
 
   // The countdown of pending invitations ticks every second.
@@ -150,10 +162,18 @@ export default function Team() {
   const sendInvite = (event) => {
     event.preventDefault();
     return guarded('invite', async () => {
+      const before = team.pending.length;
       await api.invite(email.trim());
       setEmail('');
+      const { team: after } = await api.myTeam();
+      setTeam(after);
+      // The slot below is the proof: it only appears when an invitation was really created.
+      setNotice(
+        after.pending.length > before
+          ? t('Invitation sent. It is shown as a pending slot until it is answered.')
+          : t('If the user exists and can be invited, an invitation has been sent.'),
+      );
       toast.info(t('If the user exists and can be invited, an invitation has been sent.'));
-      await load();
     });
   };
 
@@ -319,6 +339,12 @@ export default function Team() {
                 <Icon name="mail" /> {t('Send invite')}
               </Button>
             </form>
+          )}
+          {notice && (
+            <p className="field-note" role="status">
+              <Icon name="check" size={18} />
+              <span>{notice}</span>
+            </p>
           )}
         </section>
       </div>

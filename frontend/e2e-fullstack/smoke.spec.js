@@ -32,12 +32,12 @@ test('real stack: sign up with an e-mail code, check in, pass a quiz, appear in 
   await expect(page.getByText(/Rank #/)).toBeVisible();
 
   await page.goto('/quests');
-  await page.getByRole('link', { name: /Containers/ }).click();
+  await page.getByRole('link', { name: /Campus Garden/ }).click();
   await page.getByRole('link', { name: 'Start quest' }).click();
-  await page.getByRole('button', { name: 'I agree' }).click();
-  await expect(page.getByText('Locked on!')).toBeVisible();
   await expect(page.getByText(/PLACEHOLDER fact 1/)).toBeVisible();
   await page.getByRole('button', { name: "I'm ready" }).click();
+  await page.getByRole('button', { name: 'I agree' }).click();
+  await expect(page.getByText('Locked on!')).toBeVisible();
   await expect(page.getByRole('timer')).toBeVisible();
 
   for (let i = 0; i < 3; i += 1) {
@@ -48,5 +48,6 @@ test('real stack: sign up with an e-mail code, check in, pass a quiz, appear in 
   await expect(page.getByText('Checkpoint cleared')).toBeVisible();
 
   await page.goto('/ranks');
-  await expect(page.locator('.ranks__you')).toBeVisible();
+  // With demo players in the database the new player is a row of the list; without them it is the "you" card.
+  await expect(page.getByText('Smoke T.').first()).toBeVisible();
 });

@@ -15,6 +15,8 @@ erDiagram
     CHECKPOINTS ||--o{ QUESTIONS : "owns"
     CHECKPOINTS ||--o{ LOCATION_CHECKS : "is checked by"
     CHECKPOINTS ||--o{ CHECKPOINT_FACTS : "has read-first facts"
+    CHECKPOINTS ||--o{ CHECKPOINT_IMAGES : "has photos"
+    STUDENTS ||--o{ AUDIT_EVENTS : "appears in"
     DIFFICULTY ||--o{ QUESTIONS : "classifies"
     QUESTIONS ||--|{ OPTIONS : "has 4"
     ATTEMPTS ||--|{ ATTEMPT_QUESTIONS : "presents 3 or 5"
@@ -48,6 +50,12 @@ erDiagram
         string last_name
         string nickname
         int avatar_preset
+        string role "student or admin"
+        string status "active, blocked, archived, deleted"
+        string status_reason
+        datetime reported_at
+        string report_reason
+        datetime deleted_at
         int total_points
         bigint points_exact_x100
         datetime points_updated_at
@@ -123,6 +131,25 @@ erDiagram
         bigint checkpoint_id PK
         int position PK
         string fact_text
+    }
+    CHECKPOINT_IMAGES {
+        bigint checkpoint_id PK
+        int position PK
+        string url
+        string alt_text
+        string credit
+    }
+    AUDIT_EVENTS {
+        bigint event_id PK
+        bigint student_id FK
+        bigint actor_id
+        string event_type
+        string detail
+        datetime created_at
+    }
+    BANNED_TERMS {
+        string term PK
+        string mode
     }
     LOCATION_CHECKS {
         bigint check_id PK

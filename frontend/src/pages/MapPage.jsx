@@ -4,15 +4,17 @@ import { api } from '../api/client.js';
 import { errorText } from '../api/errorText.js';
 import { Avatar } from '../components/Avatar.jsx';
 import { Button } from '../components/Button.jsx';
+import { Carousel } from '../components/Carousel.jsx';
 import { Icon } from '../components/icons.jsx';
 import { MapView } from '../components/MapView.jsx';
 import { Sheet } from '../components/Sheet.jsx';
 import { Chip, Display } from '../components/ui.jsx';
+import { useRoute } from '../hooks/useRoute.js';
 import { useSession } from '../hooks/useSession.jsx';
 import { useToast } from '../hooks/useToast.jsx';
 import { formatNumber, t } from '../i18n.js';
 
-function CheckpointSheet({ checkpoint, active, onClose }) {
+function CheckpointSheet({ checkpoint, active, onClose, onRoute }) {
   const state = checkpoint.completed ? 'done' : checkpoint.isActive ? 'open' : 'closed';
   return (
     <Sheet title={t('{name} checkpoint', { name: checkpoint.name })} onClose={onClose}>
@@ -26,6 +28,12 @@ function CheckpointSheet({ checkpoint, active, onClose }) {
         >
           {state === 'done' ? t('Cleared') : state === 'open' ? t('Open') : t('Not open yet')}
         </Chip>
+      </div>
+      <div className="mt">
+        <Carousel
+          images={checkpoint.images ?? []}
+          label={t('Photos of {name}', { name: checkpoint.name })}
+        />
       </div>
       <div className="grid2 mt">
         <div className="card card--tight">
@@ -53,12 +61,18 @@ function CheckpointSheet({ checkpoint, active, onClose }) {
         {t('Timer starts at the first question.')}{' '}
         {t('Leaving the checkpoint later does not end your quiz.')}
       </p>
+      <Button className="mt" variant="ghost" onClick={onRoute}>
+        <Icon name="compass" /> {t('Show walking route')}
+      </Button>
+      <p className="small muted mt-s">
+        {t('Your position is used in your browser only to draw the route. It is not sent to us.')}
+      </p>
       {active ? (
         <Button className="mt" to={`/quiz/${active.id}`} data-autofocus>
           {t('Continue the quiz')} <Icon name="arrow" />
         </Button>
       ) : state === 'open' ? (
-        <Button className="mt" to={`/locate/${checkpoint.id}`} data-autofocus>
+        <Button className="mt" to={`/info/${checkpoint.id}`} data-autofocus>
           {checkpoint.attemptsUsed ? t('Retry quest') : t('Start quest')} <Icon name="arrow" />
         </Button>
       ) : (
@@ -78,6 +92,8 @@ export default function MapPage() {
   const [zone, setZone] = useState('campus');
   const [checkpoints, setCheckpoints] = useState([]);
   const [active, setActive] = useState(null);
+  const [sheetOpen, setSheetOpen] = useState(true);
+  const route = useRoute();
 
   useEffect(() => {
     let alive = true;
@@ -95,7 +111,15 @@ export default function MapPage() {
 
   const selectedId = Number(params.get('cp')) || null;
   const selected = checkpoints.find((c) => c.id === selectedId) ?? null;
-  const select = (id) => setParams(id ? { cp: String(id) } : {}, { replace: true });
+  const select = (id) => {
+    setSheetOpen(true);
+    setParams(id ? { cp: String(id) } : {}, { replace: true });
+  };
+  const showRoute = () => {
+    setSheetOpen(false);
+    route.show([selected.latitude, selected.longitude]);
+  };
+  const routeTarget = route.status === 'idle' ? null : selected;
 
   return (
     <div className="mapscreen">
@@ -104,6 +128,8 @@ export default function MapPage() {
           checkpoints={zone === 'campus' ? checkpoints : []}
           selectedId={selectedId}
           onSelect={select}
+          route={route.route}
+          from={route.from}
         />
       </div>
 
@@ -150,6 +176,35 @@ export default function MapPage() {
             <Icon name="chevron" size={20} />
           </Link>
         )}
+        {routeTarget && (
+          <div className="card card--tight row mapscreen__route" role="status">
+            <Icon name="compass" />
+            <span className="grow small">
+              {route.status === 'locating' && t('Finding your position…')}
+              {route.status === 'routing' && t('Finding the way…')}
+              {route.status === 'denied' &&
+                t('Location is blocked in your browser, so no route can be drawn.')}
+              {route.status === 'error' && t('Your position could not be found.')}
+              {route.status === 'ready' && (
+                <>
+                  <strong>{t('Route to {name}', { name: routeTarget.name })}</strong>
+                  {route.route.straight ? (
+                    <> · {t('Router offline, straight line shown')}</>
+                  ) : (
+                    <>
+                      {' · '}
+                      {route.route.meters} m · {Math.max(1, Math.round(route.route.seconds / 60))}{' '}
+                      {t('min walk')}
+                    </>
+                  )}
+                </>
+              )}
+            </span>
+            <button type="button" className="linkbtn" onClick={route.clear}>
+              {t('Clear route')}
+            </button>
+          </div>
+        )}
         <div className="tabs tabs--2" role="tablist" aria-label={t('Map zone')}>
           <button
             type="button"
@@ -172,10 +227,11 @@ export default function MapPage() {
         </div>
       </header>
 
-      {selected && zone === 'campus' && (
+      {selected && sheetOpen && zone === 'campus' && (
         <CheckpointSheet
           checkpoint={selected}
           active={active}
+          onRoute={showRoute}
           onClose={() => {
             select(null);
             navigate('/map', { replace: true });

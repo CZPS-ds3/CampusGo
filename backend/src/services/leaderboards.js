@@ -12,7 +12,8 @@ export function createLeaderboardService({ pool }) {
   async function solo(studentId) {
     const [rows] = await pool.query(
       `SELECT student_id, first_name, last_name, nickname, profile_picture, avatar_preset, total_points, points_updated_at
-       FROM students ORDER BY total_points DESC, points_updated_at ASC, student_id ASC`,
+       FROM students WHERE status = 'active' AND role = 'student'
+       ORDER BY total_points DESC, points_updated_at ASC, student_id ASC`,
     );
     const entries = assignRanks(rows.map((r) => ({ ...r, points: r.total_points }))).map((r) => ({
       rank: r.rank,
@@ -35,7 +36,7 @@ export function createLeaderboardService({ pool }) {
       throw new AppError(403, 'NO_TEAM', 'Join or create a team to see the team leaderboard.');
     const [rows] = await pool.query(
       `SELECT t.team_id, t.team_name, t.profile_picture, t.team_score, COUNT(s.student_id) AS size
-       FROM teams t JOIN students s ON s.team_id = t.team_id
+       FROM teams t JOIN students s ON s.team_id = t.team_id AND s.status = 'active'
        GROUP BY t.team_id HAVING size >= 2
        ORDER BY t.team_score DESC, t.score_updated_at ASC, t.team_id ASC`,
     );
@@ -54,7 +55,7 @@ export function createLeaderboardService({ pool }) {
   /** Competition rank for a given total: one more than the number of students with strictly more points (R-52). */
   async function rankOf(total, conn = pool) {
     const [[row]] = await conn.query(
-      'SELECT COUNT(*) AS higher FROM students WHERE total_points > ?',
+      "SELECT COUNT(*) AS higher FROM students WHERE total_points > ? AND status = 'active' AND role = 'student'",
       [total],
     );
     return Number(row.higher) + 1;

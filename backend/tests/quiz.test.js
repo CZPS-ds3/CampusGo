@@ -8,10 +8,8 @@ afterAll(() => ctx.close());
 const SECOND = 1000;
 const MINUTE = 60 * SECOND;
 
-const verifyAt = (agent, cp, accuracy = 5, offset = 0) =>
-  agent
-    .post(`/api/checkpoints/${cp.id}/location-check`)
-    .send({ latitude: cp.latitude + offset, longitude: cp.longitude, accuracy });
+const consent = (agent) => agent.post('/api/me/location-consent').expect(204);
+const count = async (table) => (await ctx.pool.query(`SELECT COUNT(*) AS n FROM ${table}`))[0][0].n;
 
 describe('BR07 BR08 checkpoints', () => {
   it('BR07 eight pilot checkpoints are listed with their question rules', async () => {
@@ -24,57 +22,102 @@ describe('BR07 BR08 checkpoints', () => {
       passThreshold: 4,
       hardQuestionEnabled: true,
     });
-    const containers = body.checkpoints.find((c) => c.name === 'Containers');
-    expect(containers).toMatchObject({
+    const sensoricum = body.checkpoints.find((c) => c.name === 'Sensoricum');
+    expect(sensoricum).toMatchObject({
       questionCount: 3,
       passThreshold: 2,
       hardQuestionEnabled: false,
     });
   });
 
-  it('BR08 an inactive checkpoint cannot unlock a quiz', async () => {
+  it('BR08 test 8: an inactive checkpoint is hidden from the map and cannot unlock a quiz', async () => {
     const { agent } = await ctx.login('inactive');
-    await agent.post('/api/me/location-consent').expect(204);
+    await consent(agent);
     const mensa = await ctx.checkpointByName(agent, 'Mensa');
     await ctx.pool.query('UPDATE checkpoints SET is_active = 0 WHERE checkpoint_id = ?', [
       mensa.id,
     ]);
-    const res = await verifyAt(agent, mensa);
-    expect(res.status).toBe(409);
-    expect(res.body.error.code).toBe('CHECKPOINT_INACTIVE');
+    expect(await ctx.checkpointByName(agent, 'Mensa')).toBeUndefined();
+    const res = await ctx.verify(agent, mensa);
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_AVAILABLE');
+    expect(await count('attempts')).toBe(0);
   });
 });
 
-describe('BR12 location check at attempt start', () => {
-  it('check 5: accuracy 51 m inside the radius is poor_accuracy, with no attempt and no location row', async () => {
-    const { agent } = await ctx.login('poor');
-    await agent.post('/api/me/location-consent').expect(204);
+describe('BR12 geofence verification (Main Project Document, section 9)', () => {
+  it('test 2: a fresh reading inside the circle unlocks the quiz and starts the timer', async () => {
+    const { agent } = await ctx.login('inside');
+    await consent(agent);
     const cp = await ctx.checkpointByName(agent, 'Library');
-    const res = await verifyAt(agent, cp, 51);
-    expect(res.body.outcome).toBe('poor_accuracy');
-    const [attempts] = await ctx.pool.query('SELECT COUNT(*) AS n FROM attempts');
-    const [checks] = await ctx.pool.query('SELECT COUNT(*) AS n FROM location_checks');
-    expect(attempts[0].n).toBe(0);
-    expect(checks[0].n).toBe(0);
-    const start = await agent.post('/api/attempts').send({ checkpointId: cp.id });
-    expect(start.status).toBe(409);
-    expect(start.body.error.code).toBe('LOCATION_NOT_VERIFIED');
+    const res = await ctx.verify(agent, cp, { accuracy: 10 }).expect(200);
+    expect(res.body).toMatchObject({ status: 'OK', resumed: false });
+    const { attempt } = res.body;
+    expect(attempt.attemptNumber).toBe(1);
+    expect(Date.parse(attempt.expiresAt) - Date.parse(attempt.startTime)).toBe(5 * MINUTE);
+    const [[check]] = await ctx.pool.query('SELECT * FROM location_checks');
+    expect(check).toMatchObject({ inside_radius: 1, used_by_attempt_id: attempt.id });
   });
 
-  it('BR12 being outside the radius does not verify the location', async () => {
+  it('test 3: outside the circle answers OUTSIDE with a rounded distance and starts nothing', async () => {
     const { agent } = await ctx.login('far');
-    await agent.post('/api/me/location-consent').expect(204);
+    await consent(agent);
     const cp = await ctx.checkpointByName(agent, 'Library');
-    const res = await verifyAt(agent, cp, 5, 0.01);
-    expect(res.body.outcome).toBe('outside_radius');
-    const start = await agent.post('/api/attempts').send({ checkpointId: cp.id });
-    expect(start.status).toBe(409);
+    const res = await ctx.verify(agent, cp, { offset: 0.002 }).expect(200);
+    expect(res.body.status).toBe('OUTSIDE');
+    expect(res.body.distanceM).toBe(220); // 0.002 degrees of latitude is about 222 m
+    expect(res.body.message).toContain('about 220 m from Library');
+    expect(await count('attempts')).toBe(0);
+    const [[check]] = await ctx.pool.query('SELECT inside_radius FROM location_checks');
+    expect(check.inside_radius).toBe(0);
+  });
+
+  it('test 4: accuracy worse than 50 m is ACCURACY_TOO_LOW, with no attempt and no location row', async () => {
+    const { agent } = await ctx.login('poor');
+    await consent(agent);
+    const cp = await ctx.checkpointByName(agent, 'Library');
+    const res = await ctx.verify(agent, cp, { accuracy: 51 });
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe('ACCURACY_TOO_LOW');
+    expect(await count('attempts')).toBe(0);
+    expect(await count('location_checks')).toBe(0);
+    await ctx.verify(agent, cp, { accuracy: 50 }).expect(200);
+  });
+
+  it('test 5: a reading older than 30 s, or from the future, is STALE_POSITION and starts nothing', async () => {
+    const { agent } = await ctx.login('stale');
+    await consent(agent);
+    const cp = await ctx.checkpointByName(agent, 'Library');
+    for (const ageMs of [30_001, -1]) {
+      const res = await ctx.verify(agent, cp, { ageMs });
+      expect(res.status).toBe(422);
+      expect(res.body.error.code).toBe('STALE_POSITION');
+    }
+    expect(await count('attempts')).toBe(0);
+    expect(await count('location_checks')).toBe(0);
+    expect((await ctx.verify(agent, cp, { ageMs: 30_000 })).body.status).toBe('OK');
+  });
+
+  it('rejects a reading that is not a valid position', async () => {
+    const { agent } = await ctx.login('bad');
+    await consent(agent);
+    const cp = await ctx.checkpointByName(agent, 'Library');
+    for (const body of [
+      { lat: 91, lng: 9, accuracy: 5, ageMs: 0 },
+      { lat: '49.1', lng: 9, accuracy: 5, ageMs: 0 },
+      { lat: 49.1, lng: 9, accuracy: -1, ageMs: 0 },
+      { lat: 49.1, lng: 9, accuracy: 5 },
+    ]) {
+      const res = await agent.post(`/api/checkpoints/${cp.id}/verify`).send(body);
+      expect(res.status).toBe(400);
+    }
+    expect(await count('attempts')).toBe(0);
   });
 
   it('R-63 location needs the consent notice first', async () => {
     const { agent } = await ctx.login('noconsent');
     const cp = await ctx.checkpointByName(agent, 'Library');
-    const res = await verifyAt(agent, cp);
+    const res = await ctx.verify(agent, cp);
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe('CONSENT_REQUIRED');
   });
@@ -93,27 +136,67 @@ describe('BR12 location check at attempt start', () => {
     ).toEqual([]);
   });
 
-  it('R-62 a verified check is used up by one attempt start', async () => {
-    const { agent } = await ctx.login('onceonly');
-    const attempt = await ctx.startAttempt(agent, 'Containers');
-    await ctx.answerPattern(agent, attempt, [false, false, false]);
-    const again = await agent.post('/api/attempts').send({ checkpointId: attempt.checkpointId });
-    expect(again.status).toBe(409);
-    expect(again.body.error.code).toBe('LOCATION_NOT_VERIFIED');
-  });
-
-  it('R-62 a verified check older than 5 minutes is not valid any more', async () => {
-    const { agent } = await ctx.login('stale');
-    await agent.post('/api/me/location-consent').expect(204);
+  it('test 10 BR12: leaving the circle after the unlock changes nothing; answers are still accepted', async () => {
+    const { agent } = await ctx.login('wander');
+    const attempt = await ctx.startAttempt(agent, 'Library');
     const cp = await ctx.checkpointByName(agent, 'Library');
-    await verifyAt(agent, cp).expect(200);
-    ctx.clock.advance(5 * MINUTE + 1);
-    const res = await agent.post('/api/attempts').send({ checkpointId: cp.id });
-    expect(res.body.error.code).toBe('LOCATION_NOT_VERIFIED');
+    const away = await ctx.verify(agent, cp, { offset: 0.01, accuracy: 500, ageMs: 600_000 });
+    expect(away.body).toMatchObject({ status: 'OK', resumed: true });
+    expect(away.body.attempt.id).toBe(attempt.id);
+    expect((await ctx.answer(agent, attempt, true)).status).toBe(200);
   });
 });
 
-describe('BR09 BR13 BR23 starting an attempt', () => {
+describe('overlapping circles (Building C and Sensoricum)', () => {
+  it('standing in Building C does not unlock the Sensoricum, and the other way round', async () => {
+    const { agent } = await ctx.login('overlap');
+    await consent(agent);
+    const c = await ctx.checkpointByName(agent, 'Building C');
+    const s = await ctx.checkpointByName(agent, 'Sensoricum');
+
+    const atS = await ctx.verify(agent, s).expect(200);
+    expect(atS.body.status).toBe('OK'); // at the Sensoricum centre: unlocks the Sensoricum
+    await ctx.pool.query(
+      "UPDATE attempts SET status = 'failed', end_reason = 'expired', finished_at = ? WHERE status = 'active'",
+      [new Date(ctx.clock.now())],
+    );
+
+    const wrong = await agent
+      .post(`/api/checkpoints/${s.id}/verify`)
+      .send({ lat: c.latitude, lng: c.longitude, accuracy: 5, ageMs: 0 })
+      .expect(200);
+    expect(wrong.body).toMatchObject({ status: 'OUTSIDE', elsewhere: 'Building C' });
+    expect(wrong.body.message).toContain('You are at Building C, not at Sensoricum');
+
+    const reverse = await agent
+      .post(`/api/checkpoints/${c.id}/verify`)
+      .send({ lat: s.latitude, lng: s.longitude, accuracy: 5, ageMs: 0 })
+      .expect(200);
+    expect(reverse.body).toMatchObject({ status: 'OUTSIDE', elsewhere: 'Sensoricum' });
+    expect(await count('attempts')).toBe(1);
+
+    const right = await agent
+      .post(`/api/checkpoints/${c.id}/verify`)
+      .send({ lat: c.latitude, lng: c.longitude, accuracy: 5, ageMs: 0 })
+      .expect(200);
+    expect(right.body.status).toBe('OK');
+  });
+
+  it('a deactivated neighbour no longer takes the spot', async () => {
+    const { agent } = await ctx.login('neighbour');
+    await consent(agent);
+    const c = await ctx.checkpointByName(agent, 'Building C');
+    const s = await ctx.checkpointByName(agent, 'Sensoricum');
+    await ctx.pool.query('UPDATE checkpoints SET is_active = 0 WHERE checkpoint_id = ?', [c.id]);
+    const res = await agent
+      .post(`/api/checkpoints/${s.id}/verify`)
+      .send({ lat: c.latitude, lng: c.longitude, accuracy: 5, ageMs: 0 })
+      .expect(200);
+    expect(res.body.status).toBe('OK');
+  });
+});
+
+describe('BR09 BR13 BR23 BR25 unlocking an attempt', () => {
   it('BR09 BR13 a 5-question checkpoint draws 5 distinct questions with 4 options and a 5-minute deadline', async () => {
     const { agent } = await ctx.login('draw');
     const attempt = await ctx.startAttempt(agent, 'Library');
@@ -128,7 +211,7 @@ describe('BR09 BR13 BR23 starting an attempt', () => {
 
   it('BR13 a 3-question checkpoint has a 3-minute deadline', async () => {
     const { agent } = await ctx.login('three');
-    const attempt = await ctx.startAttempt(agent, 'Containers');
+    const attempt = await ctx.startAttempt(agent, 'Sensoricum');
     expect(attempt.questions).toHaveLength(3);
     expect(Date.parse(attempt.expiresAt) - Date.parse(attempt.startTime)).toBe(3 * MINUTE);
   });
@@ -151,40 +234,79 @@ describe('BR09 BR13 BR23 starting an attempt', () => {
 
     const other = await ctx.login('bank2');
     await ctx.pool.query('UPDATE questions SET is_active = 0 WHERE question_id = ?', [keep[0]]);
-    await other.agent.post('/api/me/location-consent').expect(204);
-    await verifyAt(other.agent, cafe).expect(200);
-    const res = await other.agent.post('/api/attempts').send({ checkpointId: cafe.id });
+    await consent(other.agent);
+    const res = await ctx.verify(other.agent, cafe);
     expect(res.status).toBe(503);
     expect(res.body.error.code).toBe('DRAW_IMPOSSIBLE');
-  });
-
-  it('check 15: two simultaneous starts give one active attempt', async () => {
-    const { agent } = await ctx.login('race');
-    await agent.post('/api/me/location-consent').expect(204);
-    const cp = await ctx.checkpointByName(agent, 'Library');
-    await verifyAt(agent, cp).expect(200);
-    const [a, b] = await Promise.all([
-      agent.post('/api/attempts').send({ checkpointId: cp.id }),
-      agent.post('/api/attempts').send({ checkpointId: cp.id }),
-    ]);
-    expect([a.status, b.status].sort()).toEqual([201, 409]);
-    const [rows] = await ctx.pool.query(
-      "SELECT COUNT(*) AS n FROM attempts WHERE status = 'active'",
+    const [[rows]] = await ctx.pool.query(
+      'SELECT COUNT(*) AS n FROM location_checks WHERE student_id = ?',
+      [other.student.id],
     );
-    expect(rows[0].n).toBe(1);
+    expect(rows.n).toBe(0); // the whole unlock was rolled back
   });
 
-  it('check 23 BR25: after a new login the attempt resumes without a location check, and starting is refused', async () => {
+  it('BR10 a question without exactly one correct option of four is never drawn', async () => {
+    const { agent } = await ctx.login('broken');
+    const cafe = await ctx.checkpointByName(agent, 'CAS Cafe');
+    const [ids] = await ctx.pool.query(
+      'SELECT question_id FROM questions WHERE checkpoint_id = ? ORDER BY question_id',
+      [cafe.id],
+    );
+    const keep = ids.slice(0, 4).map((r) => r.question_id);
+    await ctx.pool.query(
+      'UPDATE questions SET is_active = 0 WHERE checkpoint_id = ? AND question_id NOT IN (?)',
+      [cafe.id, keep],
+    );
+    await ctx.pool.query('UPDATE options SET is_correct = 0 WHERE question_id = ?', [keep[0]]);
+    try {
+      const attempt = await ctx.startAttempt(agent, 'CAS Cafe');
+      expect(attempt.questions.map((q) => q.id)).not.toContain(keep[0]);
+    } finally {
+      await ctx.pool.query(
+        'UPDATE options SET is_correct = 1 WHERE question_id = ? AND option_text LIKE ?',
+        [keep[0], '%placeholder answer%'],
+      );
+    }
+  });
+
+  it('test 7 check 15: two simultaneous taps give one attempt, and both get it back', async () => {
+    const { agent } = await ctx.login('race');
+    await consent(agent);
+    const cp = await ctx.checkpointByName(agent, 'Library');
+    const [a, b] = await Promise.all([ctx.verify(agent, cp), ctx.verify(agent, cp)]);
+    expect([a.status, b.status]).toEqual([200, 200]);
+    expect(a.body.attempt.id).toBe(b.body.attempt.id);
+    expect(await count('attempts')).toBe(1);
+  });
+
+  it('test 7 check 23 BR25: after a new login the same attempt resumes, other checkpoints are refused', async () => {
     const first = await ctx.login('resume');
     const attempt = await ctx.startAttempt(first.agent, 'Library');
     const second = await ctx.login('resume');
     const { body } = await second.agent.get('/api/attempts/active').expect(200);
     expect(body.attempt.id).toBe(attempt.id);
-    const cp = await ctx.checkpointByName(second.agent, 'Mensa');
-    const check = await verifyAt(second.agent, cp);
-    expect(check.body.error.code).toBe('ACTIVE_ATTEMPT_EXISTS');
-    const start = await second.agent.post('/api/attempts').send({ checkpointId: cp.id });
-    expect(start.body.error.code).toBe('ACTIVE_ATTEMPT_EXISTS');
+    const library = await ctx.checkpointByName(second.agent, 'Library');
+    const again = await ctx.verify(second.agent, library, { ageMs: 120_000 }).expect(200);
+    expect(again.body.attempt.id).toBe(attempt.id);
+    expect(again.body.attempt.questions.map((q) => q.id)).toEqual(
+      attempt.questions.map((q) => q.id),
+    );
+    const mensa = await ctx.checkpointByName(second.agent, 'Mensa');
+    const other = await ctx.verify(second.agent, mensa);
+    expect(other.status).toBe(409);
+    expect(other.body.error.code).toBe('ACTIVE_ATTEMPT_EXISTS');
+    expect(other.body.error.attemptId).toBe(attempt.id);
+  });
+
+  it('BR19 an expired attempt is closed and the next tap starts attempt number 2', async () => {
+    const { agent } = await ctx.login('next');
+    const first = await ctx.startAttempt(agent, 'Sensoricum');
+    ctx.clock.advance(3 * MINUTE);
+    const cp = await ctx.checkpointByName(agent, 'Sensoricum');
+    const res = await ctx.verify(agent, cp).expect(200);
+    expect(res.body.resumed).toBe(false);
+    expect(res.body.attempt.id).not.toBe(first.id);
+    expect(res.body.attempt.attemptNumber).toBe(2);
   });
 });
 
@@ -370,8 +492,8 @@ describe('BR17 BR18 BR19 BR20 BR21 scoring through the API', () => {
     expect(refused.body.error.code).toBe('HARD_NOT_AVAILABLE');
 
     const small = await ctx.login('smallhard');
-    const containers = await ctx.startAttempt(small.agent, 'Containers');
-    const done = await ctx.answerPattern(small.agent, containers, [true, true]);
+    const sensoricum = await ctx.startAttempt(small.agent, 'Sensoricum');
+    const done = await ctx.answerPattern(small.agent, sensoricum, [true, true]);
     expect(done.body.attempt.hardUnlocked).toBe(false);
   });
 
@@ -410,23 +532,23 @@ describe('BR17 BR18 BR19 BR20 BR21 scoring through the API', () => {
 
   it('check 13 BR21: a passed checkpoint is final and cannot be started again', async () => {
     const { agent } = await ctx.login('final');
-    const attempt = await ctx.startAttempt(agent, 'Containers');
+    const attempt = await ctx.startAttempt(agent, 'Sensoricum');
     await ctx.answerPattern(agent, attempt, [true, true, true]);
-    const cp = await ctx.checkpointByName(agent, 'Containers');
+    const cp = await ctx.checkpointByName(agent, 'Sensoricum');
     expect(cp.completed).toBe(true);
-    const res = await verifyAt(agent, cp);
+    const res = await ctx.verify(agent, cp);
     expect(res.status).toBe(409);
-    expect(res.body.error.code).toBe('CHECKPOINT_COMPLETED');
+    expect(res.body.error.code).toBe('ALREADY_COMPLETED');
   });
 
   it('check 14 example 7: attempt 6 passes with 0 points, the checkpoint is completed and the total is unchanged', async () => {
     const { agent } = await ctx.login('six');
     for (let i = 1; i <= 5; i += 1) {
-      const attempt = await ctx.startAttempt(agent, 'Containers');
+      const attempt = await ctx.startAttempt(agent, 'Sensoricum');
       expect(attempt.attemptNumber).toBe(i);
       await ctx.answerPattern(agent, attempt, [false, false, false]);
     }
-    const sixth = await ctx.startAttempt(agent, 'Containers');
+    const sixth = await ctx.startAttempt(agent, 'Sensoricum');
     const last = await ctx.answerPattern(agent, sixth, [true, true, true]);
     expect(last.body.result).toMatchObject({
       passed: true,
@@ -442,7 +564,7 @@ describe('BR17 BR18 BR19 BR20 BR21 scoring through the API', () => {
     ]);
     await ctx.pool.query('UPDATE scoring_multiplier SET percentage = 50 WHERE attempt_number = 1');
     const { agent } = await ctx.login('tables');
-    const attempt = await ctx.startAttempt(agent, 'Containers');
+    const attempt = await ctx.startAttempt(agent, 'Sensoricum');
     const last = await ctx.answerPattern(agent, attempt, [true, true, true]);
     // (3 x 500 + 180 time + 200 full clear) x 50% = 940
     expect(last.body.result).toMatchObject({
@@ -469,11 +591,11 @@ describe('BR04 BR24 solo leaderboard', () => {
     const later = await ctx.login('later1', { firstName: 'Later' });
     const low = await ctx.login('low1', { firstName: 'Low' });
     for (const who of [early, later]) {
-      const attempt = await ctx.startAttempt(who.agent, 'Containers');
+      const attempt = await ctx.startAttempt(who.agent, 'Sensoricum');
       await ctx.answerPattern(who.agent, attempt, [true, true, false]);
       ctx.clock.advance(5 * SECOND);
     }
-    const attempt = await ctx.startAttempt(low.agent, 'Containers');
+    const attempt = await ctx.startAttempt(low.agent, 'Sensoricum');
     ctx.clock.advance(100 * SECOND);
     await ctx.answerPattern(low.agent, attempt, [true, false, false]);
     const { body } = await low.agent.get('/api/leaderboards/solo').expect(200);
@@ -486,9 +608,9 @@ describe('BR04 BR24 solo leaderboard', () => {
 describe('read-first info, best score and rank (R-62, BR24)', () => {
   it('R-62 every checkpoint lists its read-first facts, and the best score of the student', async () => {
     const { agent } = await ctx.login('facts');
-    const first = await ctx.startAttempt(agent, 'Containers');
+    const first = await ctx.startAttempt(agent, 'Sensoricum');
     await ctx.answerPattern(agent, first, [true, true, false]);
-    const cp = await ctx.checkpointByName(agent, 'Containers');
+    const cp = await ctx.checkpointByName(agent, 'Sensoricum');
     expect(cp.facts).toHaveLength(3);
     expect(cp.facts[0]).toContain('PLACEHOLDER');
     expect(cp.bestScore).toBeGreaterThan(0);
@@ -498,10 +620,10 @@ describe('read-first info, best score and rank (R-62, BR24)', () => {
 
   it('BR24 the result carries the rank before and after, and what the next attempt pays', async () => {
     const rival = await ctx.login('rival');
-    const attempt0 = await ctx.startAttempt(rival.agent, 'Containers');
+    const attempt0 = await ctx.startAttempt(rival.agent, 'Sensoricum');
     await ctx.answerPattern(rival.agent, attempt0, [true, true, true]);
     const { agent } = await ctx.login('climber');
-    const attempt = await ctx.startAttempt(agent, 'Containers');
+    const attempt = await ctx.startAttempt(agent, 'Sensoricum');
     ctx.clock.advance(120_000);
     const last = await ctx.answerPattern(agent, attempt, [false, false, false]);
     expect(last.body.result).toMatchObject({
@@ -510,7 +632,7 @@ describe('read-first info, best score and rank (R-62, BR24)', () => {
       rankAfter: 2,
       nextMultiplierPercent: 85,
     });
-    const second = await ctx.startAttempt(agent, 'Containers');
+    const second = await ctx.startAttempt(agent, 'Sensoricum');
     const won = await ctx.answerPattern(agent, second, [true, true, true]);
     // Attempt 2 pays 85%, which is still less than the rival's full first attempt.
     expect(won.body.result).toMatchObject({ rankBefore: 2, rankAfter: 2 });

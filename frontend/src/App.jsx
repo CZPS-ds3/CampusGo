@@ -17,6 +17,12 @@ import Ranks from './pages/Ranks.jsx';
 import Result from './pages/Result.jsx';
 import Splash from './pages/Splash.jsx';
 import Team from './pages/Team.jsx';
+import AdminLayout from './pages/admin/AdminLayout.jsx';
+import AdminNames from './pages/admin/AdminNames.jsx';
+import AdminOverview from './pages/admin/AdminOverview.jsx';
+import AdminTeams from './pages/admin/AdminTeams.jsx';
+import AdminUser from './pages/admin/AdminUser.jsx';
+import AdminUsers from './pages/admin/AdminUsers.jsx';
 
 /** Everything behind the login. The GO badge menu is hidden while a quiz runs. */
 function Protected() {
@@ -42,6 +48,12 @@ function Protected() {
   );
 }
 
+/** The admin area is only for accounts with the admin role. */
+function AdminOnly() {
+  const { student } = useSession();
+  return student?.role === 'admin' ? <AdminLayout /> : <Navigate to="/map" replace />;
+}
+
 export default function App() {
   useSettings(); // re-render the whole tree when language, theme or font size changes
   return (
@@ -59,6 +71,13 @@ export default function App() {
           <Route path="/team" element={<Team />} />
           <Route path="/ranks" element={<Ranks />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/admin" element={<AdminOnly />}>
+            <Route index element={<AdminOverview />} />
+            <Route path="users" element={<AdminUsers />} />
+            <Route path="users/:id" element={<AdminUser />} />
+            <Route path="teams" element={<AdminTeams />} />
+            <Route path="names" element={<AdminNames />} />
+          </Route>
         </Route>
         <Route path="*" element={<NotFound />} />
       </Routes>

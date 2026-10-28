@@ -3,6 +3,7 @@ import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from 
 import { at } from '../clock.js';
 import { withTransaction } from '../db/pool.js';
 import { AppError } from '../middleware/errors.js';
+import { recordEvent } from './audit.js';
 
 export const GENERIC_OTP_MESSAGE =
   'If the account exists, an email containing the OTP has been sent.';
@@ -44,13 +45,29 @@ export function publicStudent(row) {
     displayName: displayName(row),
     pictureUrl: row.profile_picture,
     avatarPreset: row.avatar_preset,
+    role: row.role,
     totalPoints: row.total_points,
     teamId: row.team_id,
     locationConsent: Boolean(row.location_consent_at),
   };
 }
 
-export function createAuthService({ pool, config, mailer, clock }) {
+/** The login e-mail. `code` is six digits and `ttlMinutes` a number, so nothing here needs HTML escaping. */
+export function otpEmail(to, code, ttlMinutes) {
+  return {
+    to,
+    subject: 'Your Campus & City Quest login code',
+    text: `Your one-time code is ${code}. It is valid for ${ttlMinutes} minutes.\nIf you did not ask for it, ignore this message.`,
+    html:
+      '<div style="font-family:Arial,sans-serif;font-size:16px;color:#1a1a1a">' +
+      '<p>Your Campus &amp; City Quest login code:</p>' +
+      `<p style="font-size:28px;font-weight:bold;letter-spacing:6px">${code}</p>` +
+      `<p>It is valid for ${ttlMinutes} minutes. Never share it with anyone.</p>` +
+      '<p style="color:#666;font-size:13px">If you did not ask for it, ignore this message.</p></div>',
+  };
+}
+
+export function createAuthService({ pool, config, mailer, clock, nameRules }) {
   const hashCode = (email, code) =>
     createHmac('sha256', config.otpSecret).update(`${email}:${code}`).digest('hex');
   const hashToken = (token) => createHash('sha256').update(token).digest('hex');
@@ -88,11 +105,7 @@ export function createAuthService({ pool, config, mailer, clock }) {
         [email, hashCode(email, code), at(now), at(now + config.otpTtlMinutes * 60 * 1000)],
       );
     });
-    mailer.send({
-      to: email,
-      subject: 'Your Campus & City Quest login code',
-      text: `Your one-time code is ${code}. It is valid for ${config.otpTtlMinutes} minutes.\nIf you did not ask for it, ignore this message.`,
-    });
+    mailer.send(otpEmail(email, code, config.otpTtlMinutes));
   }
 
   async function createSession(conn, studentId, now) {
@@ -146,15 +159,25 @@ export function createAuthService({ pool, config, mailer, clock }) {
       const [[existing]] = await conn.query('SELECT * FROM students WHERE email = ? FOR UPDATE', [
         email,
       ]);
+      if (existing && existing.status !== 'active') {
+        throw new AppError(
+          403,
+          'ACCOUNT_UNAVAILABLE',
+          'This account cannot be used. Please contact the study office.',
+        );
+      }
       let student = existing;
       let created = false;
+      const isAdminEmail = email === config.adminEmail;
       if (!student) {
         if (!profile?.firstName || !profile?.lastName) return { status: 'profile_required' }; // OTP stays usable
+        await nameRules.assertAllowed(profile.firstName, profile.lastName, profile.nickname);
         const [inserted] = await conn.query(
-          `INSERT INTO students (email, first_name, last_name, nickname, avatar_preset, total_points, points_exact_x100, points_updated_at, created_at)
-           VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?)`,
+          `INSERT INTO students (email, role, first_name, last_name, nickname, avatar_preset, total_points, points_exact_x100, points_updated_at, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, ?)`,
           [
             email,
+            isAdminEmail ? 'admin' : 'student',
             profile.firstName,
             profile.lastName,
             profile.nickname ?? null,
@@ -169,8 +192,15 @@ export function createAuthService({ pool, config, mailer, clock }) {
         student = row;
         created = true;
       }
+      if (isAdminEmail && student.role !== 'admin') {
+        await conn.query("UPDATE students SET role = 'admin' WHERE student_id = ?", [
+          student.student_id,
+        ]);
+        student = { ...student, role: 'admin' };
+      }
       await conn.query('UPDATE otp_codes SET is_used = 1 WHERE otp_id = ?', [otp.otp_id]);
       const token = await createSession(conn, student.student_id, now);
+      await recordEvent(conn, now, { studentId: student.student_id, type: 'login' });
       return { status: 'ok', created, token, student: publicStudent(student) };
     });
   }
@@ -191,14 +221,26 @@ export function createAuthService({ pool, config, mailer, clock }) {
     const [[student]] = await pool.query('SELECT * FROM students WHERE student_id = ?', [
       session.student_id,
     ]);
+    // A blocked, archived or deleted account loses its session at once.
+    if (student && student.status !== 'active') {
+      await pool.query('UPDATE sessions SET is_active = 0 WHERE session_id = ?', [
+        session.session_id,
+      ]);
+      return null;
+    }
     return student ?? null;
   }
 
   async function logout(token) {
-    if (token)
-      await pool.query('UPDATE sessions SET is_active = 0 WHERE token_hash = ?', [
-        hashToken(token),
-      ]);
+    if (!token) return;
+    const [[session]] = await pool.query(
+      'SELECT student_id FROM sessions WHERE token_hash = ? AND is_active = 1',
+      [hashToken(token)],
+    );
+    await pool.query('UPDATE sessions SET is_active = 0 WHERE token_hash = ?', [hashToken(token)]);
+    if (session) {
+      await recordEvent(pool, clock.now(), { studentId: session.student_id, type: 'logout' });
+    }
   }
 
   async function purgeOldOtps() {
@@ -207,5 +249,13 @@ export function createAuthService({ pool, config, mailer, clock }) {
     ]);
   }
 
-  return { requestOtp, verifyOtp, authenticate, logout, purgeOldOtps };
+  /** Ended or expired sessions are of no use after a day; their token hashes should not pile up. */
+  async function purgeOldSessions() {
+    await pool.query(
+      'DELETE FROM sessions WHERE (is_active = 0 OR expires_at < ?) AND created_at < ?',
+      [at(clock.now()), at(clock.now() - 24 * 3600 * 1000)],
+    );
+  }
+
+  return { requestOtp, verifyOtp, authenticate, logout, purgeOldOtps, purgeOldSessions };
 }

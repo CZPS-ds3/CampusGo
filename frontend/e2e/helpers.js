@@ -3,9 +3,12 @@ import { expect } from '@playwright/test';
 export const OTP = '123456';
 
 /** Logs a brand-new student in through the screens (mock mode accepts the code 123456). */
-export async function login(page, { first = 'Ada', last = 'Lovelace' } = {}) {
+export async function login(
+  page,
+  { first = 'Ada', last = 'Lovelace', email = 'ada@heilbronn.dhbw.de' } = {},
+) {
   await page.goto('/login');
-  await page.getByLabel('School email').fill('ada@heilbronn.dhbw.de');
+  await page.getByLabel('School email').fill(email);
   await page.getByRole('button', { name: 'Send code' }).click();
   await expect(page.getByRole('heading', { name: /6-digit code/ })).toBeVisible();
   await page.getByLabel('Digit 1 of 6').click();
@@ -35,12 +38,12 @@ export async function openCheckpoint(page, name) {
   await expect(page.getByRole('dialog')).toBeVisible();
 }
 
-/** From an open checkpoint sheet to a running quiz: start, accept the location notice, read, go. */
+/** From an open checkpoint sheet to a running quiz: start, read, accept the location notice, unlock. */
 export async function startQuiz(page) {
   await page.getByRole('link', { name: /Start quest|Retry quest/ }).click();
+  await page.getByRole('button', { name: "I'm ready" }).click();
   await page.getByRole('button', { name: 'I agree' }).click();
   await expect(page.getByText('Locked on!')).toBeVisible();
-  await page.getByRole('button', { name: "I'm ready" }).click();
   await expect(page.getByRole('timer')).toBeVisible();
 }
 

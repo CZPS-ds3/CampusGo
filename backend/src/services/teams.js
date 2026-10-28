@@ -6,7 +6,6 @@ import { displayName, isSchoolEmail, normalizeEmail } from './auth.js';
 import { teamScore } from './scoring.js';
 
 export const MAX_TEAM_SIZE = 5;
-const MAX_PENDING_PER_TEAM = 10;
 export const GENERIC_INVITE_MESSAGE =
   'If the user exists and can be invited, an invitation has been sent.';
 
@@ -32,7 +31,7 @@ export async function refreshTeamScore(conn, teamId, eventMs) {
   ]);
 }
 
-export function createTeamService({ pool, config, clock }) {
+export function createTeamService({ pool, config, clock, nameRules }) {
   async function expireOldInvitations(conn = pool) {
     await conn.query(
       "UPDATE team_invitations SET status = 'expired', responded_at = ? WHERE status = 'pending' AND expires_at <= ?",
@@ -75,6 +74,7 @@ export function createTeamService({ pool, config, clock }) {
 
   async function createTeam(studentId, name) {
     const now = clock.now();
+    await nameRules.assertAllowed(name);
     await withTransaction(pool, async (conn) => {
       const [[student]] = await conn.query(
         'SELECT team_id, total_points FROM students WHERE student_id = ? FOR UPDATE',
@@ -131,21 +131,36 @@ export function createTeamService({ pool, config, clock }) {
       if (!inviter.team_id) throw new AppError(403, 'NO_TEAM', 'Create a team first.');
       await expireOldInvitations(conn);
       await conn.query('SELECT team_id FROM teams WHERE team_id = ? FOR UPDATE', [inviter.team_id]);
-      const [[invitee]] = await conn.query(
-        'SELECT student_id, team_id FROM students WHERE email = ?',
-        [email],
-      );
-      if (!invitee || invitee.student_id === inviterId || invitee.team_id) return;
+      // Members plus open invitations may never exceed the team size. This depends only on the
+      // inviter's own team, so it tells nothing about the invitee (R-43).
       const [[{ size }]] = await conn.query(
         'SELECT COUNT(*) AS size FROM students WHERE team_id = ?',
         [inviter.team_id],
       );
-      if (size >= MAX_TEAM_SIZE) return;
       const [[{ pending }]] = await conn.query(
         "SELECT COUNT(*) AS pending FROM team_invitations WHERE team_id = ? AND status = 'pending'",
         [inviter.team_id],
       );
-      if (pending >= MAX_PENDING_PER_TEAM) return;
+      if (size + pending >= MAX_TEAM_SIZE) {
+        throw new AppError(
+          409,
+          'TEAM_FULL',
+          'Your team is full: members plus open invitations already make 5.',
+        );
+      }
+      const [[invitee]] = await conn.query(
+        'SELECT student_id, team_id, status, role FROM students WHERE email = ?',
+        [email],
+      );
+      if (
+        !invitee ||
+        invitee.status !== 'active' ||
+        invitee.role !== 'student' ||
+        invitee.student_id === inviterId ||
+        invitee.team_id
+      ) {
+        return;
+      }
       const [[dup]] = await conn.query(
         "SELECT invitation_id FROM team_invitations WHERE team_id = ? AND invitee_id = ? AND status = 'pending'",
         [inviter.team_id, invitee.student_id],

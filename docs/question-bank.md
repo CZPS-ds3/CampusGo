@@ -17,7 +17,7 @@ Source of truth for the quiz content (BR09, BR10, BR11). The questions are loade
 | Checkpoint kind | Questions per attempt | Normal in bank | Hard in bank |
 |---|---|---|---|
 | Large (Mensa, Library, Building B, Building C) | 5 (attempt 1 may swap the 5th for a hard one) | **10** (the source template shows 8; BR09 asks for 2x the 5 normal questions in play) | **3** |
-| Small (Containers, CAS Cafe, Care.box and Shop.box, Campus Garden) | 3 | **6** | 0 |
+| Small (Sensoricum, CAS Cafe, Care.box and Shop.box, Campus Garden) | 3 | **6** | 0 |
 
 Total minimum: 4 x (10 + 3) + 4 x 6 = **76 questions** (the source template alone would give 68).
 
@@ -105,7 +105,7 @@ Questions per attempt: **5**. Bank minimum: **10 normal, 3 hard**.
 | 2 | Hard |  |  |  |  |  |  | draft |
 | 3 | Hard |  |  |  |  |  |  | draft |
 
-## Containers
+## Sensoricum
 
 Questions per attempt: **3**. Bank minimum: **6 normal**.
 

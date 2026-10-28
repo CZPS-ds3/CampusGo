@@ -1,31 +1,73 @@
 // In-browser stand-in for the backend (npm run dev:mock, e2e tests). Same shapes and rules as the real API,
 // kept deliberately small: the real rules live in backend/. State survives a page refresh (sessionStorage).
 
-const STORAGE_KEY = 'cq-mock-v1';
+import places from './places.json';
+
+const STORAGE_KEY = 'cq-mock-v2';
 const SECOND = 1000;
 const OTP = '123456';
 const DOMAIN = 'heilbronn.dhbw.de';
 const MAX_ACCURACY_M = 50;
+const MAX_POSITION_AGE_MS = 30_000;
+const ADMIN_EMAIL = `sekretariat.dski@${DOMAIN}`;
+const PLACE_SLUGS = {
+  Mensa: 'mensa',
+  Library: 'library',
+  'CAS Cafe': 'cas-cafe',
+  'Campus Garden': 'campus-garden',
+  'Care.box and Shop.box': 'carebox-shopbox',
+  'Building B': 'building-b',
+  'Building C': 'building-c',
+  Sensoricum: 'sensoricum',
+};
+// Accounts the mock "knows": an invitation is only created for these (the reply stays the same for everyone).
+const KNOWN_EMAILS = ['mia.k', 'jonas', 'aiko.t', 'sara.l'].map((n) => `${n}@${DOMAIN}`);
+const BANNED_SUBSTRING = ['fuck', 'shit', 'bitch', 'scheiss', 'arschloch', 'wichser', 'hurensohn'];
+const BANNED_TOKEN = ['ass', 'cunt', 'sex', 'arsch', 'hure', 'nutte'];
 
+/** Small copy of the server's name filter: whole words for short terms, so "Cass" stays allowed. */
+const bannedWord = (text, extra = []) => {
+  const words = String(text ?? '')
+    .replace(/([a-zäöü])([A-ZÄÖÜ])/g, '$1 $2')
+    .split(/[^\p{L}\p{N}]+/u)
+    .map((w) => w.toLowerCase().replace(/ß/g, 'ss'))
+    .filter(Boolean);
+  return (
+    words
+      .map(
+        (w) =>
+          [...BANNED_TOKEN, ...extra].find((b) => b === w) ??
+          BANNED_SUBSTRING.find((b) => w.includes(b)),
+      )
+      .find(Boolean) ?? null
+  );
+};
+
+// Same centres, radii and status as backend/src/db/seed.js (Bildungscampus Heilbronn).
 const CHECKPOINTS = [
-  ['Mensa', 49.1231, 9.2108, 5, 4, true],
-  ['Library', 49.1236, 9.2119, 5, 4, true],
-  ['CAS Cafe', 49.1228, 9.2102, 3, 2, false],
-  ['Campus Garden', 49.1224, 9.2114, 3, 2, false],
-  ['Care.box and Shop.box', 49.1233, 9.2096, 3, 2, false],
-  ['Building B', 49.1239, 9.2106, 5, 4, true],
-  ['Building C', 49.1241, 9.2115, 5, 4, true],
-  ['Containers', 49.1221, 9.2121, 3, 2, false],
-].map(([name, latitude, longitude, questionCount, passThreshold, hard], i) => ({
+  ['Mensa', 49.148464, 9.215808, 60, 5, 4, true, true],
+  ['Library', 49.149493, 9.216467, 60, 5, 4, true, true],
+  ['CAS Cafe', 49.148951, 9.216205, 40, 3, 2, false, true],
+  ['Campus Garden', 49.147082, 9.217206, 50, 3, 2, false, true],
+  ['Care.box and Shop.box', 49.149088, 9.21727, 40, 3, 2, false, true],
+  ['Building B', 49.147126, 9.218486, 60, 5, 4, true, true],
+  ['Building C', 49.147316, 9.2179, 60, 5, 4, true, true],
+  ['Sensoricum', 49.14762, 9.217807, 40, 3, 2, false, true],
+].map(([name, latitude, longitude, radius, questionCount, passThreshold, hard, isActive], i) => ({
   id: i + 1,
   name,
   latitude,
   longitude,
-  radius: 60,
-  isActive: true,
+  radius,
+  isActive,
   questionCount,
   passThreshold,
   hardQuestionEnabled: hard,
+  images: (places[PLACE_SLUGS[name]] ?? []).map((p) => ({
+    url: `/places/${p.file}`,
+    alt: p.alt,
+    credit: p.credit,
+  })),
 }));
 
 const MULTIPLIERS = [100, 85, 70, 55, 40, 0];
@@ -40,7 +82,6 @@ const fresh = () => ({
   loggedIn: false,
   student: null,
   consent: false,
-  checks: [],
   attempts: [],
   nextId: 1,
   team: null,
@@ -54,6 +95,43 @@ const fresh = () => ({
     },
   ],
   lastOtpEmail: null,
+  admin: {
+    nextId: 200,
+    users: [
+      ['Mira', 'Okonkwo', 'Mira', 'active', 7420, 8, 'Bildungscampus Bandits'],
+      ['Tomás', 'Herrera', 'Tomi', 'active', 6180, 7, 'Bildungscampus Bandits'],
+      ['Aiko', 'Tanabe', 'Aiko', 'active', 3100, 6, 'Mensa Mavericks'],
+      ['Lars', 'Nordmann', 'Lars', 'active', 2540, 5, null],
+      ['Sam', 'Whitfield', 'Sam', 'blocked', 900, 1, null],
+      ['Ben', 'Carver', 'Ben', 'archived', 1200, 1, null],
+    ].map(([firstName, lastName, nickname, status, totalPoints, questsPassed, teamName], i) => ({
+      id: 100 + i,
+      email: `${firstName}.${lastName}@${DOMAIN}`
+        .normalize('NFKD')
+        .replace(/\p{M}/gu, '')
+        .toLowerCase(),
+      firstName,
+      lastName,
+      nickname,
+      displayName: nickname,
+      role: 'student',
+      status,
+      statusReason: status === 'blocked' ? 'Repeated misuse (demo)' : null,
+      reported: false,
+      reportReason: null,
+      teamId: teamName ? 1 : null,
+      teamName,
+      totalPoints,
+      questsPassed,
+      createdAt: new Date(Date.now() - (9 - i) * 86400e3).toISOString(),
+      lastLoginAt: new Date(Date.now() - (i + 1) * 5 * 3600e3).toISOString(),
+    })),
+    teams: [
+      { id: 1, name: 'Bildungscampus Bandits', score: 6800, members: [100, 101] },
+      { id: 2, name: 'Mensa Mavericks', score: 3100, members: [102] },
+    ],
+    terms: [],
+  },
 });
 
 const distance = (la1, lo1, la2, lo2) => {
@@ -280,8 +358,11 @@ export function createMockApi(ApiError, getUnauthorized) {
         throw fail(400, 'INVALID_CODE', 'Invalid or expired code.');
       if (!state.student || state.student.email !== clean) {
         if (!firstName || !lastName) return { status: 'profile_required' };
+        const rude = bannedWord(`${firstName} ${lastName} ${nickname ?? ''}`, state.admin.terms);
+        if (rude) throw fail(400, 'NAME_NOT_ALLOWED', 'Please choose a different name.');
         state.student = {
           id: 1,
+          role: clean === ADMIN_EMAIL ? 'admin' : 'student',
           email: clean,
           firstName,
           lastName,
@@ -297,6 +378,16 @@ export function createMockApi(ApiError, getUnauthorized) {
     },
     async logout() {
       state.loggedIn = false;
+      save();
+      return null;
+    },
+    async deleteAccount() {
+      needLogin();
+      state.loggedIn = false;
+      state.student = null;
+      state.team = null;
+      state.attempts = [];
+      state.consent = false;
       save();
       return null;
     },
@@ -339,7 +430,7 @@ export function createMockApi(ApiError, getUnauthorized) {
       needLogin();
       sweep();
       return {
-        checkpoints: CHECKPOINTS.map((c) => {
+        checkpoints: CHECKPOINTS.filter((c) => c.isActive).map((c) => {
           const mine = state.attempts.filter((a) => a.checkpointId === c.id);
           return {
             ...c,
@@ -352,41 +443,50 @@ export function createMockApi(ApiError, getUnauthorized) {
         }),
       };
     },
-    async locationCheck(id, { latitude, longitude, accuracy }) {
+    async verifyLocation(id, { latitude, longitude, accuracy, ageMs }) {
       needLogin();
       sweep();
       const cp = checkpoint(id);
-      if (!cp) throw fail(404, 'NOT_FOUND', 'Checkpoint not found.');
-      if (!state.consent)
-        throw fail(403, 'CONSENT_REQUIRED', 'Please accept the location notice first.');
+      if (!cp?.isActive) throw fail(404, 'NOT_AVAILABLE', 'This checkpoint is not available.');
       if (state.attempts.some((a) => a.checkpointId === cp.id && a.status === 'passed')) {
-        throw fail(409, 'CHECKPOINT_COMPLETED', 'You already completed this checkpoint.');
+        throw fail(409, 'ALREADY_COMPLETED', 'You already completed this checkpoint.');
       }
       const active = activeAttempt();
+      if (active?.checkpointId === cp.id)
+        return { status: 'OK', resumed: true, attempt: view(active) };
       if (active)
         throw fail(409, 'ACTIVE_ATTEMPT_EXISTS', 'You have a quiz in progress.', {
           attemptId: active.id,
         });
-      if (accuracy > MAX_ACCURACY_M) return { outcome: 'poor_accuracy' };
-      const inside = distance(latitude, longitude, cp.latitude, cp.longitude) <= cp.radius;
-      if (inside) state.checks.push({ checkpointId: cp.id, at: Date.now(), used: false });
-      save();
-      return { outcome: inside ? 'verified' : 'outside_radius' };
-    },
-    async startAttempt(checkpointId) {
-      needLogin();
-      sweep();
-      const cp = checkpoint(checkpointId);
-      const active = activeAttempt();
-      if (active)
-        throw fail(409, 'ACTIVE_ATTEMPT_EXISTS', 'You have a quiz in progress.', {
-          attemptId: active.id,
-        });
-      const check = state.checks.find(
-        (c) => c.checkpointId === cp.id && !c.used && Date.now() - c.at <= 5 * 60 * 1000,
-      );
-      if (!check) throw fail(409, 'LOCATION_NOT_VERIFIED', 'Please check your location first.');
-      check.used = true;
+      if (!state.consent)
+        throw fail(403, 'CONSENT_REQUIRED', 'Please accept the location notice first.');
+      if (ageMs < 0 || ageMs > MAX_POSITION_AGE_MS)
+        throw fail(422, 'STALE_POSITION', 'Your location reading is too old. Please try again.');
+      if (accuracy > MAX_ACCURACY_M)
+        throw fail(422, 'ACCURACY_TOO_LOW', 'Your location is not precise enough.');
+      const metres = distance(latitude, longitude, cp.latitude, cp.longitude);
+      const distanceM = Math.round(metres / 10) * 10;
+      if (metres > cp.radius) {
+        return {
+          status: 'OUTSIDE',
+          distanceM,
+          elsewhere: null,
+          message: `You are about ${distanceM} m from ${cp.name}. Walk closer and try again.`,
+        };
+      }
+      // Overlapping circles: a reading belongs to the checkpoint with the nearest centre only.
+      const nearer = CHECKPOINTS.filter((c) => c.isActive && c.id !== cp.id)
+        .map((c) => ({ c, d: distance(latitude, longitude, c.latitude, c.longitude) }))
+        .filter(({ c, d }) => d <= c.radius && (d < metres || (d === metres && c.id < cp.id)))
+        .sort((a, b) => a.d - b.d)[0];
+      if (nearer) {
+        return {
+          status: 'OUTSIDE',
+          distanceM,
+          elsewhere: nearer.c.name,
+          message: `You are at ${nearer.c.name}, not at ${cp.name}. Walk to ${cp.name} and try again.`,
+        };
+      }
       const used = state.attempts.filter((a) => a.checkpointId === cp.id).length;
       const now = Date.now();
       const attempt = {
@@ -402,7 +502,7 @@ export function createMockApi(ApiError, getUnauthorized) {
       state.nextId += 1;
       state.attempts.push(attempt);
       save();
-      return { attempt: view(attempt) };
+      return { status: 'OK', resumed: false, attempt: view(attempt) };
     },
     async activeAttempt() {
       needLogin();
@@ -480,6 +580,8 @@ export function createMockApi(ApiError, getUnauthorized) {
     async createTeam(name) {
       needLogin();
       if (state.team) throw fail(409, 'ALREADY_IN_TEAM', 'You are already in a team.');
+      if (bannedWord(name, state.admin.terms))
+        throw fail(400, 'NAME_NOT_ALLOWED', 'Please choose a different name.');
       state.team = {
         name,
         members: [
@@ -511,7 +613,15 @@ export function createMockApi(ApiError, getUnauthorized) {
         );
       }
       const taken = state.team.members.length + (state.team.pending ?? []).length;
-      if (taken < 5) {
+      if (taken >= 5) {
+        throw fail(
+          409,
+          'TEAM_FULL',
+          'Your team is full: members plus open invitations already make 5.',
+        );
+      }
+      const known = KNOWN_EMAILS.includes(String(email).trim().toLowerCase());
+      if (known) {
         state.team.pending = [
           ...(state.team.pending ?? []),
           { expiresAt: new Date(Date.now() + 24 * 3600e3).toISOString() },
@@ -614,14 +724,230 @@ export function createMockApi(ApiError, getUnauthorized) {
     },
   };
 
-  return new Proxy(methods, {
-    get(target, name) {
-      const fn = target[name];
-      if (typeof fn !== 'function') return undefined;
-      return async (...args) => {
-        await wait();
-        return copy(await fn(...args));
+  const needAdmin = () => {
+    needLogin();
+    if (state.student?.role !== 'admin')
+      throw fail(403, 'FORBIDDEN', 'This area is for administrators.');
+  };
+  const adminUser = (id) => {
+    const user = state.admin.users.find((u) => u.id === Number(id));
+    if (!user) throw fail(404, 'NOT_FOUND', 'Account not found.');
+    return user;
+  };
+  const emailTaken = (email, ignoreId) =>
+    state.admin.users.some((u) => u.email === email && u.id !== ignoreId);
+  const checkAdminEmail = (raw, ignoreId) => {
+    const email = String(raw).trim().toLowerCase();
+    if (!email.endsWith(DOMAIN) || email.split('@').length !== 2)
+      throw fail(
+        400,
+        'INVALID_EMAIL',
+        `Please use a school e-mail address (ending with ${DOMAIN}).`,
+      );
+    if (emailTaken(email, ignoreId))
+      throw fail(409, 'EMAIL_TAKEN', 'This e-mail address already belongs to an account.');
+    return email;
+  };
+  const logFor = (user) => ({
+    sessions: [
+      { id: 1, startedAt: user.lastLoginAt, lastActiveAt: user.lastLoginAt, active: false },
+    ],
+    attempts: [],
+    events: [
+      { type: 'logout', detail: null, at: user.lastLoginAt, byAdmin: false },
+      { type: 'login', detail: null, at: user.lastLoginAt, byAdmin: false },
+    ],
+  });
+
+  methods.admin = {
+    async overview() {
+      needAdmin();
+      const count = (s) => state.admin.users.filter((u) => u.status === s).length;
+      return {
+        users: {
+          active: count('active'),
+          blocked: count('blocked'),
+          archived: count('archived'),
+          deleted: count('deleted'),
+        },
+        activeSessions: 3,
+        questsPassedToday: 11,
+        loginsToday: 17,
+        teams: state.admin.teams.length,
       };
     },
-  });
+    async users({ q = '', status = '' } = {}) {
+      needAdmin();
+      const needle = q.toLowerCase();
+      return {
+        users: state.admin.users.filter(
+          (u) =>
+            (!needle ||
+              `${u.email} ${u.firstName} ${u.lastName} ${u.nickname}`
+                .toLowerCase()
+                .includes(needle)) &&
+            (!status || (status === 'reported' ? u.reported : u.status === status)),
+        ),
+      };
+    },
+    async user(id) {
+      needAdmin();
+      const user = adminUser(id);
+      return { user, ...logFor(user) };
+    },
+    async createUser({ email, firstName, lastName, nickname }) {
+      needAdmin();
+      const clean = checkAdminEmail(email);
+      if (bannedWord(`${firstName} ${lastName} ${nickname ?? ''}`, state.admin.terms))
+        throw fail(400, 'NAME_NOT_ALLOWED', 'Please choose a different name.');
+      const user = {
+        id: state.admin.nextId++,
+        email: clean,
+        firstName,
+        lastName,
+        nickname: nickname || null,
+        displayName: nickname || `${firstName} ${lastName.charAt(0)}.`,
+        role: 'student',
+        status: 'active',
+        statusReason: null,
+        reported: false,
+        reportReason: null,
+        teamId: null,
+        teamName: null,
+        totalPoints: 0,
+        questsPassed: 0,
+        createdAt: new Date().toISOString(),
+        lastLoginAt: null,
+      };
+      state.admin.users.unshift(user);
+      save();
+      return { user };
+    },
+    async updateUser(id, patch) {
+      needAdmin();
+      const user = adminUser(id);
+      if (patch.email !== undefined) user.email = checkAdminEmail(patch.email, user.id);
+      for (const key of ['firstName', 'lastName']) if (patch[key]) user[key] = patch[key];
+      if (patch.nickname !== undefined) user.nickname = patch.nickname || null;
+      if (
+        bannedWord(`${user.firstName} ${user.lastName} ${user.nickname ?? ''}`, state.admin.terms)
+      )
+        throw fail(400, 'NAME_NOT_ALLOWED', 'Please choose a different name.');
+      save();
+      return { user };
+    },
+    async setStatus(id, status, reason) {
+      needAdmin();
+      const user = adminUser(id);
+      user.status = status;
+      user.statusReason = status === 'active' ? null : (reason ?? null);
+      save();
+      return { user };
+    },
+    async report(id, reason) {
+      needAdmin();
+      const user = adminUser(id);
+      user.reported = true;
+      user.reportReason = reason;
+      save();
+      return { user };
+    },
+    async clearReport(id) {
+      needAdmin();
+      const user = adminUser(id);
+      user.reported = false;
+      user.reportReason = null;
+      save();
+      return { user };
+    },
+    async forceLogout(id) {
+      needAdmin();
+      adminUser(id);
+      return null;
+    },
+    async deleteUser(id) {
+      needAdmin();
+      const user = adminUser(id);
+      user.status = 'deleted';
+      user.email = `deleted-${user.id}@deleted.invalid`;
+      user.firstName = 'Deleted';
+      user.lastName = 'User';
+      user.nickname = null;
+      user.teamName = null;
+      save();
+      return null;
+    },
+    async teams() {
+      needAdmin();
+      return {
+        teams: state.admin.teams.map((t) => ({
+          id: t.id,
+          name: t.name,
+          score: t.score,
+          size: t.members.length,
+          createdAt: new Date().toISOString(),
+          members: t.members.map((m) => ({ id: m, displayName: adminUser(m).displayName })),
+        })),
+      };
+    },
+    async renameTeam(id, name) {
+      needAdmin();
+      if (bannedWord(name, state.admin.terms))
+        throw fail(400, 'NAME_NOT_ALLOWED', 'Please choose a different name.');
+      state.admin.teams.find((t) => t.id === Number(id)).name = name;
+      save();
+      return null;
+    },
+    async removeMember(teamId, studentId) {
+      needAdmin();
+      const team = state.admin.teams.find((t) => t.id === Number(teamId));
+      team.members = team.members.filter((m) => m !== Number(studentId));
+      save();
+      return null;
+    },
+    async deleteTeam(id) {
+      needAdmin();
+      state.admin.teams = state.admin.teams.filter((t) => t.id !== Number(id));
+      save();
+      return null;
+    },
+    async names() {
+      needAdmin();
+      return {
+        builtIn: { substring: BANNED_SUBSTRING, token: BANNED_TOKEN },
+        custom: state.admin.terms.map((term) => ({ term, mode: 'token' })),
+      };
+    },
+    async addTerm(term) {
+      needAdmin();
+      if (!state.admin.terms.includes(term)) state.admin.terms.push(term.toLowerCase());
+      save();
+      return null;
+    },
+    async removeTerm(term) {
+      needAdmin();
+      state.admin.terms = state.admin.terms.filter((x) => x !== term);
+      save();
+      return null;
+    },
+    async testName(text) {
+      needAdmin();
+      return { blockedBy: bannedWord(text, state.admin.terms) };
+    },
+  };
+
+  /** Every method answers after a short delay and returns a copy, like a real network call. */
+  const wrap = (group) =>
+    new Proxy(group, {
+      get(target, name) {
+        const entry = target[name];
+        if (entry && typeof entry === 'object') return wrap(entry);
+        if (typeof entry !== 'function') return undefined;
+        return async (...args) => {
+          await wait();
+          return copy(await entry(...args));
+        };
+      },
+    });
+  return wrap(methods);
 }

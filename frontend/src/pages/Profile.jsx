@@ -96,6 +96,8 @@ export default function Profile() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [confirm, setConfirm] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const fileInput = useRef(null);
 
   useEffect(() => {
@@ -156,6 +158,21 @@ export default function Profile() {
     setConfirm(false);
     await logout();
     navigate('/', { replace: true });
+  };
+
+  const removeAccount = async () => {
+    setDeleting(true);
+    try {
+      await api.deleteAccount();
+      setConfirmDelete(false);
+      await logout();
+      navigate('/', { replace: true });
+    } catch (failure) {
+      setConfirmDelete(false);
+      setError(errorText(failure));
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
@@ -243,15 +260,53 @@ export default function Profile() {
         </div>
         <div className="stack">
           <Preferences />
+          {student.role === 'admin' && (
+            <Button to="/admin" variant="dark">
+              <Icon name="compass" /> {t('Admin area')}
+            </Button>
+          )}
           <Button onClick={() => setConfirm(true)}>
             <Icon name="logout" /> {t('Sign out')}
           </Button>
+          {student.role !== 'admin' && (
+            <section className="card stack danger-zone" aria-labelledby="danger-h">
+              <Display as="h2" size="h3" id="danger-h">
+                {t('Delete my account')}
+              </Display>
+              <p className="small muted">
+                {t(
+                  'This removes your name, picture and e-mail from the game and takes you out of your team. It cannot be undone.',
+                )}
+              </p>
+              <Button small variant="ghost" onClick={() => setConfirmDelete(true)}>
+                {t('Delete my account')}
+              </Button>
+            </section>
+          )}
           <div className="profile__logo">
             <Logo height={40} />
           </div>
         </div>
       </div>
 
+      {confirmDelete && (
+        <Modal title={t('Confirm account deletion')} onClose={() => setConfirmDelete(false)}>
+          <Display as="h2" size="h2">
+            {t('Delete your account?')}
+          </Display>
+          <p className="muted mt-s">
+            {t('Your points and quests disappear from the rankings. You can sign up again later.')}
+          </p>
+          <div className="grid2 mt">
+            <Button small variant="ghost" onClick={() => setConfirmDelete(false)} data-autofocus>
+              {t('Keep my account')}
+            </Button>
+            <Button small busy={deleting} onClick={removeAccount}>
+              {t('Yes, delete it')}
+            </Button>
+          </div>
+        </Modal>
+      )}
       {confirm && (
         <Modal title={t('Confirm sign out')} onClose={() => setConfirm(false)}>
           <Display as="h2" size="h2">

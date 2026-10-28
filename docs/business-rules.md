@@ -2,7 +2,7 @@
 
 ## 0. Purpose, scope and how to read this file
 
-This file is the single source of truth for the behaviour of the Campus & City Quest pilot: a mobile web app in which incoming international students verify their live location at 8 campus checkpoints and then take a short multiple-choice quiz. It is derived from the team's newest Main Project Document, which overrides every earlier idea. Not part of this pilot: the old 30-second leave rule, the old 5 checkpoints, old point values, duo and nationality leaderboards, city locators, native apps, NFC, any admin UI.
+This file is the single source of truth for the behaviour of the Campus & City Quest pilot: a mobile web app in which incoming international students verify their live location at 8 campus checkpoints and then take a short multiple-choice quiz. It is derived from the team's newest Main Project Document, which overrides every earlier idea. Not part of this pilot: the old 30-second leave rule, the old 5 checkpoints, old point values, duo and nationality leaderboards, city locators, native apps, NFC. (A small admin area was added as a proposal, see section 9.)
 
 Conventions:
 
@@ -22,9 +22,9 @@ Conventions:
 | BR04 | A solo leaderboard ranks individual users by their total points. A team leaderboard ranks teams by the average of the total points of all their members. Users who are not in a team cannot view the team leaderboard. Fractional points of users and teams are rounded up. |
 | BR05 | A team has 1 to 5 members. Only teams with at least 2 members take part in the team leaderboard. Each user can belong to one and only one team (read as "never more than one team", see R-40). Users can create teams; a team must have a name and may have a profile picture. |
 | BR06 | A user can invite another user to their team by e-mail address. The invited user can accept or reject the invitation in the web app. A rejected invitation automatically becomes invalid. An invitation to a team that is already full cannot be accepted and becomes invalid. Invitations expire after 24 hours and become invalid. A user who is already in a team cannot be invited to a team. |
-| BR07 | The pilot has eight checkpoints: Mensa, Library, CAS Cafe, Campus Garden, Care.box and Shop.box, Building B, Building C, Containers. |
+| BR07 | The pilot has eight checkpoints: Mensa, Library, CAS Cafe, Campus Garden, Care.box and Shop.box, Building B, Building C, Sensoricum. |
 | BR08 | Each checkpoint has a unique name, GPS coordinates, a positive geofence radius and an active/inactive status (`is_active`). Only active checkpoints can unlock quizzes. |
-| BR09 | Each checkpoint attempt randomly selects 3 or 5 distinct questions from the checkpoint's question bank, depending on the checkpoint (larger areas such as Library, Mensa, Building B and Building C use 5; Containers uses 3). The bank should contain at least 2 times as many normal questions and 3 times as many hard questions as are in play. A new attempt makes a fresh random selection; questions from earlier attempts may appear again. |
+| BR09 | Each checkpoint attempt randomly selects 3 or 5 distinct questions from the checkpoint's question bank, depending on the checkpoint (larger areas such as Library, Mensa, Building B and Building C use 5; Sensoricum uses 3). The bank should contain at least 2 times as many normal questions and 3 times as many hard questions as are in play. A new attempt makes a fresh random selection; questions from earlier attempts may appear again. |
 | BR10 | Each question belongs to exactly one checkpoint and has four answer options, exactly one of which is correct. |
 | BR11 | Questions, options, answer keys and point values are maintained in the database and can be changed without changing backend code. |
 | BR12 | Location verification is required when starting each checkpoint attempt. Poor GPS accuracy or denied permission requires another check and does not consume an attempt or start the timer. Leaving the geofence afterwards does not end the attempt and does not block submissions. |
@@ -57,7 +57,7 @@ Question counts per checkpoint (source table, `n` = number of questions per atte
 | Checkpoint | Normal questions drawn | Hard questions drawn | n |
 |---|---|---|---|
 | Mensa, Building B, Building C, Library | 5 (attempt 1 may swap the fifth for a hard one: 4 normal + 1 hard) | 0 or 1 | 5 |
-| Containers, CAS Cafe, Care.box and Shop.box, Campus Garden | 3 | 0 | 3 |
+| Sensoricum, CAS Cafe, Care.box and Shop.box, Campus Garden | 3 | 0 | 3 |
 
 ## 2. Resolutions of ambiguities
 
@@ -101,7 +101,7 @@ For a **failed** attempt: `time_bonus = 0`, `full_clear = 0`, `points_exact = 0`
 
 **R-11 Meaning of "first selection" in BR20 [Assumption].** Because BR14 allows no retries, every selection is the first and only one. So "answered the first four questions correctly on the first selection" simply means: questions 1 to 4 were all answered correctly. The words "first selection" add no further condition.
 
-**R-12 Which checkpoints can offer a hard question [Assumption, from the source table].** Only the checkpoints with `question_count = 5`: Mensa, Library, Building B, Building C. The four 3-question checkpoints (Containers, CAS Cafe, Care.box and Shop.box, Campus Garden) never offer one.
+**R-12 Which checkpoints can offer a hard question [Assumption, from the source table].** Only the checkpoints with `question_count = 5`: Mensa, Library, Building B, Building C. The four 3-question checkpoints (Sensoricum, CAS Cafe, Care.box and Shop.box, Campus Garden) never offer one.
 
 **R-13 Hard-question rules [Source + Assumption].**
 1. Eligibility is checked when the answer to question 4 is accepted: attempt number is 1, the checkpoint can offer hard questions (R-12), questions 1 to 4 are all correct, and the attempt is still active. If so, `Attempt.hard_unlocked` becomes true and the offer is persisted (BR25).
@@ -129,7 +129,7 @@ For a **failed** attempt: `time_bonus = 0`, `full_clear = 0`, `points_exact = 0`
 | Checkpoint kind | Normal | Hard |
 |---|---|---|
 | 5-question (Mensa, Library, Building B, Building C) | 10 (2 x 5) | 3 (3 x 1) |
-| 3-question (Containers, CAS Cafe, Care.box and Shop.box, Campus Garden) | 6 (2 x 3) | 0 |
+| 3-question (Sensoricum, CAS Cafe, Care.box and Shop.box, Campus Garden) | 6 (2 x 3) | 0 |
 
 The source template has 8 normal rows for Building B, Building C and Library, and 3 visible normal rows for Mensa. This is below 10. The reading "4 normal in play" would give 8, but a draw without a hard question uses 5 normal questions, so the safer minimum of 10 is used. **Action:** add at least 2 normal questions to each of those 4 banks (Mensa: fill all rows to 10). The minimum is enforced **when loading seed data**: the seed validation (`docs/data-model.md` section 4) refuses to load a checkpoint as active when its bank is below the minimum. It is **not** a second runtime gate: BR08 alone (`is_active`) decides whether a checkpoint unlocks quizzes. The only runtime check is technical: if fewer than `n` active normal questions exist, a draw of `n` distinct questions is impossible and the server answers `DRAW_IMPOSSIBLE` (a configuration fault to be fixed, not a rule). The Mensa staircase sample question is unverified and must not be loaded as is (OP-09).
 
@@ -139,11 +139,11 @@ The source template has 8 normal rows for Building B, Building C and Library, an
 
 **R-19 Attempt numbering and what uses up an attempt [Source + Assumption].** `attempt_number = 1 + (number of earlier attempt rows of this student for this checkpoint)`. An attempt row exists only after a successful location check and a start, so location failures never use an attempt (BR12). Every started attempt that ends without a pass (wrong answers, expiry, abandonment) is `failed` and used up. An attempt that was abandoned (phone closed) keeps running on the server and expires at `expires_at`.
 
-**R-20 Checkpoint already completed or inactive [Source + Assumption].** The server refuses to check location or to start an attempt when the student already has a `passed` attempt for the checkpoint (error `CHECKPOINT_COMPLETED`) or when the checkpoint is inactive (`CHECKPOINT_INACTIVE`). These checks happen before any location data is processed. Deactivating a checkpoint does not interrupt attempts already running; they finish normally.
+**R-20 Checkpoint already completed or inactive [Source + Assumption].** The server refuses to check location or to start an attempt when the student already has a `passed` attempt for the checkpoint (error `ALREADY_COMPLETED`) or when the checkpoint is inactive (`NOT_AVAILABLE`). These checks happen before any location data is processed. Deactivating a checkpoint does not interrupt attempts already running; they finish normally.
 
 **R-21 One active attempt per student, and resume [Assumption, requested in the data model].** A student can have at most one attempt in status `active`.
 1. Before any check, the server first finalises an active attempt of the student whose `expires_at` has passed (lazy expiry, R-22).
-2. While an attempt is `active`, a **location check** and a **start** (for any checkpoint, including the one of the running attempt) are refused with `ACTIVE_ATTEMPT_EXISTS`. The error body carries the running attempt's id, so the client can resume it.
+2. While an attempt is `active`, a verify call for the **same** checkpoint returns that attempt unchanged (resume, BR25, no location needed); a verify call for **another** checkpoint is refused with `ACTIVE_ATTEMPT_EXISTS`. The error body carries the running attempt's id, so the client can resume it.
 3. **Resume** is a separate read-only operation, "get my active attempt". It needs only a valid session; it needs **no** location check and no verified check (G6 does not apply). It returns the running attempt as described in section 4.4, or "none". The attempt must belong to the caller. Resume writes nothing except the lazy finalisation of point 1.
 4. This is the path for a student whose phone died or who logged in again: log in, call resume, continue. BR12 asks for location verification only "when starting" an attempt, so resuming does not repeat it.
 
@@ -226,21 +226,23 @@ An accept request on an expired invitation first marks it `expired`, then fails.
 
 ### 2.5 Location verification
 
-**R-60 Outcomes [Source + Assumption].** The student sends one location sample per check (latitude, longitude, accuracy in metres) for one checkpoint. The server computes the great-circle distance to the checkpoint centre.
+**R-60 Outcomes [Source + Main Project Document, Geofencing].** The student sends one location reading per tap (latitude, longitude, accuracy in metres, age of the reading in ms) for one checkpoint. The server checks freshness, then accuracy, then the great-circle (Haversine) distance to the checkpoint centre.
 
 | Outcome returned to the client | Condition | Consumes attempt | Starts timer | Stored in the database |
 |---|---|---|---|---|
-| `verified` | accuracy at most the accuracy limit AND distance at most the radius | no | no | one row: `inside_radius = true` + time |
-| `outside_radius` | accuracy within the limit but distance above the radius | no | no | one row: `inside_radius = false` + time |
-| `poor_accuracy` | accuracy above the limit (decided before distance) | no | no | nothing |
-| `permission_denied` | the browser reports permission denied (client reports it) | no | no | nothing |
-| `unavailable` | timeout, position unavailable or no Geolocation support (client reports it) | no | no | nothing |
+| `OK` (unlock) | reading at most 30 s old, accuracy at most the limit, distance at most the radius | yes (the attempt is created) | yes | one row: `inside_radius = true` + time, linked to the attempt |
+| `OUTSIDE` | fresh and precise, but distance above the radius (rounded distance returned) | no | no | one row: `inside_radius = false` + time |
+| `OUTSIDE` with `elsewhere` | inside this circle, but another active checkpoint whose circle also contains the reading has a nearer centre (overlapping circles, for example Building C and Sensoricum) | no | no | one row: `inside_radius = false` + time |
+| `ACCURACY_TOO_LOW` | accuracy above the limit | no | no | nothing |
+| `STALE_POSITION` | reading older than 30 s (or from the future) | no | no | nothing |
+| permission denied | the browser reports it (client only, nothing is sent) | no | no | nothing |
+| unavailable | timeout, no position or no Geolocation support (client only) | no | no | nothing |
 
-The database therefore holds exactly what the binding decision allows: "inside radius yes/no" with a timestamp (plus the student and checkpoint it belongs to). The three failure outcomes without a distance decision are answered to the client and leave no location record. Any failure simply allows another check; there is no cooldown beyond rate limiting (R-62). Only `verified` allows a start.
+The database therefore holds exactly what the binding decision allows: "inside radius yes/no" with a timestamp (plus the student and checkpoint it belongs to). Failures without a distance decision leave no location record. Any failure simply allows another tap; there is no cooldown beyond rate limiting (R-62).
 
 **R-61 Accuracy limit [Proposal].** 50 metres, held in configuration (not hard-coded). The distance rule uses the reported position only; the accuracy is not added to the radius. A radius smaller than the accuracy limit makes the zone looser than intended; coordinates and radii come from the separate geofencing document (OP-10, OP-22).
 
-**R-62 Start gate [Proposal].** A `verified` result authorises exactly one attempt start for that student and checkpoint, within 5 minutes (configurable). After that, or after use, a new check is needed. This keeps verification tied to "when starting each attempt" (BR12) and leaves room for the info page. Rate limit: at most 10 location checks per student per 10 minutes, counted by a counter that holds no outcome and no location (for example an in-memory or cache counter keyed by student id).
+**R-62 Start gate [Main Project Document, Geofencing 6.2].** Verification and start are one call: a fresh reading inside the circle creates the attempt at once, so the timer starts at the moment of verification (BR12, BR13). The read-first info page comes **before** the check, so reading never costs quiz time. Rate limit: at most 10 verify calls per student per minute, counted by an in-memory counter keyed by student id that holds no outcome and no location.
 
 **R-63 What the server stores [Source].** Only "inside radius yes/no" plus a timestamp, the student and the checkpoint (DM-P10). Raw coordinates, the accuracy value, the client's timestamp and failure reasons are used in memory for the decision and then discarded. Location rows are deleted after 7 days (proposal). Location consent is recorded once (DM-P4). The consent screen appears before the browser's own permission prompt; without consent no check is possible.
 
@@ -294,7 +296,7 @@ Each example gives the raw sum, the multiplier and the final value. "Remaining" 
 | 1 | Library, attempt 1, questions 1 to 4 correct, hard offered and declined, normal question 5 correct. Last answer after 179.4 s of 300 s: 120.6 s left, so 120 whole seconds | base 5 x 1000 = 5000; Full Clear 200; time 120; raw 5000 + 200 + 120 = 5320; x 100% | **5320** |
 | 2 | Mensa, attempt 1, questions 1 to 4 correct, hard accepted and correct, 90 s left | base 4 x 1000 + 2000 = 6000; Full Clear 200; time 90; raw 6290; x 100% | **6290** |
 | 3 | Building B, attempt 1, questions 1 to 4 correct, hard accepted and wrong, 150 s left (passed 4/5) | base 4 x 1000 = 4000; hard 0; Full Clear 0; time 150; raw 4150; x 100% | **4150** |
-| 4 | Containers (3 questions), attempt 1, 2 of 3 correct, 100 s left (passed 2/3) | base 2 x 1000 = 2000; Full Clear 0; time 100; raw 2100; x 100% | **2100** |
+| 4 | Sensoricum (3 questions), attempt 1, 2 of 3 correct, 100 s left (passed 2/3) | base 2 x 1000 = 2000; Full Clear 0; time 100; raw 2100; x 100% | **2100** |
 | 5 | CAS Cafe (3 questions), attempt 2, 3 of 3 correct, 60 s left. Multiplier after bonuses | base 3000; Full Clear 200; time 60; raw 3260; 3260 x 85 = 277,100; 277,100 / 100 = 2771.00 | **2771** (wrong order, multiplier before bonuses: 3000 x 0.85 + 200 + 60 = 2810) |
 | 6 | Library, attempt 5, 4 of 5 correct (all normal), 45 s left | base 4000; Full Clear 0; time 45; raw 4045; 4045 x 40 = 161,800; / 100 = 1618.00 | **1618** |
 | 7 | Building C, attempt 6, 5 of 5 correct, 200 s left | base 5000; Full Clear 200; time 200; raw 5400; x 0% = 0 | **0**; attempt `passed`, checkpoint completed, `total_points` unchanged |
@@ -350,11 +352,11 @@ Note: from HardOffered the attempt always ends passed, because 4 correct answers
 | Guard | Condition | Error if violated |
 |---|---|---|
 | G1 | Session valid (R-35) | 401 |
-| G2 | Checkpoint exists and `is_active = true` | `CHECKPOINT_INACTIVE` (409) |
-| G3 | Student has no `passed` attempt for it (BR23) | `CHECKPOINT_COMPLETED` (409) |
-| G4 | Student has no active attempt after lazy expiry (R-21); this applies to location check and start, **not** to resume | `ACTIVE_ATTEMPT_EXISTS` (409, body names the running attempt) |
+| G2 | Checkpoint exists and `is_active = true` | `NOT_AVAILABLE` (404) |
+| G3 | Student has no `passed` attempt for it (BR23) | `ALREADY_COMPLETED` (409) |
+| G4 | Student has no active attempt at another checkpoint after lazy expiry (R-21); a running attempt at the same checkpoint is resumed instead | `ACTIVE_ATTEMPT_EXISTS` (409, body names the running attempt) |
 | G5 | Location consent given (R-63) | `CONSENT_REQUIRED` (403) |
-| G6 | An unused check with `inside_radius = true` exists for this student and checkpoint, at most 5 minutes old | `LOCATION_NOT_VERIFIED` (409) |
+| G6 | The reading is at most 30 s old, accuracy <= 50 m, and inside the radius (Haversine) | `STALE_POSITION` (422), `ACCURACY_TOO_LOW` (422), or `OUTSIDE` with the rounded distance (200) |
 | G7 | For answers: attempt belongs to the student, status `active`, `now < expires_at`, the question number is the next unanswered one, the option belongs to that question | `ATTEMPT_NOT_ACTIVE`, `ATTEMPT_EXPIRED`, `WRONG_QUESTION`, `ALREADY_ANSWERED`, `INVALID_OPTION` (409 / 400); an attempt of another student returns 404 |
 | G8 | For the hard replacement: `hard_unlocked`, slot 5 unanswered, not yet replaced, `now < expires_at` | `HARD_NOT_AVAILABLE` (409) |
 
@@ -364,8 +366,8 @@ Technical fault (not a guard): if a start cannot draw `n` distinct active normal
 
 | Transition | Guards | Writes (one transaction each) |
 |---|---|---|
-| Location check | G1, G2, G3, G4, G5 | If a distance decision is made (accuracy within the limit): insert `Location_Check` (student, checkpoint, `inside_radius`, time). Otherwise nothing. No coordinates. |
-| Start | G1 to G6 | Lock the student row. Insert `Attempt`: `attempt_number` per R-19, `start_time = now`, `expires_at = now + n minutes`, `status = 'active'`, `hard_unlocked = false`, bonuses 0, `points_earned` 0. Insert `n` `Attempt_Question` rows with randomly drawn distinct questions (R-17). Mark the check as used by this attempt. A concurrent duplicate start fails on the unique indexes and returns `ACTIVE_ATTEMPT_EXISTS` with the existing attempt. |
+| Verify, outside | G1 to G5, G6 fails on distance | Insert `Location_Check` (student, checkpoint, `inside_radius = false`, time). No coordinates. Stale or imprecise readings write nothing. |
+| Verify, inside (unlock) | G1 to G6 | Lock the student row. Insert `Attempt`: `attempt_number` per R-19, `start_time = now`, `expires_at = now + n minutes`, `status = 'active'`, `hard_unlocked = false`, bonuses 0, `points_earned` 0. Insert `n` `Attempt_Question` rows with randomly drawn distinct questions (R-17). Insert `Location_Check` (`inside_radius = true`) linked to this attempt. A concurrent duplicate tap fails on the unique indexes and gets the winning attempt back. |
 | Resume | G1, attempt belongs to the caller | Lazy finalisation of an expired attempt only. Otherwise read-only: returns the attempt state (section 4.4). Needs no location check and no verified check. |
 | Answer, not last | G7 | Set `selected_option_id` and `answered_at = now` on the slot. Return correctness (and the right option if wrong). If this was question 4 and questions 1 to 4 are all correct and attempt is 1 and the checkpoint can offer a hard question: set `hard_unlocked = true`. |
 | Accept hard | G7 timing, G8 | In slot 5 set `question_id` to a random active hard question of the checkpoint and record the replaced question id (DM-P9). |
@@ -476,10 +478,10 @@ The numbered items below must be confirmed with the client or lecturer. "TBC" me
 | 7 | Answer at `expires_at - 1 ms` and at `expires_at` | First accepted, second refused |
 | 8 | Answer question 3 before question 2 | `WRONG_QUESTION` |
 | 9 | Same answer posted twice | Second refused, data unchanged |
-| 10 | Q1 to Q4 correct on attempt 1 at Library; same on attempt 2 | Hard offered once; never on attempt 2 or at Containers |
+| 10 | Q1 to Q4 correct on attempt 1 at Library; same on attempt 2 | Hard offered once; never on attempt 2 or at Sensoricum |
 | 11 | Hard accepted, answered wrong | Passed, `full_clear_bonus = 0`, hard question 0 points |
 | 12 | Refresh mid-quiz and after hard acceptance | Same questions, order, answers and offer state |
-| 13 | Pass checkpoint, then try to start it again | `CHECKPOINT_COMPLETED` |
+| 13 | Pass checkpoint, then try to start it again | `ALREADY_COMPLETED` |
 | 14 | Attempt 6 passed | `points_earned = 0`, checkpoint completed |
 | 15 | Two clients start an attempt at the same time | One active attempt |
 | 16 | Two invitees accept the last free place at the same time | One succeeds; the other invitation `invalid`; team size 5 |
@@ -492,3 +494,20 @@ The numbered items below must be confirmed with the client or lecturer. "TBC" me
 | 23 | Active attempt exists; student logs in again and calls resume; also calls location check or start | Resume returns the attempt with no location check; location check and start return `ACTIVE_ATTEMPT_EXISTS` |
 | 24 | Two passed attempts with exact sums 343,145 and 175,525 | `total_points = 5187`, not 5188 |
 | 25 | Checkpoint `is_active = true` with a bank below the 2x minimum, enough questions to draw | Quiz starts; seeding that bank as active would have failed validation |
+
+## 9. Proposals added on 2026-10-27 (need the team's approval)
+
+These rules were requested by the project manager after the pilot rules were written. They are **[Proposal]** until the team agrees; the code and tests already follow them (test names carry the BR number). Yuri's backend rewrite must keep them.
+
+| Rule | Text |
+|---|---|
+| **BR26 Admin role** | One configured school address (`ADMIN_EMAIL`, default `sekretariat.dski@heilbronn.dhbw.de`) logs in with the normal OTP flow and receives the role `admin`. Only admins reach `/api/admin/*` and the `/admin` pages. Admin accounts cannot be blocked, archived or deleted through the web area, and never appear in the leaderboards. |
+| **BR27 Name rules** | Nicknames, first and last names and team names may not contain a banned word in German or English. Whole words are compared, so harmless names that contain a banned word (Cass, Classic) stay allowed. The list is in `docs/banned-terms.md`; admins may add words. |
+| **BR28 Account status** | An account is `active`, `blocked`, `archived` or `deleted`. Only `active` accounts can log in, hold a session, appear in the leaderboards or be invited. Blocking or archiving ends all sessions at once. An admin may also **report** an account (flag with a reason) without blocking it. Login of a blocked or archived account fails with `ACCOUNT_UNAVAILABLE` after the code was entered correctly. |
+| **BR29 Audit log** | Logins, logouts, forced logouts, account changes, status changes and account deletion are written to `audit_events` (no e-mail addresses, codes, tokens or coordinates). The admin user page shows sessions, quests (attempts) and this log. |
+| **BR30 Delete my account** | Every non-admin user may delete their own account. In one transaction: the user leaves their team (the team score is recomputed; an empty team is deleted), open invitations become invalid, all sessions end, and the name, nickname, picture, avatar, consent and e-mail are overwritten (`deleted-<id>@deleted.invalid`). Attempts stay for consistency but the account appears nowhere. The e-mail address is free for a new sign-up. This is the only way to leave a team in the pilot (see R-41). |
+| **BR31 One e-mail, one account** | `students.email` is unique (normalised: trimmed, lower case). Sign-up, admin create and admin edit all refuse an address that already belongs to an account (`EMAIL_TAKEN`). Archived and blocked accounts keep their address reserved. |
+| **BR32 Invitation limit** | Members plus open (pending, unexpired) invitations of a team may never exceed 5. A sixth is refused with `TEAM_FULL`. The check only looks at the inviter's own team, so it tells nothing about the invitee (R-43 stays valid: the reply for an unknown, taken or ineligible address is still the generic message, and no invitation is created). Open invitations count as occupied slots and are shown to the team as "Invite pending" with their remaining time. |
+| **BR33 Route helper (client only)** | On request, the app may draw a walking route from the device position to a checkpoint (OpenStreetMap foot router). The position is read in the browser for that tap only and is **never sent to the server or logged**. It does not replace the server-side location check of BR12. |
+| **BR34 Map limits** | The map cannot be panned or zoomed out beyond the Heilbronn area (about 6 km by 7 km around the Bildungscampus). |
+| **BR35 Region lock** | Not implemented. A lock to a 150 km radius around Heilbronn was considered and dropped by the project manager. |

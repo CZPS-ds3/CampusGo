@@ -5,11 +5,16 @@ import express from 'express';
 import helmet from 'helmet';
 import multer from 'multer';
 import { z } from 'zod';
+import { requireAdmin } from './middleware/admin.js';
 import { SESSION_COOKIE, requireAuth, sessionCookieOptions } from './middleware/auth.js';
 import { AppError, errorHandler, handle, notFound } from './middleware/errors.js';
 import { createLimiters } from './middleware/rate-limit.js';
+import { requireSameOrigin } from './middleware/same-origin.js';
+import { createAccountService } from './services/account.js';
+import { createAdminService } from './services/admin.js';
 import { GENERIC_OTP_MESSAGE, createAuthService, publicStudent } from './services/auth.js';
 import { createLeaderboardService } from './services/leaderboards.js';
+import { createNameRules } from './services/name-rules.js';
 import { storeProfilePicture } from './services/pictures.js';
 import { createQuizService } from './services/quiz.js';
 import { GENERIC_INVITE_MESSAGE, createTeamService } from './services/teams.js';
@@ -27,15 +32,47 @@ const schemas = {
     nickname: z.string().trim().max(20).optional(),
     avatarPreset: z.number().int().min(0).max(5).optional(),
   }),
-  location: z.object({
-    latitude: z.number().min(-90).max(90),
-    longitude: z.number().min(-180).max(180),
-    accuracy: z.number().min(0).max(100000),
+  // One location reading (Main Project Document 6.2). Never logged or stored.
+  reading: z.object({
+    lat: z.number().finite().min(-90).max(90),
+    lng: z.number().finite().min(-180).max(180),
+    accuracy: z.number().finite().min(0).max(100000),
+    ageMs: z
+      .number()
+      .finite()
+      .max(24 * 3600 * 1000),
   }),
-  startAttempt: z.object({ checkpointId: id }),
   answer: z.object({ optionId: id, questionNumber: z.number().int().min(1).max(5).optional() }),
   team: z.object({ name: z.string().trim().min(2).max(30) }),
   invite: z.object({ email }),
+  adminUsers: z.object({
+    q: z.string().trim().max(80).optional(),
+    status: z.enum(['active', 'blocked', 'archived', 'deleted', 'reported']).optional(),
+    limit: z.coerce.number().int().min(1).max(200).optional(),
+    offset: z.coerce.number().int().min(0).optional(),
+  }),
+  adminCreate: z.object({
+    email,
+    firstName: name,
+    lastName: name,
+    nickname: z.string().trim().max(20).optional(),
+  }),
+  adminPatch: z.object({
+    email: email.optional(),
+    firstName: name.optional(),
+    lastName: name.optional(),
+    nickname: z.string().trim().max(20).optional(),
+  }),
+  adminStatus: z.object({
+    status: z.enum(['active', 'blocked', 'archived']),
+    reason: z.string().trim().max(200).optional(),
+  }),
+  adminReport: z.object({ reason: z.string().trim().min(1).max(200) }),
+  adminTerm: z.object({
+    term: z.string().trim().toLowerCase().min(2).max(60),
+    mode: z.enum(['substring', 'token']),
+  }),
+  adminTest: z.object({ text: z.string().max(200) }),
 };
 
 /**
@@ -44,9 +81,12 @@ const schemas = {
  */
 export function createApp({ pool, config, mailer, clock }) {
   const app = express();
-  const auth = createAuthService({ pool, config, mailer, clock });
+  const nameRules = createNameRules({ pool });
+  const auth = createAuthService({ pool, config, mailer, clock, nameRules });
   const quiz = createQuizService({ pool, config, clock });
-  const teams = createTeamService({ pool, config, clock });
+  const teams = createTeamService({ pool, config, clock, nameRules });
+  const accounts = createAccountService({ pool, clock });
+  const admin = createAdminService({ pool, config, clock, nameRules });
   const boards = createLeaderboardService({ pool });
   const limits = createLimiters(config);
   const needLogin = requireAuth(auth);
@@ -57,11 +97,12 @@ export function createApp({ pool, config, mailer, clock }) {
   const uploadDir = resolve(config.uploadDir);
 
   app.disable('x-powered-by');
-  app.set('trust proxy', 1);
+  app.set('trust proxy', config.trustProxy);
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
   app.use(cors({ origin: config.frontendOrigin, credentials: true }));
   app.use(express.json({ limit: '10kb' }));
   app.use(cookieParser());
+  app.use(requireSameOrigin(config.frontendOrigin));
   app.use('/uploads', express.static(uploadDir, { maxAge: '1h', index: false }));
 
   const api = express.Router();
@@ -102,7 +143,8 @@ export function createApp({ pool, config, mailer, clock }) {
       res.status(204).end();
     }),
   );
-  if (config.isDev) {
+  // Development only, and only while no real SMTP server is configured (codes are then kept in memory).
+  if (config.isDev && !config.smtp.host) {
     api.get('/dev/last-otp', (req, res) => {
       const mail = mailer.lastTo?.(
         String(req.query.email ?? '')
@@ -123,6 +165,17 @@ export function createApp({ pool, config, mailer, clock }) {
     handle(async (req, res) => {
       const rank = await boards.rankOf(req.student.total_points);
       res.json({ student: { ...publicStudent(req.student), rank } });
+    }),
+  );
+  api.delete(
+    '/me',
+    handle(async (req, res) => {
+      if (req.student.role === 'admin') {
+        throw new AppError(403, 'FORBIDDEN', 'Administrator accounts cannot be deleted here.');
+      }
+      await accounts.deleteAccount(req.student.student_id);
+      res.clearCookie(SESSION_COOKIE, { ...sessionCookieOptions(config), maxAge: undefined });
+      res.status(204).end();
     }),
   );
   api.post(
@@ -167,25 +220,18 @@ export function createApp({ pool, config, mailer, clock }) {
       res.json({ checkpoints: await quiz.listCheckpoints(req.student.student_id) }),
     ),
   );
+  // Geofence check and unlock in one call (Main Project Document 6.2, Figure 3).
   api.post(
-    '/checkpoints/:id/location-check',
-    limits.location,
+    '/checkpoints/:id/verify',
+    limits.verify,
     handle(async (req, res) => {
-      const outcome = await quiz.locationCheck(
-        req.student.student_id,
-        id.parse(req.params.id),
-        schemas.location.parse(req.body),
+      res.json(
+        await quiz.verifyAndStart(
+          req.student.student_id,
+          id.parse(req.params.id),
+          schemas.reading.parse(req.body),
+        ),
       );
-      res.json({ outcome });
-    }),
-  );
-  api.post(
-    '/attempts',
-    handle(async (req, res) => {
-      const body = schemas.startAttempt.parse(req.body);
-      res
-        .status(201)
-        .json({ attempt: await quiz.startAttempt(req.student.student_id, body.checkpointId) });
     }),
   );
   api.get(
@@ -287,9 +333,139 @@ export function createApp({ pool, config, mailer, clock }) {
     handle(async (req, res) => res.json(await boards.team(req.student.student_id))),
   );
 
+  // ----- admin area (needs the admin role) -----
+  const adminApi = express.Router();
+  adminApi.use(requireAdmin);
+  const actor = (req) => req.student.student_id;
+  adminApi.get(
+    '/overview',
+    handle(async (_req, res) => res.json(await admin.overview())),
+  );
+  adminApi.get(
+    '/users',
+    handle(async (req, res) =>
+      res.json({ users: await admin.listUsers(schemas.adminUsers.parse(req.query)) }),
+    ),
+  );
+  adminApi.post(
+    '/users',
+    handle(async (req, res) =>
+      res
+        .status(201)
+        .json({ user: await admin.createUser(actor(req), schemas.adminCreate.parse(req.body)) }),
+    ),
+  );
+  adminApi.get(
+    '/users/:id',
+    handle(async (req, res) => res.json(await admin.getUser(id.parse(req.params.id)))),
+  );
+  adminApi.patch(
+    '/users/:id',
+    handle(async (req, res) =>
+      res.json({
+        user: await admin.updateUser(
+          actor(req),
+          id.parse(req.params.id),
+          schemas.adminPatch.parse(req.body),
+        ),
+      }),
+    ),
+  );
+  adminApi.post(
+    '/users/:id/status',
+    handle(async (req, res) => {
+      const body = schemas.adminStatus.parse(req.body);
+      res.json({
+        user: await admin.setStatus(actor(req), id.parse(req.params.id), body.status, body.reason),
+      });
+    }),
+  );
+  adminApi.post(
+    '/users/:id/report',
+    handle(async (req, res) => {
+      const body = schemas.adminReport.parse(req.body);
+      res.json({ user: await admin.report(actor(req), id.parse(req.params.id), body.reason) });
+    }),
+  );
+  adminApi.delete(
+    '/users/:id/report',
+    handle(async (req, res) =>
+      res.json({ user: await admin.clearReport(actor(req), id.parse(req.params.id)) }),
+    ),
+  );
+  adminApi.post(
+    '/users/:id/logout',
+    handle(async (req, res) => {
+      await admin.forceLogout(actor(req), id.parse(req.params.id));
+      res.status(204).end();
+    }),
+  );
+  adminApi.delete(
+    '/users/:id',
+    handle(async (req, res) => {
+      await admin.deleteUser(actor(req), id.parse(req.params.id));
+      res.status(204).end();
+    }),
+  );
+  adminApi.get(
+    '/teams',
+    handle(async (_req, res) => res.json({ teams: await admin.listTeams() })),
+  );
+  adminApi.patch(
+    '/teams/:id',
+    handle(async (req, res) => {
+      await admin.renameTeam(
+        actor(req),
+        id.parse(req.params.id),
+        schemas.team.parse(req.body).name,
+      );
+      res.status(204).end();
+    }),
+  );
+  adminApi.delete(
+    '/teams/:id/members/:studentId',
+    handle(async (req, res) => {
+      await admin.removeMember(actor(req), id.parse(req.params.id), id.parse(req.params.studentId));
+      res.status(204).end();
+    }),
+  );
+  adminApi.delete(
+    '/teams/:id',
+    handle(async (req, res) => {
+      await admin.deleteTeam(actor(req), id.parse(req.params.id));
+      res.status(204).end();
+    }),
+  );
+  adminApi.get(
+    '/names',
+    handle(async (_req, res) => res.json(await admin.listTerms())),
+  );
+  adminApi.post(
+    '/names',
+    handle(async (req, res) => {
+      const body = schemas.adminTerm.parse(req.body);
+      await admin.addTerm(actor(req), body.term, body.mode);
+      res.status(204).end();
+    }),
+  );
+  adminApi.delete(
+    '/names/:term',
+    handle(async (req, res) => {
+      await admin.removeTerm(actor(req), String(req.params.term).toLowerCase());
+      res.status(204).end();
+    }),
+  );
+  adminApi.post(
+    '/names/test',
+    handle(async (req, res) =>
+      res.json(await admin.testName(schemas.adminTest.parse(req.body).text)),
+    ),
+  );
+  api.use('/admin', adminApi);
+
   api.use((_req, _res, next) => next(notFound('Unknown endpoint.')));
   app.use('/api', api);
   app.use(errorHandler(config));
 
-  return { app, services: { auth, quiz, teams, boards } };
+  return { app, services: { auth, quiz, teams, boards, admin, accounts } };
 }

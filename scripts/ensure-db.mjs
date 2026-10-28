@@ -1,5 +1,6 @@
 // Makes sure the MySQL container is running and the schema/seed data exist.
 //   node scripts/ensure-db.mjs           start MySQL, migrate + seed the dev database
+//   node scripts/ensure-db.mjs --demo    same, plus fictional demo players, teams and activity (development only)
 //   node scripts/ensure-db.mjs --test    start MySQL, migrate the test database
 //   node scripts/ensure-db.mjs --reset   drop the volume and start from scratch
 // Set SKIP_DOCKER=1 to use your own MySQL (DATABASE_URL in backend/.env).
@@ -36,4 +37,6 @@ const migrate = args.has('--test')
 if (run(migrate).status !== 0) fail('Migration failed.');
 if (!args.has('--test') && run('npm run seed --prefix backend').status !== 0)
   fail('Seeding failed.');
+if (args.has('--demo') && run('npm run seed:demo --prefix backend').status !== 0)
+  fail('Demo data failed.');
 console.log('[db] ready.');
