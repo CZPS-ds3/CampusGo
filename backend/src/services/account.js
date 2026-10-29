@@ -61,5 +61,34 @@ export function createAccountService({ pool, clock }) {
     });
   }
 
-  return { deleteAccount };
+  /**
+   * Administrators only (BR41): wipes the admin's own test attempts and points so that every quiz can be
+   * tried again. Nothing about it ever reaches a ranking, because administrators are in none.
+   */
+  async function resetTestPoints(studentId) {
+    const now = clock.now();
+    await withTransaction(pool, async (conn) => {
+      const [[student]] = await conn.query(
+        'SELECT role FROM students WHERE student_id = ? FOR UPDATE',
+        [studentId],
+      );
+      if (student?.role !== 'admin') {
+        throw new AppError(403, 'FORBIDDEN', 'Only administrators can reset their points.');
+      }
+      await conn.query(
+        `DELETE aq FROM attempt_questions aq JOIN attempts a ON a.attempt_id = aq.attempt_id
+         WHERE a.student_id = ?`,
+        [studentId],
+      );
+      await conn.query('DELETE FROM location_checks WHERE student_id = ?', [studentId]);
+      await conn.query('DELETE FROM attempts WHERE student_id = ?', [studentId]);
+      await conn.query(
+        'UPDATE students SET total_points = 0, points_exact_x100 = 0, points_updated_at = ? WHERE student_id = ?',
+        [at(now), studentId],
+      );
+      await recordEvent(conn, now, { studentId, type: 'points_reset' });
+    });
+  }
+
+  return { deleteAccount, resetTestPoints };
 }

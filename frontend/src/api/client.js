@@ -64,6 +64,7 @@ const realApi = {
   devLastOtp: (email) => request('GET', `/dev/last-otp?email=${encodeURIComponent(email)}`),
   me: () => request('GET', '/me'),
   deleteAccount: () => request('DELETE', '/me'),
+  resetPoints: () => post('/me/reset-points'),
   uploadPicture: (file) => {
     const form = new FormData();
     form.append('file', file);

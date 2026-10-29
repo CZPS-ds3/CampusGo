@@ -87,3 +87,47 @@ e2e-mock:
     expire_in: 1 week
     paths:
       - frontend/test-results/
+
+# Python tests: formatting and lint run on every pipeline, the stack tests are a manual job.
+python-lint:
+  stage: check
+  image: python:3.11
+  cache: {}
+  before_script:
+    - python -m pip install --quiet -r tests/requirements.txt
+  script:
+    - python -m black --check --config tests/pyproject.toml tests/conftest.py tests/python tests/regression
+    - python -m pylint --rcfile tests/.pylintrc tests/conftest.py tests/python tests/regression
+
+# Database, integration, security and regression tests through tests/run-all.mjs (restarts everything once on a failure).
+integration-tests:
+  stage: test
+  image: node:24-bookworm
+  when: manual
+  allow_failure: true
+  services:
+    - name: mysql:8.4
+      alias: mysql
+      command:
+        - --character-set-server=utf8mb4
+        - --collation-server=utf8mb4_0900_ai_ci
+        - --default-time-zone=+00:00
+  variables:
+    MYSQL_ROOT_PASSWORD: cq_root_ci_password
+    MYSQL_DATABASE: campusquest_test
+    MYSQL_USER: cq
+    MYSQL_PASSWORD: cq_dev_password
+    TEST_DATABASE_URL: mysql://cq:cq_dev_password@mysql:3306/campusquest_test
+  before_script:
+    - npm ci --cache .npm --prefer-offline --no-audit --no-fund
+    - apt-get update -qq && apt-get install -y -qq python3-venv python3-pip
+    - python3 -m venv .venv
+    - . .venv/bin/activate && pip install --quiet -r tests/requirements.txt
+  script:
+    - . .venv/bin/activate && node tests/run-all.mjs --ci --only python-unit,node-config,python-db,python-api,python-security,regression
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths:
+      - tests/reports/summary.json
+      - tests/reports/api.log

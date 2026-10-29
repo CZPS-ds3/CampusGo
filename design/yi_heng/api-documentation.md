@@ -62,6 +62,14 @@ Status codes: 400 invalid input · 401 no valid session · 403 not allowed · 40
 
 `GET /teams/me` pending entries are now `{ expiresAt, invitedEmail \| null, displayName }`. `POST /checkpoints/:id/verify` and `GET /checkpoints` behave differently for admins (BR38): all checkpoints are listed and any quiz starts without a location.
 
+## Admin points and team ranking (BR41 to BR43)
+
+| Endpoint | Body | Result |
+|---|---|---|
+| `POST /me/reset-points` | none | `200 { totalPoints: 0 }`; `403 FORBIDDEN` for students. Deletes the admin's own attempts, answers and location checks. |
+
+`GET /me` returns `rank: null` for admins. The `result` object of `GET /attempts/:id/result` has `rankBefore` and `rankAfter` (both `null` for admins) and, for a student in a ranked team, `team: { teamName, teamScoreBefore, teamScoreAfter, teamRankBefore, teamRankAfter }` (otherwise `team: null`; admins get no `team` field). `GET /teams/me` adds `ranked` (two active students, no admin) and `hasAdmin`.
+
 ## Account deletion (BR30)
 
 | Endpoint | Body | Result |

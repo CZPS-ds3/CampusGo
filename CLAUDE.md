@@ -18,7 +18,7 @@ Key rules in short (read the file before implementing):
 - **Scoring (BR14, 16-21):** normal 1,000, hard 2,000, time bonus 1 per whole remaining second, full clear 200, attempt multipliers 100/85/70/55/40/0 % applied after bonuses, hard-question option only on attempt 1 of the 4 large checkpoints, fractions rounded up. **Points, bonuses and multipliers are read from database tables (BR11), never hard-coded.**
 - **Server authority (BR22):** answers and submissions are accepted only while the attempt is active and before it expires, judged on the server clock. Never trust the client for time, location or correctness.
 - **Leaderboards (BR04, 24):** solo (total points) and team; equal scores share a rank, earlier achiever listed first.
-- Not in scope: city locators, Google Maps, native apps, NFC/student cards, duo/nationality leaderboards. A small admin area (BR26-BR40: admin role and test mode, dashboard, name filter, player profiles) exists as a proposal in `docs/business-rules.md` section 9. The admin account is pre-seeded and cannot be deleted; administrators never appear in rankings.
+- Not in scope: city locators, Google Maps, native apps, NFC/student cards, duo/nationality leaderboards. A small admin area (BR26-BR43: admin role, test mode and point reset, dashboard, name filter, player profiles, team ranking rules) exists as a proposal in `docs/business-rules.md` section 9. The admin account is pre-seeded and cannot be deleted; administrators never appear in rankings, and a team with an administrator is not ranked (BR42). **Team score = average of the active students' points, rounded up (BR43).**
 - The read-first info page (before the quiz) is a Should item.
 
 Team: Catalina, Yuri, Ryan, Yi Heng (Project Manager), Akil.
@@ -31,6 +31,7 @@ ai-logs/<member>/     Per-member AI session logs (catalina, yuri, ryan, yi_heng,
 backend/              Express API (index.js, src/routes|services|db|middleware, tests/, .env.example)
 frontend/             React + Vite app (src/api|components|hooks|pages|styles, tests/, e2e/, .env.example)
 design/               Architecture, ER diagram, API docs, decisions, UI spec, prototype reference, screenshots
+tests/                run-all.mjs + manifest.json (all categories), Python suites (python/, regression/), ui-ux, browser, perf budgets; see tests/README.md
 testing/              location-testing-guide.md + checkpoint-coordinates.json (test positions for all checkpoints, DevTools steps)
 docs/                 business-rules.md (SOURCE OF TRUTH), data-model, geofencing, question-bank, traceability, git-workflow, project_handbook
 docker-compose.yml    MySQL 8.4 for development and tests
@@ -55,6 +56,8 @@ The project uses Node.js (LTS, v20 or newer), **npm only** (no yarn/pnpm), npm w
 | Build the web app | `npm run build` |
 | Database | `npm run db:up`, `db:down`, `db:reset`, `db:migrate`, `db:seed` |
 | **All checks** (lint + format + tests + build) | `npm run check` |
+| **Every kind of test** (restarts all on a failure) | `npm run test:all` (one category: `npm run test:cat -- <id>`, list: `node tests/run-all.mjs --list`) |
+| Python lint (black + pylint) | `npm run lint:py` |
 | CI (GitLab) | `.gitlab-ci.yml`: lint, backend tests with a MySQL service, frontend tests, build; browser tests are manual |
 
 Rules:
@@ -62,11 +65,11 @@ Rules:
 - Never commit `node_modules/`, build output, uploads or `.env` files.
 - Secrets (database URL, session and OTP secrets, SMTP credentials) live in `backend/.env` and are documented by name only in `backend/.env.example`. Never hard-code or print them.
 - Seed data (checkpoint coordinates, questions) is **placeholder** until replaced; never present it as real.
-- `pylint` is a Python tool (pip, not npm). It is only relevant if Python code is ever added; see `requirements.md` section 8.
+- Python is used only for the tests in `tests/` (pytest, requests, pymysql, black, pylint; `python -m pip install -r tests/requirements.txt`). Python code must be black-formatted and score 10/10 in pylint (`npm run lint:py`). See `requirements.md` section 8.
 
 ## Linting / Testing
 
-Before proposing a commit or Merge Request, run `npm run check` (ESLint + Prettier + Vitest) and make sure it passes. If a check fails, fix the cause; do not disable the rule or delete the test. State clearly in your reply if you were unable to run a check. Add tests for new logic and **name the business rule in each test** (e.g. `BR19 attempt 2 applies 85% after bonuses`). The 15 worked scoring examples and the 25 acceptance checks in `docs/business-rules.md` must exist as automated tests. Money-like arithmetic is integer arithmetic (no floating point for points).
+Before proposing a commit or Merge Request, run `npm run check` (ESLint + Prettier + Vitest) and make sure it passes. If a check fails, fix the cause; do not disable the rule or delete the test. State clearly in your reply if you were unable to run a check. Every bug that is fixed gets a regression test in `tests/regression/test_regression.py`. Before a commit run `npm run check` and, for larger changes, `npm run test:all`. Add tests for new logic and **name the business rule in each test** (e.g. `BR19 attempt 2 applies 85% after bonuses`). The 15 worked scoring examples and the 25 acceptance checks in `docs/business-rules.md` must exist as automated tests. Money-like arithmetic is integer arithmetic (no floating point for points).
 
 ## Code Style Guidelines
 

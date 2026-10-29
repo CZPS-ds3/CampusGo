@@ -159,6 +159,13 @@ export default function Ranks() {
           />
         ) : (
           <>
+            {tab === 'team' && (
+              <p className="small muted">
+                {t(
+                  'Team score = average points of the members, rounded up to the next whole number.',
+                )}
+              </p>
+            )}
             <Podium
               entries={data.entries}
               nameOf={(e) => (tab === 'solo' ? e.displayName : e.name)}

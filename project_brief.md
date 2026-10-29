@@ -75,3 +75,7 @@ Solves Real Pain Points: International students often struggle during their firs
 High Engagement: Gamification transforms a tedious orientation process into a fun social activity that helps break the ice among new students.
 
 Feasible & Scalable: Built as a mobile-friendly website, students don't even need to download a heavy app from an app store—they can just open a link and start playing.
+
+## Test strategy (2026-10-29)
+
+One folder, `tests/`, runs every kind of test (unit, backend, frontend, integration, database, security, regression, performance, end-to-end, UI/UX with accessibility scans, browser) with `npm run test:all`. If any test fails, **all** tests are restarted (2 restarts); a pass after a restart is shown as PASSED-AFTER-RETRY so that flaky tests stay visible. Every fixed bug gets a regression test. Python tests must be black-formatted and pylint 10/10. See [tests/README.md](tests/README.md).

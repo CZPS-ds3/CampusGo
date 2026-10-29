@@ -225,7 +225,7 @@ erDiagram
 - `Student.avatar_preset` (0 to 5, nullable): the drawn avatar picked at sign-up; an uploaded picture wins over it.
 - `Checkpoint_Fact (checkpoint_id, position 1-5, fact_text)`: the "read these first" facts of the info page (Should item). Seeded with PLACEHOLDER texts.
 - `Location_Check` (see R-62 and R-63) holds only inside yes/no and a time.
-- `Student.role` (student/admin), `Student.status` (active/blocked/archived/deleted) with `status_reason`, `reported_at`, `report_reason`, `deleted_at` (BR26, BR28, BR30); table `Audit_Event` (BR29); table `Banned_Term` (admin additions to the built-in list, BR27); table `Checkpoint_Image` (photo url, alt text, credit). Migration `005_admin_and_media.sql`. `Team_Invitation.invited_email` (nullable): the address the inviter typed (BR40), migration `006_invitation_email.sql`. Yuri's migrations `003_bildungscampus_checkpoints.sql` and `004_sensoricum.sql` come before ours.
+- `Student.role` (student/admin), `Student.status` (active/blocked/archived/deleted) with `status_reason`, `reported_at`, `report_reason`, `deleted_at` (BR26, BR28, BR30); table `Audit_Event` (BR29); table `Banned_Term` (admin additions to the built-in list, BR27); table `Checkpoint_Image` (photo url, alt text, credit). Migration `005_admin_and_media.sql`. `Team_Invitation.invited_email` (nullable): the address the inviter typed (BR40), migration `006_invitation_email.sql`. Migration `007_recompute_team_scores.sql` recalculates `Team.team_score` as the rounded-up average of the active students (BR43). Yuri's migrations `003_bildungscampus_checkpoints.sql` and `004_sensoricum.sql` come before ours.
 
 ## 4. Seed data for BR11 (no admin UI)
 

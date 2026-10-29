@@ -236,6 +236,12 @@ export function createAdminService({ pool, config, clock, nameRules }) {
       throw new AppError(409, 'DELETED', 'The account was deleted.');
     const now = clock.now();
     await withTransaction(pool, async (conn) => {
+      // Team first, then student (same lock order as everywhere else).
+      if (current.team_id) {
+        await conn.query('SELECT team_id FROM teams WHERE team_id = ? FOR UPDATE', [
+          current.team_id,
+        ]);
+      }
       await conn.query('UPDATE students SET status = ?, status_reason = ? WHERE student_id = ?', [
         status,
         status === 'active' ? null : reason,
@@ -244,6 +250,8 @@ export function createAdminService({ pool, config, clock, nameRules }) {
       if (status !== 'active') {
         await conn.query('UPDATE sessions SET is_active = 0 WHERE student_id = ?', [id]);
       }
+      // A blocked or archived member stops counting in the team average (BR43).
+      if (current.team_id) await refreshTeamScore(conn, current.team_id, now);
       await recordEvent(conn, now, {
         studentId: id,
         actorId,

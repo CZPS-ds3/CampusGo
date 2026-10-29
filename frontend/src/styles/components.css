@@ -281,25 +281,31 @@ a.card:active {
 .switch {
   position: relative;
   flex-shrink: 0;
-  width: 52px;
-  height: 30px;
-  border-radius: 999px;
+  width: 56px;
+  height: 44px; /* a full-size touch target; the visible track is drawn by ::before */
   border: 0;
+  background: none;
+}
+.switch::before {
+  content: '';
+  position: absolute;
+  inset: 7px 2px;
+  border-radius: 999px;
   background: var(--line2);
   transition: background 160ms;
 }
 .switch::after {
   content: '';
   position: absolute;
-  top: 3px;
-  left: 3px;
+  top: 10px;
+  left: 5px;
   width: 24px;
   height: 24px;
   border-radius: 50%;
   background: #fff;
   transition: transform 160ms;
 }
-.switch[aria-checked='true'] {
+.switch[aria-checked='true']::before {
   background: var(--signal);
 }
 .switch[aria-checked='true']::after {

@@ -430,6 +430,17 @@ Use `npm ci` instead of `npm install` for a clean, reproducible install from `pa
 | Browser tests, 6 screen sizes (installs Chromium on first run) | `npm run test:e2e` |
 | Database: start / stop / reset / migrate / seed | `npm run db:up` / `db:down` / `db:reset` / `db:migrate` / `db:seed` |
 
+### 6.1 The `tests/` folder: every kind of test in one place
+
+| Command | What |
+|---|---|
+| `npm run test:all` | Runs **all** categories in order and **restarts everything** when one fails (2 restarts); prints one table |
+| `npm run test:cat -- python-api` | One category (`--list` shows them) |
+| `npm run lint:py` | `black --check` and `pylint` (must be 10/10) on the Python tests |
+| `npm run check:all` | `npm run check` + `lint:py` + `test:all` |
+
+Categories: unit (pytest + node:test), backend and frontend (Vitest), integration, database, security, regression (one test per fixed bug), performance (budgets), end-to-end (mock API and the real stack), UI/UX with accessibility scans, and a browser smoke test. One-time setup: `python -m pip install -r tests/requirements.txt`. Full guide: [tests/README.md](tests/README.md). The tests only ever touch the database `campusquest_test`, never your development data.
+
 `npm test` and `npm run dev` start the database themselves (`pretest` / `predev` hooks), so nobody has to remember it.
 
 ---
@@ -470,6 +481,7 @@ campus-city-quest/
 │   ├── git-workflow.md     branching strategy and workflow
 │   └── project_handbook.md full project plan
 ├── ai-logs/                one folder per member (catalina, yuri, ryan, yi_heng, akil)
+├── tests/                  all test kinds: run-all.mjs, manifest, Python suites, UI/UX, browser, performance
 ├── .gitlab/                issue and merge request templates
 └── scripts/                setup.mjs (runs after npm install), ensure-db.mjs (starts the database), setup-repo.sh
 ```

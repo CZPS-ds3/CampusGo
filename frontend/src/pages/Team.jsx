@@ -81,7 +81,7 @@ function Invitations({ items, onAnswer, busyId }) {
 
 export default function Team() {
   const toast = useToast();
-  const { refresh } = useSession();
+  const { student, refresh } = useSession();
   const [team, setTeam] = useState(undefined);
   const [invites, setInvites] = useState([]);
   const [name, setName] = useState('');
@@ -275,9 +275,24 @@ export default function Team() {
       <p className="mono accent">
         {team.members.length}/{MAX_MEMBERS} <span className="caption muted">{t('members')}</span>
         {' · '}
-        {formatNumber(team.score)} <span className="caption muted">{t('Team score')}</span>
+        {team.ranked && (
+          <>
+            {formatNumber(team.score)}{' '}
+            <span className="caption muted">
+              {t('Team score (average of {n} members, rounded up)', { n: team.members.length })}
+            </span>
+          </>
+        )}
       </p>
-      {!team.active && (
+      {student.role === 'admin' && (
+        <p className="small muted">
+          {t('Administrators are not ranked, and neither is their team.')}
+        </p>
+      )}
+      {student.role !== 'admin' && team.hasAdmin && (
+        <p className="small muted">{t('Not ranked while an administrator is a member.')}</p>
+      )}
+      {student.role !== 'admin' && !team.hasAdmin && !team.active && (
         <p className="small muted">{t('A team appears in the ranking from two members.')}</p>
       )}
       {error}

@@ -165,8 +165,10 @@ export default function Profile() {
     try {
       await api.deleteAccount();
       setConfirmDelete(false);
-      await logout();
+      // Leave the protected pages first: clearing the session while still on one would send the person to the
+      // login screen instead of the start page.
       navigate('/', { replace: true });
+      await logout();
     } catch (failure) {
       setConfirmDelete(false);
       setError(errorText(failure));

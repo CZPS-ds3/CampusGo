@@ -3,6 +3,7 @@
 import { at } from '../clock.js';
 import { notFound } from '../middleware/errors.js';
 import { displayName } from './auth.js';
+import { rankOfTeam } from './team-ranking.js';
 import { MAX_TEAM_SIZE } from './teams.js';
 
 export function createPlayerService({ pool, clock, boards }) {
@@ -13,18 +14,6 @@ export function createPlayerService({ pool, clock, boards }) {
     avatarPreset: row.avatar_preset,
     totalPoints: row.total_points,
   });
-
-  async function teamStanding(team, size) {
-    if (size < 2) return null;
-    const [[row]] = await pool.query(
-      `SELECT COUNT(*) AS better FROM (
-         SELECT t.team_id FROM teams t JOIN students s ON s.team_id = t.team_id AND s.status = 'active'
-         GROUP BY t.team_id HAVING COUNT(*) >= 2 AND MAX(t.team_score) > ?
-       ) x`,
-      [team.team_score],
-    );
-    return Number(row.better) + 1;
-  }
 
   /** Whether the viewer, as a team member with a free place, may invite this player. */
   async function canInvite(viewerId, target) {
@@ -67,7 +56,7 @@ export function createPlayerService({ pool, clock, boards }) {
         name: teamRow.team_name,
         pictureUrl: teamRow.profile_picture,
         score: teamRow.team_score,
-        rank: await teamStanding(teamRow, members.length),
+        rank: await rankOfTeam(pool, teamRow.team_id),
         members: members.map(person),
       };
     }

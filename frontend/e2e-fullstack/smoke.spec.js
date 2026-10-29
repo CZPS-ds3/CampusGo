@@ -29,7 +29,7 @@ test('real stack: sign up with an e-mail code, check in, pass a quiz, appear in 
   await page.getByLabel('First name *').fill('Smoke');
   await page.getByLabel('Last name *').fill('Tester');
   await page.getByRole('button', { name: 'Enter campus' }).click();
-  await expect(page.getByText(/Rank #/)).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Open profile' })).toBeVisible();
 
   await page.goto('/quests');
   await page.getByRole('link', { name: /Campus Garden/ }).click();
@@ -76,7 +76,7 @@ test('real stack: the pre-seeded admin signs in without a sign-up form and tests
     .toBeTruthy();
   await page.getByLabel('Digit 1 of 6').click();
   await page.keyboard.insertText(otp);
-  await expect(page.getByText(/Rank #/)).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Open profile' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Open menu' }).click();
   await expect(page.getByRole('menuitem').first()).toContainText('Admin');

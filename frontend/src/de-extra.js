@@ -324,4 +324,32 @@ export const DE_EXTRA = new Map([
   ['This player is not in a team.', 'Diese Person ist in keinem Team.'],
   ['Dashboard', 'Dashboard'],
   ['users', 'Nutzer'],
+  ['Points reset', 'Punkte zurückgesetzt'],
+  ['Reset points', 'Punkte zurücksetzen'],
+  ['Confirm reset', 'Zurücksetzen bestätigen'],
+  ['Reset your test points?', 'Deine Testpunkte zurücksetzen?'],
+  [
+    'Your points and test attempts are cleared so you can test every quiz again.',
+    'Deine Punkte und Testversuche werden gelöscht, damit du jedes Quiz erneut testen kannst.',
+  ],
+  [
+    'Team score = average points of the members, rounded up to the next whole number.',
+    'Teampunkte = Durchschnitt der Punkte der Mitglieder, aufgerundet auf die nächste ganze Zahl.',
+  ],
+  [
+    'Team score (average of the members, rounded up)',
+    'Teampunkte (Durchschnitt der Mitglieder, aufgerundet)',
+  ],
+  [
+    'Team score (average of {n} members, rounded up)',
+    'Teampunkte (Durchschnitt von {n} Mitgliedern, aufgerundet)',
+  ],
+  [
+    'Administrators are not ranked, and neither is their team.',
+    'Admins werden nicht gerankt, und ihr Team auch nicht.',
+  ],
+  [
+    'Not ranked while an administrator is a member.',
+    'Nicht gerankt, solange ein Admin Mitglied ist.',
+  ],
 ]);

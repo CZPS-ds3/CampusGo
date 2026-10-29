@@ -176,7 +176,7 @@ export function createMockApi(ApiError, getUnauthorized) {
   const publicStudent = () => ({
     ...state.student,
     totalPoints: totalPoints(),
-    rank: rankFor(totalPoints()),
+    rank: state.student.role === 'admin' ? null : rankFor(totalPoints()),
     teamId: state.team ? 1 : null,
     locationConsent: state.consent,
   });
@@ -302,8 +302,7 @@ export function createMockApi(ApiError, getUnauthorized) {
       multiplierPercent: a.multiplierPercent,
       pointsEarned: a.pointsEarned,
       totalPoints: totalPoints(),
-      rankBefore: rankFor(Math.ceil(Math.max(0, totalExact() - (a.pointsExact ?? 0)) / 100)),
-      rankAfter: rankFor(totalPoints()),
+      ...resultRanks(a),
       nextMultiplierPercent: MULTIPLIERS[Math.min(used + 1, 6) - 1],
       checkpointCompleted: state.attempts.some(
         (x) => x.checkpointId === a.checkpointId && x.status === 'passed',
@@ -318,6 +317,28 @@ export function createMockApi(ApiError, getUnauthorized) {
     return a;
   };
   const activeAttempt = () => state.attempts.find((a) => a.status === 'active') ?? null;
+
+  const resultRanks = (a) => {
+    if (state.student.role === 'admin')
+      return { rankBefore: null, rankAfter: null, team: undefined };
+    const before = Math.ceil(Math.max(0, totalExact() - (a.pointsExact ?? 0)) / 100);
+    const out = { rankBefore: rankFor(before), rankAfter: rankFor(totalPoints()), team: null };
+    if (state.team && state.team.members.length >= 2) {
+      const others = state.team.members.filter((m) => !m.self).map((m) => m.totalPoints);
+      const average = (own) =>
+        Math.ceil([own, ...others].reduce((n, p) => n + p, 0) / (others.length + 1));
+      const rivals = [4100, 2000];
+      const rankWith = (score) => 1 + rivals.filter((r) => r > score).length;
+      out.team = {
+        teamName: state.team.name,
+        teamScoreBefore: average(before),
+        teamScoreAfter: average(totalPoints()),
+        teamRankBefore: rankWith(average(before)),
+        teamRankAfter: rankWith(average(totalPoints())),
+      };
+    }
+    return out;
+  };
 
   const teamView = () =>
     state.team && {
@@ -336,6 +357,8 @@ export function createMockApi(ApiError, getUnauthorized) {
           state.team.members.length,
       ),
       active: state.team.members.length >= 2,
+      hasAdmin: state.student.role === 'admin',
+      ranked: state.team.members.length >= 2 && state.student.role !== 'admin',
     };
 
   const startAttempt = (cp) => {
@@ -402,6 +425,14 @@ export function createMockApi(ApiError, getUnauthorized) {
       state.loggedIn = false;
       save();
       return null;
+    },
+    async resetPoints() {
+      needLogin();
+      if (state.student.role !== 'admin')
+        throw fail(403, 'FORBIDDEN', 'Only administrators can reset their points.');
+      state.attempts = [];
+      save();
+      return { totalPoints: 0 };
     },
     async deleteAccount() {
       needLogin();
@@ -796,7 +827,7 @@ export function createMockApi(ApiError, getUnauthorized) {
           isYourTeam: false,
         },
       ];
-      const entries = mine.active
+      const entries = mine.ranked
         ? [
             ...others,
             {

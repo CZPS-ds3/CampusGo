@@ -4,6 +4,7 @@ import { withTransaction } from '../db/pool.js';
 import { AppError, notFound } from '../middleware/errors.js';
 import { displayName, isSchoolEmail, normalizeEmail } from './auth.js';
 import { teamScore } from './scoring.js';
+import { unrankedReason } from './team-ranking.js';
 
 export const MAX_TEAM_SIZE = 5;
 export const GENERIC_INVITE_MESSAGE =
@@ -14,9 +15,11 @@ export const GENERIC_INVITE_MESSAGE =
  * rounded score changed (R-55). Must run inside the transaction that changed the members/points.
  */
 export async function refreshTeamScore(conn, teamId, eventMs) {
-  const [members] = await conn.query('SELECT total_points FROM students WHERE team_id = ?', [
-    teamId,
-  ]);
+  // Only active students count: administrators, blocked and archived people do not (BR43).
+  const [members] = await conn.query(
+    "SELECT total_points FROM students WHERE team_id = ? AND status = 'active' AND role = 'student'",
+    [teamId],
+  );
   const score = teamScore(members.map((m) => m.total_points));
   const [[team]] = await conn.query(
     'SELECT team_score, score_updated_at FROM teams WHERE team_id = ? FOR UPDATE',
@@ -76,6 +79,9 @@ export function createTeamService({ pool, config, clock, nameRules }) {
       size: members.length,
       score: team.team_score,
       active: members.length >= 2,
+      // Ranked teams have two active students and no administrator (BR42).
+      ranked: (await unrankedReason(pool, team.team_id)) === null,
+      hasAdmin: (await unrankedReason(pool, team.team_id)) === 'admin',
     };
   }
 

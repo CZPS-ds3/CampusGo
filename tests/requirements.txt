@@ -1,0 +1,7 @@
+# Python tools for the tests in this folder (development only, Python 3.11 or newer).
+# Install once:  python -m pip install -r tests/requirements.txt
+pytest>=8,<10          # test runner for the API, database, security, performance and regression suites
+requests>=2.31,<3      # HTTP client for the API tests
+pymysql>=1.1,<2        # direct SQL checks in the database tests (pure Python, no build tools needed)
+black>=24              # code formatter, checked with `black --check`
+pylint>=3              # linter, must score 10/10

@@ -167,8 +167,16 @@ export function createApp({ pool, config, mailer, clock }) {
   api.get(
     '/me',
     handle(async (req, res) => {
-      const rank = await boards.rankOf(req.student.total_points);
+      const rank =
+        req.student.role === 'admin' ? null : await boards.rankOf(req.student.total_points);
       res.json({ student: { ...publicStudent(req.student), rank } });
+    }),
+  );
+  api.post(
+    '/me/reset-points',
+    handle(async (req, res) => {
+      await accounts.resetTestPoints(req.student.student_id);
+      res.json({ totalPoints: 0 });
     }),
   );
   api.delete(

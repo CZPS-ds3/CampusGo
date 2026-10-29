@@ -43,6 +43,8 @@ Run with `npm test` (backend and frontend) and `npm run test:e2e` (browser). Eve
 | File | What it proves | Rules and checks |
 |---|---|---|
 | `backend/tests/scoring.test.js` | The 15 worked examples of §3.3 exactly, integer rounding, team average, ranks 1-1-3, values read from the table passed in | BR04, BR11, BR14, BR16-BR21; checks 21, 24 |
+| `backend/tests/team-rules.test.js` | Team score is the average rounded up (5 members divide by 5, 1000+1000+1001 gives 1001, a blocked member does not count), a team with an admin is not ranked and returns when the admin leaves, the result shows team rank before and after, admin points can be reset and the admin stays out of rankings | BR41-BR43 (proposals) |
+| `tests/` (see [tests/README.md](../tests/README.md)) | The whole test folder: pytest unit, integration, database, security, regression and performance suites, node:test config checks, Playwright UI/UX (axe), browser and full-stack tests, run by `npm run test:all` | all rules; one regression test per fixed bug |
 | `backend/tests/listen-error.test.js` | Start-up errors in plain words: port already in use, permission denied, unknown errors left visible, a real second listener | (development robustness) |
 | `backend/tests/geofence-lenient.test.js` | Grace zone of 25 m, accuracy limit 100 m, 20 m margin before "you are at another checkpoint" | BR12 (lenient settings) |
 | `backend/tests/players.test.js` | Player profile (points, ranks, team, members, no e-mail or last name), invite from a profile, pre-seeded admin that cannot be deleted, admin test mode away from the campus and for inactive checkpoints, students still need the location | BR36-BR38 (proposals) |

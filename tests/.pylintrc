@@ -1,0 +1,20 @@
+[MAIN]
+# Pylint must give 10/10 on the Python tests (npm run lint:py fails below that).
+fail-under=10
+jobs=1
+
+[FORMAT]
+# Black wraps code at 100; docstrings and long strings may be a little longer.
+max-line-length=115
+
+[MESSAGES CONTROL]
+# Test code: fixtures are used by name (redefined-outer-name), tests are long and take many fixtures,
+# and a test name that states the rule is documentation enough (missing-function-docstring).
+disable=
+    missing-function-docstring,
+    redefined-outer-name,
+    too-many-arguments,
+    too-many-positional-arguments,
+    too-many-locals,
+    too-few-public-methods,
+    duplicate-code

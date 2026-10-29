@@ -5,6 +5,7 @@ import { withTransaction } from '../db/pool.js';
 import { AppError, notFound } from '../middleware/errors.js';
 import { evaluateLocation } from './geo.js';
 import { ceilDiv, multiplierFor, remainingWholeSeconds, scoreAttempt } from './scoring.js';
+import { teamStandingAround } from './team-ranking.js';
 import { refreshTeamScore } from './teams.js';
 
 /**
@@ -622,7 +623,7 @@ export function createQuizService({ pool, config, clock }) {
   /** Solo rank a student with this total would hold (the student's own row is not counted against itself). */
   async function rankAmong(total, studentId) {
     const [[row]] = await pool.query(
-      'SELECT COUNT(*) AS higher FROM students WHERE total_points > ? AND student_id <> ?',
+      "SELECT COUNT(*) AS higher FROM students WHERE total_points > ? AND student_id <> ? AND status = 'active' AND role = 'student'",
       [total, studentId],
     );
     return Number(row.higher) + 1;
@@ -639,7 +640,7 @@ export function createQuizService({ pool, config, clock }) {
     if (attempt.status === 'active')
       throw new AppError(409, 'ATTEMPT_NOT_FINISHED', 'This attempt is still running.');
     const [[student]] = await pool.query(
-      'SELECT total_points, points_exact_x100 FROM students WHERE student_id = ?',
+      'SELECT total_points, points_exact_x100, role FROM students WHERE student_id = ?',
       [studentId],
     );
     const rules = await loadRules(pool);
@@ -648,6 +649,7 @@ export function createQuizService({ pool, config, clock }) {
       Math.max(0, Number(student.points_exact_x100) - Number(attempt.points_exact)),
       100,
     );
+    const isAdmin = student.role === 'admin';
     const [[{ passed }]] = await pool.query(
       "SELECT COUNT(*) AS passed FROM attempts WHERE student_id = ? AND checkpoint_id = ? AND status = 'passed'",
       [studentId, attempt.checkpoint_id],
@@ -676,8 +678,10 @@ export function createQuizService({ pool, config, clock }) {
       multiplierPercent: attempt.multiplier_percent,
       pointsEarned: attempt.points_earned,
       totalPoints: student.total_points,
-      rankBefore: await rankAmong(totalBefore, studentId),
-      rankAfter: await rankAmong(student.total_points, studentId),
+      // Administrators are in no ranking (BR41, BR42).
+      rankBefore: isAdmin ? null : await rankAmong(totalBefore, studentId),
+      rankAfter: isAdmin ? null : await rankAmong(student.total_points, studentId),
+      ...(isAdmin ? {} : { team: await teamStandingAround(pool, studentId, totalBefore) }),
       nextMultiplierPercent: multiplierFor(rules.multipliers, used + 1),
       checkpointCompleted: passed > 0,
       nextAttemptNumber: used + 1,
