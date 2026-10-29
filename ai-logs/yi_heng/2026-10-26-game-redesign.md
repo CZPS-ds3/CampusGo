@@ -76,3 +76,10 @@
 - **Problem:** a student standing at Building B could not start the quiz.
 - **Change:** accuracy limit 50 to 100 m, a 25 m grace zone on every radius, and a 20 m margin before the app says "you are at another checkpoint" (settings in `backend/.env`; the mock API follows). Tests updated and added (`geofence-lenient.test.js`).
 - **Open question:** Yuri's Building B position (OpenStreetMap, 49.147126 / 9.218486) is about 110 m from the Google Maps link position (49.1473112 / 9.2169587). If Building B is really at the second one, the circle is in the wrong place and the grace zone does not help; the centre must be corrected in the database.
+
+### Follow-up 2026-10-29: database down, port 3000 busy, tests
+
+- **Login failed with `ECONNREFUSED 127.0.0.1:3307`:** Docker Desktop had closed, so the MySQL container was down. Docker was started again; data was intact. The backend now says so once in plain words (`[db] MySQL is not reachable ...`).
+- **`EADDRINUSE :::3000`:** a test API that the AI had started to check logins was still running and held the port. It was verified by its command line and stopped. `backend/index.js` now prints one clear line (`describeListenError`, `backend/src/listen-error.js`, unit-tested) instead of a stack trace when the port is taken.
+- **Test fixes:** the admin browser test matched "Allowed." ambiguously (a sentence on the page also contains "allowed"); the real-stack admin test reused one address and hit its resend cooldown and hourly code limit, so the Playwright-started server now relaxes those two limits (`playwright.fullstack.config.js`).
+- **Results:** `npm run check` (lint, format, 164 backend tests, 34 frontend tests, build), 132 browser tests on six sizes, 4 real-stack runs in a row, all passing.
