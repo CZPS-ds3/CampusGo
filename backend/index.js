@@ -18,12 +18,37 @@ const { app, services } = createApp({ pool, config, mailer, clock: systemClock }
 // Tells the operator straight away whether login codes can be delivered (wrong password, blocked port ...).
 mailer.verify().then(({ ok, detail }) => (ok ? console.log : console.error)(`[mail] ${detail}`));
 
+// A stopped database (Docker Desktop closed) is the usual development problem: say so once, in plain words,
+// instead of repeating the raw connection error every few seconds, and say when it is back.
+let databaseDown = false;
+function reportDatabase(error) {
+  if (!error) {
+    if (databaseDown) console.log('[db] MySQL is reachable again.');
+    databaseDown = false;
+    return;
+  }
+  if (error.code !== 'ECONNREFUSED' && error.code !== 'ETIMEDOUT') {
+    console.error(`[db] ${error.message}`);
+    return;
+  }
+  if (!databaseDown) {
+    console.error(
+      '[db] MySQL is not reachable. Start Docker Desktop, then run "npm run db:up" ' +
+        '(or start everything with "npm run dev" from the project root folder). Login needs the database.',
+    );
+  }
+  databaseDown = true;
+}
+
 const EXPIRY_SWEEP_MS = 10_000;
 const HOUSEKEEPING_MS = 10 * 60 * 1000;
 
 // Closes overdue attempts even if nobody asks for them (BR16, BR22).
 const sweep = setInterval(() => {
-  services.quiz.finalizeAllExpired().catch((error) => console.error(`[sweep] ${error.message}`));
+  services.quiz
+    .finalizeAllExpired()
+    .then(() => reportDatabase(null))
+    .catch(reportDatabase);
 }, EXPIRY_SWEEP_MS);
 
 const housekeeping = setInterval(() => {
