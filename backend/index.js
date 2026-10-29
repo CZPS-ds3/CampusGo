@@ -1,6 +1,7 @@
 import { createApp } from './src/app.js';
 import { systemClock } from './src/clock.js';
 import { loadConfig, productionProblems } from './src/config.js';
+import { describeListenError } from './src/listen-error.js';
 import { createPool } from './src/db/pool.js';
 import { createMailer } from './src/services/mailer.js';
 
@@ -62,6 +63,16 @@ const housekeeping = setInterval(() => {
 
 const server = app.listen(config.port, () => {
   console.log(`Campus & City Quest API listening on http://localhost:${config.port}`);
+});
+
+// A port that is taken (another API still running) gets one clear line instead of a stack trace.
+server.on('error', (error) => {
+  const text = describeListenError(error, config.port);
+  if (!text) throw error;
+  console.error(`[server] ${text}`);
+  clearInterval(sweep);
+  clearInterval(housekeeping);
+  pool.end().finally(() => process.exit(1));
 });
 
 function shutdown() {

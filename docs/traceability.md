@@ -43,6 +43,8 @@ Run with `npm test` (backend and frontend) and `npm run test:e2e` (browser). Eve
 | File | What it proves | Rules and checks |
 |---|---|---|
 | `backend/tests/scoring.test.js` | The 15 worked examples of §3.3 exactly, integer rounding, team average, ranks 1-1-3, values read from the table passed in | BR04, BR11, BR14, BR16-BR21; checks 21, 24 |
+| `backend/tests/listen-error.test.js` | Start-up errors in plain words: port already in use, permission denied, unknown errors left visible, a real second listener | (development robustness) |
+| `backend/tests/geofence-lenient.test.js` | Grace zone of 25 m, accuracy limit 100 m, 20 m margin before "you are at another checkpoint" | BR12 (lenient settings) |
 | `backend/tests/players.test.js` | Player profile (points, ranks, team, members, no e-mail or last name), invite from a profile, pre-seeded admin that cannot be deleted, admin test mode away from the campus and for inactive checkpoints, students still need the location | BR36-BR38 (proposals) |
 | `backend/tests/stats.test.js` | Berlin days incl. 25 and 23 hour days, dashboard numbers count students only and name nobody who is blocked, students get 403 | BR39 (proposal) |
 | `backend/tests/admin.test.js` | Name filter (Cass, Classic and Scunthorpe allowed; Big Ass, f.u.c.k, 5h1t, German words blocked), sign-up and team creation refuse banned names, admin role only for the configured address, admin create/edit with unique e-mail, blocked and archived accounts lose the session and cannot log in or rank, report, user log (sessions, quests, login, logout), admin team and word management, delete my account | BR26-BR31 (proposals) |
