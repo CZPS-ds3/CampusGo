@@ -7,6 +7,7 @@ import { Button } from '../components/Button.jsx';
 import { Carousel } from '../components/Carousel.jsx';
 import { Icon } from '../components/icons.jsx';
 import { MapView } from '../components/MapView.jsx';
+import { QuestTypes } from '../components/QuestTypes.jsx';
 import { Modal, Sheet } from '../components/Sheet.jsx';
 import { Chip, Display } from '../components/ui.jsx';
 import { useRoute } from '../hooks/useRoute.js';
@@ -56,6 +57,10 @@ function CheckpointSheet({ checkpoint, active, onClose, onRoute }) {
           <p className="caption muted">{t('Attempts used:')}</p>
           <p className="mono h2">{checkpoint.attemptsUsed}</p>
         </div>
+      </div>
+      {checkpoint.description && <p className="small mt">{checkpoint.description}</p>}
+      <div className="mt">
+        <QuestTypes types={checkpoint.questionTypes} />
       </div>
       <p className="small muted mt">
         {t('Timer starts at the first question.')}{' '}

@@ -89,7 +89,11 @@ Status codes: 400 invalid input · 401 no valid session · 403 not allowed · 40
 | `POST /admin/users/:id/status` | `{ status: active\|blocked\|archived, reason? }` | `{ user }`; ends all sessions unless `active` |
 | `POST /admin/users/:id/report` / `DELETE` | `{ reason }` / none | `{ user }` |
 | `POST /admin/users/:id/logout` | none | `204` (all sessions end) |
-| `DELETE /admin/users/:id` | none | `204` (same anonymisation as BR30) |
+| `DELETE /admin/users/:id` | none | `204`. **Soft delete (BR47):** status `deleted`, sessions end, leaves the team; restorable |
+| `POST /admin/users/:id/restore` | none | `{ user }` (status `active`, no team); `409 NOT_RESTORABLE` unless deleted and not erased |
+| `DELETE /admin/users/:id/permanent` | none | `204`. Erases name, e-mail and picture for good (`purged_at`); `409 NOT_DELETED` unless the account is deleted |
+| `POST /admin/teams/:id/members` | `{ studentId }` | `204`; `404`, `409 NOT_A_STUDENT \| STUDENT_NOT_ACTIVE \| ALREADY_IN_TEAM \| TEAM_FULL` (BR46) |
+| `GET /admin/users?noTeam=1` | `q` too | only active students without a team (for the add-member pop-up) |
 | `GET /admin/teams` | none | `{ teams: [{ id, name, score, size, members: [{ id, displayName }] }] }` |
 | `PATCH /admin/teams/:id` | `{ name }` | `204`; `400 NAME_NOT_ALLOWED`, `409 TEAM_NAME_TAKEN` |
 | `DELETE /admin/teams/:id/members/:studentId`, `DELETE /admin/teams/:id` | none | `204` |
@@ -102,3 +106,41 @@ Other changes: `GET /checkpoints` adds `images: [{ url, alt, credit }]`; `POST /
 ## Health
 
 `GET /health` → `{ status: "ok" }` (no auth).
+
+## Team leader and invitations (BR44, BR45)
+
+| Endpoint | Body | Result |
+|---|---|---|
+| `DELETE /teams/me/members/:studentId` | none | `200 { team }`. `403 NOT_LEADER` for other members, `400` when the leader names themselves, `404` for someone who is not in the team |
+| `POST /teams/me/invitations/:id/cancel` | none | `200 { team }`; any member of the team; `404` when the invitation is not pending |
+
+`GET /teams/me` adds `leaderId` and an `id` for every pending entry.
+
+## Map style (BR48)
+
+| Endpoint | Body | Result |
+|---|---|---|
+| `GET /me/map-style` | none | `{ style }` (the default when none is saved) |
+| `PUT /me/map-style` | `{ preset?, base?: follow\|light\|dark, tint?: { color, strength 0-100 }, pins?: { open, done, locked }, highlight?, route? }` | `{ style }` with colours as `#rrggbb`; `400 INVALID_MAP_STYLE` with `problems: []` |
+| `DELETE /me/map-style` | none | `{ style }` (the default) |
+
+## Quests (admin, BR49 to BR51)
+
+| Endpoint | Body | Result |
+|---|---|---|
+| `GET /admin/checkpoints` | none | `{ quests: [{ id, name, description, mapUrl, lat, lng, radius, questionCount, passThreshold, timeLimitSeconds, effectiveTimeLimitSeconds, hardQuestionEnabled, typeMode, isActive, archived, readiness: { ready, problems[] }, counts: { questions, photos, facts }, hasHistory }] }` |
+| `POST /admin/checkpoints/check-link` | `{ mapLink }` | `{ lat, lng, url, warnings[] }` or `400 INVALID_MAP_LINK` with `reason` (`EMPTY`, `TOO_LONG`, `NOT_A_LINK`, `NOT_HTTPS`, `NOT_GOOGLE_MAPS`, `SHORT_LINK_FAILED`, `NO_COORDINATES`, `BAD_COORDINATES`, `OUTSIDE_MAP_AREA` + `area`) |
+| `POST /admin/checkpoints` | `{ name, mapLink, questionCount, passThreshold, description?, radius?, timeLimitSeconds?, hardQuestionEnabled?, typeMode? }` | `201 { quest, facts, photos, questions, warnings }`; created inactive; `400 INVALID_QUEST \| INVALID_MAP_LINK`, `409 NAME_TAKEN` |
+| `GET /admin/checkpoints/:id` | none | `{ quest, facts[], photos: [{ position, url, alt, credit }], questions: [{ id, difficulty, type, text, isActive, options: [{ id, position, text, isCorrect }] }] }` |
+| `PATCH /admin/checkpoints/:id` | any of the create fields and `isActive` | same as above; `409 QUEST_NOT_READY` (with `problems`) when switched on too early, `409 QUEST_ARCHIVED` |
+| `DELETE /admin/checkpoints/:id` | none | `{ result: archived \| erased }` |
+| `POST /admin/checkpoints/:id/restore` | none | the quest again (inactive); `409 NOT_ARCHIVED` |
+| `PUT /admin/checkpoints/:id/facts` | `{ facts: [text] }` (at most 5) | the quest |
+| `POST /admin/checkpoints/:id/photos` | multipart `file`, `alt`, `credit` | `201` the quest (at most 5 photos; PNG, JPG or WebP, stored as 1280 x 720 WebP) |
+| `PATCH` / `DELETE /admin/checkpoints/:id/photos/:position` | `{ alt?, credit? }` / none | the quest |
+| `POST /admin/checkpoints/:id/questions` | `{ questionText, difficulty: NORMAL\|HARD, questionType: MCQ\|MULTI, isActive?, options: [4 x { text, isCorrect }] }` | `201` the quest + `deactivated`; `400 INVALID_QUEST` when the number of right options does not fit the type |
+| `PUT` / `DELETE /admin/checkpoints/:id/questions/:questionId` | same body / none | the quest + `deactivated` (and `result: archived \| erased` for delete); `409 QUESTION_IN_USE` while a student answers it |
+
+## Quiz changes (BR50)
+
+`GET /checkpoints` adds `description`, `typeMode`, `questionTypes` (`["MCQ"]`, `["MULTI"]` or both) and `timeLimitSeconds`. An attempt view has `timeLimitSeconds`, and every question has `type`, `selectedOptionIds` and, after a wrong answer, `correctOptionIds` (`correctOptionId` stays for the first one). `POST /attempts/:id/answers` takes `{ optionId }` or `{ optionIds: [..] }` (and `questionNumber`); a single-choice question needs exactly one option, a multi-select question at least one; the answer is correct only on an exact match.

@@ -40,7 +40,20 @@ export function eventLabel(type) {
     case 'account_edited':
       return t('Account edited by an admin');
     case 'account_deleted':
-      return t('Account deleted');
+    case 'account_deleted_by_admin':
+      return t('Account deleted by an admin');
+    case 'account_deleted_by_student':
+      return t('Account deleted by the student');
+    case 'account_erased':
+      return t('Account erased for good');
+    case 'account_restored':
+      return t('Account restored by an admin');
+    case 'added_to_team':
+      return t('Added to a team by an admin');
+    case 'passed':
+      return t('Quest passed');
+    case 'points_reset':
+      return t('Points reset');
     case 'status_active':
       return t('Account activated');
     case 'status_blocked':

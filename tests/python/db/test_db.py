@@ -20,6 +20,7 @@ TABLES = {
     "options",
     "attempts",
     "attempt_questions",
+    "attempt_answers",
     "location_checks",
     "scoring_multiplier",
     "bonus",
@@ -38,7 +39,7 @@ def test_every_expected_table_exists(db):
 def test_all_migrations_ran_in_order(db):
     names = [row["name"] for row in query(db, "SELECT name FROM schema_migrations ORDER BY name")]
     numbers = [int(name[:3]) for name in names]
-    assert numbers == list(range(1, len(numbers) + 1)) and len(numbers) >= 7
+    assert numbers == list(range(1, len(numbers) + 1)) and len(numbers) >= 10
 
 
 def test_one_e_mail_can_belong_to_one_account_only(db):
@@ -72,9 +73,9 @@ def test_the_eight_pilot_checkpoints_have_sensible_geofences(db):
         assert 49.10 < float(row["latitude"]) < 49.20, row["checkpoint_name"]
         assert 9.15 < float(row["longitude"]) < 9.30, row["checkpoint_name"]
         assert 25 <= row["radius"] <= 150, row["checkpoint_name"]
-        assert (
-            row["question_count"] in (3, 5) and 1 <= row["pass_threshold"] <= row["question_count"]
-        )
+        assert 1 <= row["question_count"] <= 10, row["checkpoint_name"]
+        assert 1 <= row["pass_threshold"] <= row["question_count"], row["checkpoint_name"]
+        assert row["type_mode"] in ("MCQ_ONLY", "MULTI_ONLY", "MIXED")
 
 
 def test_points_and_multipliers_live_in_tables_not_in_code(db):
@@ -91,13 +92,84 @@ def test_points_and_multipliers_live_in_tables_not_in_code(db):
     assert multipliers == [100, 85, 70, 55, 40, 0]
 
 
-def test_every_question_has_four_options_and_exactly_one_right_answer(db):
+def test_every_question_has_four_options_and_the_right_number_of_right_answers(db):
+    """BR50: single choice has exactly one right option, multi-select has two or three."""
     broken = query(
         db,
         "SELECT q.question_id FROM questions q JOIN options o ON o.question_id = q.question_id "
-        "GROUP BY q.question_id HAVING COUNT(*) <> 4 OR SUM(o.is_correct) <> 1",
+        "GROUP BY q.question_id HAVING COUNT(*) <> 4 "
+        "OR (MAX(q.question_type) = 'MCQ' AND SUM(o.is_correct) <> 1) "
+        "OR (MAX(q.question_type) = 'MULTI' AND SUM(o.is_correct) NOT BETWEEN 2 AND 3)",
     )
     assert broken == []
+
+
+def test_a_quest_cannot_have_a_pass_mark_above_its_question_count(db):
+    with pytest.raises(pymysql.err.OperationalError):
+        query(
+            db, "UPDATE checkpoints SET pass_threshold = question_count + 1 WHERE checkpoint_id = 1"
+        )
+    with pytest.raises(pymysql.err.OperationalError):
+        query(db, "UPDATE checkpoints SET question_count = 11 WHERE checkpoint_id = 1")
+
+
+def test_attempts_keep_the_question_count_and_pass_mark_they_started_with(db):
+    columns = {
+        row["column_name"]: row["is_nullable"]
+        for row in query(
+            db,
+            "SELECT column_name, is_nullable FROM information_schema.columns "
+            "WHERE table_schema = DATABASE() AND table_name = 'attempts' "
+            "AND column_name IN ('question_count', 'pass_threshold')",
+        )
+    }
+    assert columns == {"question_count": "NO", "pass_threshold": "NO"}
+
+
+def test_every_ticked_option_is_stored_and_tied_to_its_question(db):
+    columns = {
+        row["column_name"]
+        for row in query(
+            db,
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_schema = DATABASE() AND table_name = 'attempt_answers'",
+        )
+    }
+    assert columns == {"attempt_id", "question_number", "question_id", "option_id"}
+    keys = query(
+        db,
+        "SELECT constraint_name FROM information_schema.referential_constraints "
+        "WHERE constraint_schema = DATABASE() AND table_name = 'attempt_answers'",
+    )
+    assert len(keys) >= 2
+
+
+def test_teams_have_a_leader_and_invitations_can_be_cancelled(db):
+    leader = query(
+        db,
+        "SELECT column_name FROM information_schema.columns WHERE table_schema = DATABASE() "
+        "AND table_name = 'teams' AND column_name = 'leader_id'",
+    )
+    assert leader
+    status = query(
+        db,
+        "SELECT column_type FROM information_schema.columns WHERE table_schema = DATABASE() "
+        "AND table_name = 'team_invitations' AND column_name = 'status'",
+    )[0]["column_type"]
+    assert "'cancelled'" in status
+
+
+def test_a_student_has_one_map_style_and_a_deleted_account_can_be_erased_for_good(db):
+    columns = {
+        row["column_name"]: row["data_type"]
+        for row in query(
+            db,
+            "SELECT column_name, data_type FROM information_schema.columns "
+            "WHERE table_schema = DATABASE() AND table_name = 'students' "
+            "AND column_name IN ('map_style', 'purged_at')",
+        )
+    }
+    assert columns == {"map_style": "json", "purged_at": "datetime"}
 
 
 def test_each_checkpoint_has_enough_questions_for_a_fresh_draw(db):

@@ -129,3 +129,47 @@ def test_no_coordinates_codes_or_tokens_are_stored_or_logged(player):
         text = log.read_text(encoding="utf-8", errors="replace")
         assert not re.search(r"123457|654321", text), "coordinates were written to the API log"
         assert token not in text, "the session token was written to the API log"
+
+
+def test_br49_quest_management_is_for_administrators_only():
+    student = Player(unique_email("quests")).sign_in()
+    assert student.get("/admin/checkpoints").status_code == 403
+    assert student.post("/admin/checkpoints", {"name": "Nope"}).status_code == 403
+    assert student.delete("/admin/checkpoints/1").status_code == 403
+    assert anonymous().get("/admin/checkpoints").status_code == 401
+
+
+def test_br51_the_map_link_box_cannot_be_used_to_reach_other_servers(admin):
+    for target in [
+        "http://169.254.169.254/latest/meta-data",
+        "https://169.254.169.254/maps",
+        "https://localhost:3000/maps",
+        "file:///etc/passwd",
+        "https://google.com.evil.example/maps/@49.1,9.2,17z",
+        "https://www.google.com@evil.example/maps/@49.1,9.2,17z",
+    ]:
+        reply = admin.post("/admin/checkpoints/check-link", {"mapLink": target})
+        assert reply.status_code == 400, target
+        assert reply.json()["error"]["code"] == "INVALID_MAP_LINK", target
+
+
+def test_br48_a_map_style_cannot_carry_markup_or_other_styles():
+    student = Player(unique_email("markup")).sign_in()
+    for bad in ["red; background: url(//evil)", "</style><script>x</script>", "#12345g"]:
+        reply = student.request("PUT", "/me/map-style", json={"highlight": bad})
+        assert reply.status_code == 400, bad
+        assert reply.json()["error"]["code"] == "INVALID_MAP_STYLE"
+    assert student.get("/me/map-style").json()["style"]["highlight"] != "red"
+
+
+def test_br44_only_the_leader_can_remove_a_member():
+    lead = Player(unique_email("lead")).sign_in()
+    mate = Player(unique_email("mate")).sign_in()
+    assert lead.post("/teams", {"name": f"Safe {lead.id}"}).status_code == 201
+    assert lead.post("/teams/me/invitations", {"email": mate.email}).status_code == 202
+    invitation = mate.get("/invitations").json()["invitations"][-1]
+    mate.post(f"/invitations/{invitation['id']}/accept")
+    assert mate.delete(f"/teams/me/members/{lead.id}").status_code == 403
+    outsider = Player(unique_email("outsider")).sign_in()
+    assert outsider.delete(f"/teams/me/members/{mate.id}").status_code == 403
+    assert lead.get("/teams/me").json()["team"]["size"] == 2

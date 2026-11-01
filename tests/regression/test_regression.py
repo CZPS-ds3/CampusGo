@@ -160,3 +160,68 @@ def test_bug_equal_scores_must_share_a_rank_br24(player):
         connection.close()
     entries = {e["id"]: e for e in one.get("/leaderboards/solo").json()["entries"]}
     assert entries[one.id]["rank"] == entries[two.id]["rank"]
+
+
+def test_bug_a_multi_select_answer_with_a_missing_option_was_not_judged_exactly_br50(admin):
+    """A subset of the right options must not count as correct (exact match only)."""
+    body = {
+        "name": f"TQ regression {unique_email('r')[:12]}",
+        "mapLink": "https://www.google.com/maps/@49.1502,9.2201,19z",
+        "questionCount": 3,
+        "passThreshold": 2,
+        "typeMode": "MULTI_ONLY",
+    }
+    quest = admin.post("/admin/checkpoints", body).json()["quest"]
+    for number in range(3):
+        options = [{"text": f"O{number}{n}", "isCorrect": n < 2} for n in range(4)]
+        reply = admin.post(
+            f"/admin/checkpoints/{quest['id']}/questions",
+            {
+                "questionText": f"Question {number}",
+                "difficulty": "NORMAL",
+                "questionType": "MULTI",
+                "options": options,
+            },
+        )
+        assert reply.status_code == 201, reply.text
+    admin.request("PATCH", f"/admin/checkpoints/{quest['id']}", json={"isActive": True})
+    admin.post("/me/location-consent")
+    started = admin.post(
+        f"/checkpoints/{quest['id']}/verify", {"lat": 0, "lng": 0, "accuracy": 10, "ageMs": 0}
+    ).json()["attempt"]
+    current = next(q for q in started["questions"] if q["number"] == started["currentQuestion"])
+    connection = connect_db()
+    try:
+        right = [
+            row["option_id"]
+            for row in query(
+                connection,
+                "SELECT option_id FROM options WHERE question_id = %s AND is_correct = 1 "
+                "ORDER BY option_id",
+                (current["id"],),
+            )
+        ]
+    finally:
+        connection.close()
+    partial = admin.post(f"/attempts/{started['id']}/answers", {"optionIds": right[:1]}).json()
+    assert partial["correct"] is False and partial["correctOptionIds"] == right
+    admin.post("/me/reset-points")
+    admin.delete(f"/admin/checkpoints/{quest['id']}")
+
+
+def test_bug_a_cancelled_invitation_could_still_be_accepted_br45(player):
+    lead, guest = player("cancel-lead"), player("cancel-guest")
+    assert lead.post("/teams", {"name": f"Cancel {lead.id}"}).status_code == 201
+    assert lead.post("/teams/me/invitations", {"email": guest.email}).status_code == 202
+    invitation = guest.get("/invitations").json()["invitations"][-1]
+    pending = lead.get("/teams/me").json()["team"]["pending"][0]
+    assert lead.post(f"/teams/me/invitations/{pending['id']}/cancel").status_code == 200
+    assert guest.post(f"/invitations/{invitation['id']}/accept").status_code >= 400
+    assert guest.get("/teams/me").json()["team"] is None
+
+
+def test_bug_an_admin_deleted_account_could_not_be_brought_back_br47(admin, player):
+    student = player("comeback")
+    admin.delete(f"/admin/users/{student.id}")
+    assert admin.post(f"/admin/users/{student.id}/restore").status_code == 200
+    assert Player(student.email).sign_in().get("/me").status_code == 200

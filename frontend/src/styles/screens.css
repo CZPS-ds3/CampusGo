@@ -327,14 +327,31 @@ ol.stack {
   position: absolute;
   inset: 0;
   z-index: 0;
-  background: var(--map-bg);
+  background: var(--map-tint-ground, var(--map-bg));
 }
 .map--darken .leaflet-tile-pane {
   filter: var(--map-filter);
 }
 .leaflet-container {
   font-family: var(--font);
-  background: var(--map-bg);
+  background: var(--map-tint-ground, var(--map-bg));
+}
+/* The map style of the student (BR48): the base follows the app theme, or is always light or dark, and a tint colour
+   shows through the map tiles. */
+.map .leaflet-tile-pane {
+  opacity: var(--map-tint-opacity, 1);
+}
+:root[data-map-base='light'] .map {
+  --map-bg: #eef0f2;
+}
+:root[data-map-base='dark'] .map {
+  --map-bg: #181d22;
+}
+:root[data-map-base='light'] .map--darken .leaflet-tile-pane {
+  filter: none;
+}
+:root[data-map-base='dark'] .map--darken .leaflet-tile-pane {
+  filter: var(--map-filter-dark);
 }
 .leaflet-top {
   top: calc(var(--safe-t) + 176px);
@@ -434,33 +451,34 @@ ol.stack {
   align-items: center;
   justify-content: center;
   transform: rotate(45deg);
-  background: var(--sub);
+  background: var(--pin-open, var(--sub));
   border: 2px solid var(--fg);
   box-shadow: var(--shadow);
-  color: var(--on);
+  color: var(--pin-open-fg, var(--on));
   transition: transform 160ms var(--ease-pop);
 }
 .pin__diamond svg {
   transform: rotate(-45deg);
 }
 .pin--done .pin__diamond {
-  background: var(--ok);
+  background: var(--pin-done, var(--ok));
+  color: var(--pin-done-fg, var(--on));
 }
 .pin--closed .pin__diamond {
-  background: var(--surface2);
+  background: var(--pin-locked, var(--surface2));
   border-color: var(--mute);
-  color: var(--mute);
+  color: var(--pin-locked-fg, var(--mute));
 }
 .pin.is-selected .pin__diamond {
   transform: rotate(45deg) scale(1.2);
-  background: var(--signal);
+  background: var(--highlight, var(--signal));
   border-color: var(--surface);
-  color: var(--on-signal);
+  color: var(--highlight-fg, var(--on-signal));
 }
 .pin__ring {
   position: absolute;
   inset: 0;
-  border: 3px solid var(--signal);
+  border: 3px solid var(--highlight, var(--signal));
   transform: rotate(45deg);
   animation: pulseRing 1.2s ease-out infinite;
 }
@@ -662,6 +680,13 @@ ol.stack {
 .opt__text {
   flex: 1;
   min-width: 0;
+}
+.opt--multi .opt__key {
+  border-radius: 4px;
+}
+.opt.is-ticked {
+  border-color: var(--signal);
+  box-shadow: 0 0 0 2px var(--signal);
 }
 .opt.is-pending {
   border-style: dashed;

@@ -29,13 +29,13 @@ docker compose up -d --wait                    # MySQL (the runner does this too
 | `pylint` | formatting | pylint, must score 10/10 | Python |
 | `python-unit` | **unit** (pytest) | photo list and credits, banned-word document equals the source list, seed checkpoints, migrations numbered without gaps, Python reference of the scoring and team-average rules | |
 | `node-config` | unit (node:test) | production config problems, lenient geofence defaults, admin address, start-up error text, dev OTP route absent in production | |
-| `unit-backend` | **backend** (Vitest) | the 170+ backend tests: scoring examples, auth, quiz, teams, admin, players, stats, geofence | MySQL test DB |
+| `unit-backend` | **backend** (Vitest) | the 230+ backend tests: scoring examples, auth, quiz, teams, admin, players, stats, geofence, quests, map links, question types, map style, deleted accounts | MySQL test DB |
 | `unit-frontend` | **frontend** (Vitest) | components, hooks, i18n coverage, mock API rules | |
 | `build` | build | production build of the web app | |
-| `python-db` | **database** (pytest) | tables, migrations in order, unique e-mail, admin id 1, 8 geofences, BR11 tables, 4 options and 1 right answer per question, no coordinates in `location_checks`, hashes only | fresh test DB |
+| `python-db` | **database** (pytest) | tables, migrations in order, unique e-mail, admin id 1, 8 geofences, BR11 tables, 4 options per question with the right number of right answers per type, attempt snapshots, `attempt_answers`, no coordinates in `location_checks`, hashes only | fresh test DB |
 | `python-api` | **integration** (pytest) | real HTTP: login, one session, teams, invitations, the 5 cap, privacy, every checkpoint inside and outside, a whole quiz | fresh DB, API |
 | `python-security` | **security** (pytest) | headers, HttpOnly cookie, forged cookie, hostile e-mail strings, cross-site requests, OTP lock, login rate limit, owner-only attempts, **coordinate canary** (no coordinates, code or token in any table or in the API log) | fresh DB, API |
-| `regression` | **regression** (pytest) | one test per bug that was fixed (Cass, invitation cap, admin ranked, team average, Building B, delete account, ties, ...) | fresh DB, API |
+| `regression` | **regression** (pytest) | one test per bug that was fixed (Cass, invitation cap, admin ranked, team average, Building B, delete account, ties, multi-select exact match, cancelled invitation, restore of a deleted account, ...) | fresh DB, API |
 | `e2e-mock` | **end-to-end** (Playwright) | whole player and admin journeys on 6 screen sizes with the mock API (`frontend/e2e`) | browsers |
 | `ux` | **UI/UX** (Playwright + axe) | WCAG 2.1 A/AA scan in light and dark on every screen, keyboard and focus rings, touch targets of 40 px, no sideways scroll at 320 px, German switch, reduced motion | browsers |
 | `browser` | **browser** (Playwright) | smoke test: start, sign in, map, menu, a whole quiz, offline notice; Chromium (+ Firefox and WebKit with `--all-browsers`) | browsers |

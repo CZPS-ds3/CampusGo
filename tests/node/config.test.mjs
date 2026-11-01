@@ -49,3 +49,14 @@ test('in production the development-only OTP route does not exist', async () => 
     server.close();
   }
 });
+
+test('development without SMTP never holds a login code back; production and real SMTP keep the limits', () => {
+  const dev = loadConfig({ NODE_ENV: 'development' });
+  assert.equal(dev.otpResendCooldownSeconds, 0);
+  assert.equal(dev.otpResendMaxPerHour, 1000);
+  const withSmtp = loadConfig({ NODE_ENV: 'development', SMTP_HOST: 'smtp.example.org' });
+  assert.equal(withSmtp.otpResendCooldownSeconds, 30);
+  assert.equal(withSmtp.otpResendMaxPerHour, 5);
+  assert.equal(loadConfig({ NODE_ENV: 'production' }).otpResendCooldownSeconds, 30);
+  assert.equal(loadConfig({ OTP_RESEND_COOLDOWN_SECONDS: '12' }).otpResendCooldownSeconds, 12);
+});

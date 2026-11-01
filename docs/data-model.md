@@ -227,6 +227,16 @@ erDiagram
 - `Location_Check` (see R-62 and R-63) holds only inside yes/no and a time.
 - `Student.role` (student/admin), `Student.status` (active/blocked/archived/deleted) with `status_reason`, `reported_at`, `report_reason`, `deleted_at` (BR26, BR28, BR30); table `Audit_Event` (BR29); table `Banned_Term` (admin additions to the built-in list, BR27); table `Checkpoint_Image` (photo url, alt text, credit). Migration `005_admin_and_media.sql`. `Team_Invitation.invited_email` (nullable): the address the inviter typed (BR40), migration `006_invitation_email.sql`. Migration `007_recompute_team_scores.sql` recalculates `Team.team_score` as the rounded-up average of the active students (BR43). Yuri's migrations `003_bildungscampus_checkpoints.sql` and `004_sensoricum.sql` come before ours.
 
+### 3.y Round 6 additions (2026-10-29, migrations 008 to 010)
+
+- `008_team_leader_and_account_states.sql`: `Team.leader_id` (nullable, FK to `Student`, backfilled with the earliest active member, BR44); `Team_Invitation.status` gets the value `cancelled` (BR45); `Student.purged_at` (BR47, backfilled for accounts erased before).
+- `009_map_style.sql`: `Student.map_style` (JSON, nullable; one style per account, BR48).
+- `010_quests_and_question_types.sql`:
+  - `Checkpoint`: `description`, `map_url`, `time_limit_seconds` (null = 60 s per question), `type_mode` (`MCQ_ONLY`, `MULTI_ONLY`, `MIXED`), `archived_at`; the check now allows 1 to 10 questions and a pass mark up to the question count (BR49).
+  - `Question.question_type` (`MCQ`, `MULTI`); the unique index "one right option per question" is gone. The number of right options per type is enforced by the admin service and by the draw query (BR50).
+  - `Attempt.question_count` and `Attempt.pass_threshold`: the values the attempt started with. `Attempt_Question.is_correct` (judged when answered).
+  - New table `Attempt_Answer (attempt_id, question_number, question_id, option_id)`: every option a student ticked (one row for MCQ, several for MULTI). `Attempt_Question.selected_option_id` keeps the first one.
+
 ## 4. Seed data for BR11 (no admin UI)
 
 **Approach.** Reference data and the question bank are plain files in the repository (SQL or CSV) loaded by a seed script, run by the developers at deployment. The script is idempotent: it upserts by natural key (`difficulty`, `bonus_type`, `attempt_number`, `checkpoint_name`, and for questions a stable external key kept in the seed file), so running it twice gives the same result. Changing a point value means editing the table (or the seed file) and re-running it; no backend code changes (BR11). The script runs in one transaction and ends with a validation step that fails the whole load if any of these is violated:

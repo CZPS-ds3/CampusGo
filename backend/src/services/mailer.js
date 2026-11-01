@@ -53,7 +53,9 @@ export function createMailer(config, { transport } = {}) {
       throw new Error('no SMTP_HOST configured, the e-mail was not sent');
     }
     latest.set(message.to, message);
-    console.log(`[mail:dev] to ${message.to}\n${message.text}`);
+    const code = message.text.match(/\b(\d{6})\b/)?.[1];
+    const line = code ? `LOGIN CODE for ${message.to}: ${code}` : `mail to ${message.to}`;
+    console.log(`\n[mail:dev] ======== ${line} ========\n${message.text}\n`);
   });
   return {
     ...queue,

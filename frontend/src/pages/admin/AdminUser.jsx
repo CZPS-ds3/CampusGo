@@ -81,6 +81,7 @@ export default function AdminUser() {
   const [data, setData] = useState(null);
   const [reason, setReason] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmErase, setConfirmErase] = useState(false);
   const [busy, setBusy] = useState('');
 
   const load = useCallback(() => {
@@ -114,6 +115,7 @@ export default function AdminUser() {
   const { user, sessions, attempts, events } = data;
   const isAdmin = user.role === 'admin';
   const deleted = user.status === 'deleted';
+  const erased = deleted && user.erased;
 
   return (
     <section className="stack" aria-labelledby="user-title">
@@ -147,6 +149,40 @@ export default function AdminUser() {
           </p>
         )}
       </div>
+
+      {deleted && (
+        <div className="card stack" data-testid="deleted-panel">
+          <Display as="h2" size="h3">
+            {erased ? t('Erased account') : t('Deleted account')}
+          </Display>
+          <p className="small">
+            {erased
+              ? t('This account was erased for good on {when}. Nothing can be restored.', {
+                  when: formatDateTime(user.deletedAt),
+                })
+              : t('This account was deleted on {when}. You can restore it, or erase it for good.', {
+                  when: formatDateTime(user.deletedAt),
+                })}
+          </p>
+          {!erased && (
+            <div className="admin-actions">
+              <Button
+                small
+                variant="ok"
+                busy={busy === 'restore'}
+                onClick={() =>
+                  act('restore', () => api.admin.restoreUser(user.id), t('Account restored'))
+                }
+              >
+                {t('Restore account')}
+              </Button>
+              <Button small variant="dark" onClick={() => setConfirmErase(true)}>
+                <Icon name="close" size={18} /> {t('Delete permanently')}
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
 
       {!isAdmin && !deleted && (
         <div className="card stack">
@@ -321,7 +357,9 @@ export default function AdminUser() {
             {t('Delete this account?')}
           </Display>
           <p className="muted mt-s">
-            {t('Personal data is removed and the person leaves their team. This cannot be undone.')}
+            {t(
+              'The account is marked as deleted, the person is signed out and leaves their team. You can restore it later, or erase it for good.',
+            )}
           </p>
           <div className="grid2 mt">
             <Button small variant="ghost" onClick={() => setConfirmDelete(false)} data-autofocus>
@@ -331,12 +369,38 @@ export default function AdminUser() {
               small
               onClick={() => {
                 setConfirmDelete(false);
-                act('delete', () => api.admin.deleteUser(user.id), t('Account deleted')).then(() =>
-                  navigate('/admin/users'),
-                );
+                act('delete', () => api.admin.deleteUser(user.id), t('Account deleted'));
               }}
             >
               {t('Delete account')}
+            </Button>
+          </div>
+        </Modal>
+      )}
+
+      {confirmErase && (
+        <Modal title={t('Confirm permanent delete')} onClose={() => setConfirmErase(false)}>
+          <Display as="h2" size="h2">
+            {t('Delete this account for good?')}
+          </Display>
+          <p className="muted mt-s">
+            {t(
+              'Name, e-mail address and picture are erased and can never be restored. Points and quest history stay without a name.',
+            )}
+          </p>
+          <div className="grid2 mt">
+            <Button small variant="ghost" onClick={() => setConfirmErase(false)} data-autofocus>
+              {t('Keep the account')}
+            </Button>
+            <Button
+              small
+              busy={busy === 'erase'}
+              onClick={() => {
+                setConfirmErase(false);
+                act('erase', () => api.admin.purgeUser(user.id), t('Account erased for good'));
+              }}
+            >
+              {t('Yes, delete permanently')}
             </Button>
           </div>
         </Modal>

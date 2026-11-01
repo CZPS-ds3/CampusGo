@@ -12,6 +12,9 @@ if (problems.length > 0) {
   process.exit(1);
 }
 
+if (config.isDev && !config.smtp.host) {
+  console.log('[mail] Development: login codes are printed in this terminal (no e-mail is sent).');
+}
 const pool = createPool(config.databaseUrl);
 const mailer = createMailer(config);
 const { app, services } = createApp({ pool, config, mailer, clock: systemClock });
@@ -34,7 +37,7 @@ function reportDatabase(error) {
   }
   if (!databaseDown) {
     console.error(
-      '[db] MySQL is not reachable. Start Docker Desktop, then run "npm run db:up" ' +
+      '[db] MySQL is not reachable. Start Docker Desktop, then run "npm run db:up" (also works in the backend folder) ' +
         '(or start everything with "npm run dev" from the project root folder). Login needs the database.',
     );
   }

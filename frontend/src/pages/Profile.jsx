@@ -5,6 +5,7 @@ import { errorText } from '../api/errorText.js';
 import { Avatar, PRESET_COUNT } from '../components/Avatar.jsx';
 import { Button } from '../components/Button.jsx';
 import { Icon } from '../components/icons.jsx';
+import { MapStyleSettings } from '../components/MapStyleSettings.jsx';
 import { Page } from '../components/Screen.jsx';
 import { Modal } from '../components/Sheet.jsx';
 import { Display, Logo } from '../components/ui.jsx';
@@ -262,6 +263,7 @@ export default function Profile() {
         </div>
         <div className="stack">
           <Preferences />
+          <MapStyleSettings />
           <Button onClick={() => setConfirm(true)}>
             <Icon name="logout" /> {t('Sign out')}
           </Button>

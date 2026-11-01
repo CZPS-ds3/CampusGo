@@ -5,6 +5,7 @@ import { Avatar } from '../components/Avatar.jsx';
 import { Button } from '../components/Button.jsx';
 import { Icon } from '../components/icons.jsx';
 import { Page, Skeleton } from '../components/Screen.jsx';
+import { Modal } from '../components/Sheet.jsx';
 import { Chip, Display, EmptyState, Input } from '../components/ui.jsx';
 import { useSession } from '../hooks/useSession.jsx';
 import { useToast } from '../hooks/useToast.jsx';
@@ -90,6 +91,7 @@ export default function Team() {
   const [busy, setBusy] = useState('');
   const [fieldError, setFieldError] = useState('');
   const [notice, setNotice] = useState('');
+  const [removing, setRemoving] = useState(null);
   const [, tick] = useState(0);
   const fileInput = useRef(null);
 
@@ -188,6 +190,23 @@ export default function Team() {
       }
     }).then(() => load());
 
+  // Any member can cancel an invitation that was sent (BR45); only the leader can remove a member (BR44).
+  const cancelInvite = (invitation) =>
+    guarded(`cancel-${invitation.id}`, async () => {
+      const { team: updated } = await api.cancelInvitation(invitation.id);
+      setTeam(updated);
+      setNotice(t('The invitation was cancelled.'));
+    });
+
+  const removeMember = (member) =>
+    guarded(`remove-${member.id}`, async () => {
+      const { team: updated } = await api.removeFromTeam(member.id);
+      setTeam(updated);
+      setRemoving(null);
+      setNotice(t('{name} was removed from the team.', { name: member.displayName }));
+      await refresh();
+    }).then(() => setRemoving(null));
+
   if (team === undefined) {
     return (
       <Page title={t('Team')}>
@@ -269,6 +288,7 @@ export default function Team() {
     return pending ? { kind: 'pending', pending } : { kind: 'open' };
   });
   const full = team.members.length + team.pending.length >= MAX_MEMBERS;
+  const iAmLeader = team.leaderId === student.id;
 
   return (
     <Page title={team.name} wide>
@@ -306,8 +326,30 @@ export default function Team() {
                   name={slot.member.displayName}
                   avatar={{ url: slot.member.pictureUrl, preset: slot.member.avatarPreset }}
                 />
-                <span className="grow truncate strong">{slot.member.displayName}</span>
+                <span className="grow truncate strong">
+                  {slot.member.displayName}
+                  {slot.member.id === team.leaderId && (
+                    <>
+                      {' '}
+                      <Chip tone="accent" icon="bolt">
+                        {t('Leader')}
+                      </Chip>
+                    </>
+                  )}
+                </span>
                 <span className="mono small">{formatNumber(slot.member.totalPoints)}</span>
+                {iAmLeader && slot.member.id !== student.id && (
+                  <Button
+                    small
+                    variant="ghost"
+                    aria-label={t('Remove {name} from the team', {
+                      name: slot.member.displayName,
+                    })}
+                    onClick={() => setRemoving(slot.member)}
+                  >
+                    {t('Remove')}
+                  </Button>
+                )}
               </li>
             ) : (
               <li key={k} className="slot row">
@@ -331,6 +373,20 @@ export default function Team() {
                     t('Open slot')
                   )}
                 </span>
+                {slot.kind === 'pending' && (
+                  <Button
+                    small
+                    variant="ghost"
+                    className="slot__cancel"
+                    busy={busy === `cancel-${slot.pending.id}`}
+                    aria-label={t('Cancel the invitation to {name}', {
+                      name: slot.pending.invitedEmail ?? slot.pending.displayName,
+                    })}
+                    onClick={() => cancelInvite(slot.pending)}
+                  >
+                    {t('Cancel invite')}
+                  </Button>
+                )}
               </li>
             ),
           )}
@@ -367,6 +423,30 @@ export default function Team() {
           )}
         </section>
       </div>
+      {removing && (
+        <Modal title={t('Confirm removing a member')} onClose={() => setRemoving(null)}>
+          <Display as="h2" size="h2">
+            {t('Remove {name}?', { name: removing.displayName })}
+          </Display>
+          <p className="muted mt-s">
+            {t(
+              'They leave the team at once and can be invited again later. Their points stay theirs.',
+            )}
+          </p>
+          <div className="grid2 mt">
+            <Button small variant="ghost" onClick={() => setRemoving(null)} data-autofocus>
+              {t('Keep in team')}
+            </Button>
+            <Button
+              small
+              busy={busy === `remove-${removing.id}`}
+              onClick={() => removeMember(removing)}
+            >
+              {t('Yes, remove')}
+            </Button>
+          </div>
+        </Modal>
+      )}
     </Page>
   );
 }

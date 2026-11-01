@@ -4,6 +4,7 @@ import { login } from '../../frontend/e2e/helpers.js';
 
 const ADMIN = { first: 'Study', last: 'Office', email: 'sekretariat.dski@heilbronn.dhbw.de' };
 const SCREENS = ['/map', '/quests', '/team', '/ranks', '/profile'];
+const ADMIN_SCREENS = ['/admin/quests', '/admin/quests/1', '/admin/quests/new', '/admin/teams'];
 
 /** Serious and critical accessibility problems of the page as it is shown now. */
 async function seriousProblems(page) {
@@ -55,9 +56,54 @@ test.describe('accessibility (axe, WCAG 2.1 A and AA)', () => {
     await expect(page.getByRole('heading', { name: 'Logins and quests per day' })).toBeVisible();
     expect(await seriousProblems(page)).toEqual([]);
   });
+
+  test('the quest and team pages of the admin have no serious problems, in light and dark', async ({
+    page,
+  }) => {
+    await login(page, ADMIN);
+    for (const theme of ['light', 'dark']) {
+      for (const path of ADMIN_SCREENS) {
+        await page.goto(path);
+        await page.evaluate(
+          (value) => document.documentElement.setAttribute('data-theme', value),
+          theme,
+        );
+        await page.waitForTimeout(500);
+        expect(await seriousProblems(page), `${path} (${theme})`).toEqual([]);
+      }
+      await page.goto('/admin/quests/1');
+      await page.evaluate(
+        (value) => document.documentElement.setAttribute('data-theme', value),
+        theme,
+      );
+      await page.getByRole('button', { name: 'Add question' }).click();
+      await expect(page.getByRole('alertdialog')).toBeVisible();
+      await page.waitForTimeout(700); // the pop-up fades in; axe must see its final colours
+      expect(await seriousProblems(page), `question pop-up (${theme})`).toEqual([]);
+      await page.keyboard.press('Escape');
+      await page.goto('/admin/teams');
+      await page.getByRole('button', { name: 'Add a student' }).first().click();
+      await expect(page.getByRole('alertdialog')).toBeVisible();
+      await page.waitForTimeout(700); // the pop-up fades in; axe must see its final colours
+      expect(await seriousProblems(page), `add-student pop-up (${theme})`).toEqual([]);
+    }
+  });
 });
 
 test.describe('layout and touch', () => {
+  test('the admin quest pages do not scroll sideways at 320 px wide', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 640 });
+    await login(page, ADMIN);
+    for (const path of ADMIN_SCREENS) {
+      await page.goto(path);
+      await page.waitForTimeout(300);
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - window.innerWidth,
+      );
+      expect(overflow, path).toBeLessThanOrEqual(0);
+    }
+  });
+
   test('no screen scrolls sideways, even at 320 px wide', async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 640 });
     await login(page);

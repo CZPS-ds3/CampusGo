@@ -7,7 +7,7 @@ import { recordEvent } from './audit.js';
 import { displayName, isSchoolEmail, normalizeEmail } from './auth.js';
 import { SUBSTRING_TERMS, TOKEN_TERMS } from './name-filter-terms.js';
 import { createStatsService } from './stats.js';
-import { refreshTeamScore } from './teams.js';
+import { MAX_TEAM_SIZE, ensureLeader, refreshTeamScore } from './teams.js';
 
 const SETTABLE_STATUSES = ['active', 'blocked', 'archived'];
 
@@ -25,6 +25,8 @@ const userView = (row) => ({
   reportReason: row.report_reason,
   teamId: row.team_id,
   teamName: row.team_name ?? null,
+  deletedAt: row.deleted_at ? row.deleted_at.toISOString() : null,
+  erased: Boolean(row.purged_at),
   totalPoints: row.total_points,
   createdAt: row.created_at.toISOString(),
   lastLoginAt: row.last_login_at ? new Date(row.last_login_at).toISOString() : null,
@@ -93,7 +95,7 @@ export function createAdminService({ pool, config, clock, nameRules }) {
     };
   }
 
-  async function listUsers({ q = '', status = '', limit = 100, offset = 0 } = {}) {
+  async function listUsers({ q = '', status = '', noTeam = false, limit = 100, offset = 0 } = {}) {
     const where = [];
     const params = [];
     if (q) {
@@ -103,6 +105,8 @@ export function createAdminService({ pool, config, clock, nameRules }) {
       const like = `%${q.replace(/[%_\\]/g, '\\$&')}%`;
       params.push(like, like, like, like);
     }
+    // The "add to a team" pop-up lists only people who can really be added.
+    if (noTeam) where.push("s.team_id IS NULL AND s.role = 'student' AND s.status = 'active'");
     if (status === 'reported') where.push('s.reported_at IS NOT NULL');
     else if (status) {
       where.push('s.status = ?');
@@ -251,7 +255,10 @@ export function createAdminService({ pool, config, clock, nameRules }) {
         await conn.query('UPDATE sessions SET is_active = 0 WHERE student_id = ?', [id]);
       }
       // A blocked or archived member stops counting in the team average (BR43).
-      if (current.team_id) await refreshTeamScore(conn, current.team_id, now);
+      if (current.team_id) {
+        await refreshTeamScore(conn, current.team_id, now);
+        await ensureLeader(conn, current.team_id);
+      }
       await recordEvent(conn, now, {
         studentId: id,
         actorId,
@@ -289,9 +296,81 @@ export function createAdminService({ pool, config, clock, nameRules }) {
     await recordEvent(pool, clock.now(), { studentId: id, actorId, type: 'forced_logout' });
   }
 
+  /** BR47: soft delete, restorable. */
   async function deleteUser(actorId, id) {
     await loadManageable(id);
-    await accounts.deleteAccount(id, { actorId });
+    await accounts.softDeleteAccount(id, { actorId });
+  }
+
+  async function restoreUser(actorId, id) {
+    await loadManageable(id);
+    await accounts.restoreAccount(id, { actorId });
+    return userView(await loadUser(id));
+  }
+
+  /** BR47: the second confirmation, which erases the personal data. */
+  async function purgeUser(actorId, id) {
+    await loadManageable(id);
+    await accounts.purgeAccount(id, { actorId });
+  }
+
+  /** BR46: an admin puts a student into any team, for example when an invitation has expired. */
+  async function addTeamMember(actorId, teamId, studentId) {
+    const now = clock.now();
+    await withTransaction(pool, async (conn) => {
+      const [[team]] = await conn.query(
+        'SELECT team_id, team_name FROM teams WHERE team_id = ? FOR UPDATE',
+        [teamId],
+      );
+      if (!team) throw notFound('Team not found.');
+      const [[student]] = await conn.query(
+        'SELECT student_id, role, status, team_id FROM students WHERE student_id = ? FOR UPDATE',
+        [studentId],
+      );
+      if (!student)
+        throw new AppError(404, 'STUDENT_NOT_FOUND', 'No student with this id or address.');
+      if (student.role !== 'student') {
+        throw new AppError(409, 'NOT_A_STUDENT', 'Administrator accounts are not added to teams.');
+      }
+      if (student.status !== 'active') {
+        throw new AppError(
+          409,
+          'STUDENT_NOT_ACTIVE',
+          `This account is ${student.status} and cannot join a team.`,
+        );
+      }
+      if (student.team_id) {
+        throw new AppError(409, 'ALREADY_IN_TEAM', 'This student is already in a team.');
+      }
+      const [[{ size }]] = await conn.query(
+        'SELECT COUNT(*) AS size FROM students WHERE team_id = ?',
+        [teamId],
+      );
+      if (Number(size) >= MAX_TEAM_SIZE) {
+        throw new AppError(
+          409,
+          'TEAM_FULL',
+          `${team.team_name} already has ${MAX_TEAM_SIZE} members.`,
+        );
+      }
+      await conn.query('UPDATE students SET team_id = ?, team_joined_at = ? WHERE student_id = ?', [
+        teamId,
+        at(now),
+        studentId,
+      ]);
+      await conn.query(
+        "UPDATE team_invitations SET status = 'invalid', responded_at = ? WHERE invitee_id = ? AND status = 'pending'",
+        [at(now), studentId],
+      );
+      await refreshTeamScore(conn, teamId, now);
+      await ensureLeader(conn, teamId);
+      await recordEvent(conn, now, {
+        studentId,
+        actorId,
+        type: 'added_to_team',
+        detail: team.team_name,
+      });
+    });
   }
 
   // ----- teams -----
@@ -353,8 +432,10 @@ export function createAdminService({ pool, config, clock, nameRules }) {
         'SELECT COUNT(*) AS `left` FROM students WHERE team_id = ?',
         [teamId],
       );
-      if (left > 0) await refreshTeamScore(conn, teamId, now);
-      else {
+      if (left > 0) {
+        await refreshTeamScore(conn, teamId, now);
+        await ensureLeader(conn, teamId);
+      } else {
         await conn.query('DELETE FROM team_invitations WHERE team_id = ?', [teamId]);
         await conn.query('DELETE FROM teams WHERE team_id = ?', [teamId]);
       }
@@ -415,6 +496,9 @@ export function createAdminService({ pool, config, clock, nameRules }) {
     clearReport,
     forceLogout,
     deleteUser,
+    restoreUser,
+    purgeUser,
+    addTeamMember,
     listTeams,
     renameTeam,
     removeMember,
