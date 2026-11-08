@@ -9,7 +9,9 @@ export function formatDateTime(iso) {
   );
 }
 
-export const STATUS_TONE = { active: 'ok', blocked: 'red', archived: 'mute', deleted: 'mute' };
+export const STATUS_TONE = { active: 'ok', blocked: 'red', archived: 'mute' };
+
+export const roleLabel = (role) => (role === 'admin' ? t('Admin') : t('Student'));
 
 export function statusLabel(status) {
   switch (status) {
@@ -19,8 +21,6 @@ export function statusLabel(status) {
       return t('Blocked');
     case 'archived':
       return t('Archived');
-    case 'deleted':
-      return t('Deleted');
     default:
       return status;
   }
@@ -39,15 +39,8 @@ export function eventLabel(type) {
       return t('Account created by an admin');
     case 'account_edited':
       return t('Account edited by an admin');
-    case 'account_deleted':
-    case 'account_deleted_by_admin':
-      return t('Account deleted by an admin');
-    case 'account_deleted_by_student':
-      return t('Account deleted by the student');
-    case 'account_erased':
-      return t('Account erased for good');
-    case 'account_restored':
-      return t('Account restored by an admin');
+    case 'role_changed':
+      return t('Role changed by an admin');
     case 'added_to_team':
       return t('Added to a team by an admin');
     case 'passed':

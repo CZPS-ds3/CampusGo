@@ -279,16 +279,30 @@ def test_br44_br45_the_leader_removes_members_and_a_member_cancels_an_invitation
     assert removed.status_code == 200 and removed.json()["team"]["size"] == 1
 
 
-def test_br47_a_deleted_account_can_be_restored_and_then_erased_for_good(admin, player):
+def test_br47_a_deleted_account_is_gone_for_good(admin, player):
     student = player("deleted")
     assert admin.delete(f"/admin/users/{student.id}").status_code == 204
-    shown = admin.get(f"/admin/users/{student.id}").json()["user"]
-    assert shown["status"] == "deleted" and shown["erased"] is False
-    assert admin.post(f"/admin/users/{student.id}/restore").json()["user"]["status"] == "active"
-    admin.delete(f"/admin/users/{student.id}")
-    assert admin.delete(f"/admin/users/{student.id}/permanent").status_code == 204
-    assert admin.get(f"/admin/users/{student.id}").json()["user"]["erased"] is True
-    assert admin.post(f"/admin/users/{student.id}/restore").status_code == 409
+    assert admin.get(f"/admin/users/{student.id}").status_code == 404
+    listed = admin.get("/admin/users?limit=200").json()["users"]
+    assert student.id not in [user["id"] for user in listed]
+    assert admin.get("/admin/users?status=deleted").status_code == 400
+    assert admin.post(f"/admin/users/{student.id}/restore").status_code == 404
+    assert admin.delete(f"/admin/users/{student.id}/permanent").status_code == 404
+    assert student.get("/me").status_code == 401
+
+
+def test_br53_an_admin_changes_roles_and_the_new_role_works_at_once(admin, player):
+    person = player("promote")
+    assert person.get("/admin/users").status_code == 403
+    changed = admin.post(f"/admin/users/{person.id}/role", {"role": "admin"})
+    assert changed.status_code == 200 and changed.json()["user"]["role"] == "admin"
+    assert person.get("/me").json()["student"]["role"] == "admin"
+    assert person.get("/admin/users").status_code == 200
+    assert admin.post(f"/admin/users/{person.id}/role", {"role": "student"}).status_code == 200
+    assert person.get("/admin/users").status_code == 403
+    assert admin.post(f"/admin/users/{person.id}/role", {"role": "owner"}).status_code == 400
+    assert admin.post(f"/admin/users/{admin.id}/role", {"role": "student"}).status_code == 403
+    assert person.post(f"/admin/users/{admin.id}/role", {"role": "student"}).status_code == 403
 
 
 def test_br48_one_map_style_is_saved_on_the_account(player):

@@ -2,7 +2,7 @@
 import { at } from '../clock.js';
 import { withTransaction } from '../db/pool.js';
 import { AppError, notFound } from '../middleware/errors.js';
-import { createAccountService } from './account.js';
+import { createAccountService, eraseStudentData, leaveTeam } from './account.js';
 import { recordEvent } from './audit.js';
 import { displayName, isSchoolEmail, normalizeEmail } from './auth.js';
 import { SUBSTRING_TERMS, TOKEN_TERMS } from './name-filter-terms.js';
@@ -10,8 +10,9 @@ import { createStatsService } from './stats.js';
 import { MAX_TEAM_SIZE, ensureLeader, refreshTeamScore } from './teams.js';
 
 const SETTABLE_STATUSES = ['active', 'blocked', 'archived'];
+const ROLES = ['student', 'admin'];
 
-const userView = (row) => ({
+const makeUserView = (mainAdminEmail) => (row) => ({
   id: row.student_id,
   email: row.email,
   firstName: row.first_name,
@@ -19,14 +20,14 @@ const userView = (row) => ({
   nickname: row.nickname,
   displayName: displayName(row),
   role: row.role,
+  // The pre-seeded administrator cannot be demoted or deleted (BR26).
+  mainAdmin: row.email === mainAdminEmail,
   status: row.status,
   statusReason: row.status_reason,
   reported: Boolean(row.reported_at),
   reportReason: row.report_reason,
   teamId: row.team_id,
   teamName: row.team_name ?? null,
-  deletedAt: row.deleted_at ? row.deleted_at.toISOString() : null,
-  erased: Boolean(row.purged_at),
   totalPoints: row.total_points,
   createdAt: row.created_at.toISOString(),
   lastLoginAt: row.last_login_at ? new Date(row.last_login_at).toISOString() : null,
@@ -37,6 +38,7 @@ const duplicateEmail = () =>
   new AppError(409, 'EMAIL_TAKEN', 'This e-mail address already belongs to an account.');
 
 export function createAdminService({ pool, config, clock, nameRules }) {
+  const userView = makeUserView(config.adminEmail);
   const accounts = createAccountService({ pool, clock });
   const stats = createStatsService({ pool, clock });
 
@@ -80,14 +82,17 @@ export function createAdminService({ pool, config, clock, nameRules }) {
       [dayStart],
     );
     const [[{ teams }]] = await pool.query('SELECT COUNT(*) AS teams FROM teams');
+    const [[{ admins }]] = await pool.query(
+      "SELECT COUNT(*) AS admins FROM students WHERE role = 'admin'",
+    );
     const counts = Object.fromEntries(byStatus.map((r) => [r.status, Number(r.n)]));
     return {
       users: {
         active: counts.active ?? 0,
         blocked: counts.blocked ?? 0,
         archived: counts.archived ?? 0,
-        deleted: counts.deleted ?? 0,
       },
+      admins: Number(admins),
       activeSessions: Number(sessions),
       questsPassedToday: Number(passedToday),
       loginsToday: Number(loginsToday),
@@ -95,7 +100,14 @@ export function createAdminService({ pool, config, clock, nameRules }) {
     };
   }
 
-  async function listUsers({ q = '', status = '', noTeam = false, limit = 100, offset = 0 } = {}) {
+  async function listUsers({
+    q = '',
+    status = '',
+    role = '',
+    noTeam = false,
+    limit = 100,
+    offset = 0,
+  } = {}) {
     const where = [];
     const params = [];
     if (q) {
@@ -107,6 +119,10 @@ export function createAdminService({ pool, config, clock, nameRules }) {
     }
     // The "add to a team" pop-up lists only people who can really be added.
     if (noTeam) where.push("s.team_id IS NULL AND s.role = 'student' AND s.status = 'active'");
+    if (ROLES.includes(role)) {
+      where.push('s.role = ?');
+      params.push(role);
+    }
     if (status === 'reported') where.push('s.reported_at IS NOT NULL');
     else if (status) {
       where.push('s.status = ?');
@@ -179,7 +195,7 @@ export function createAdminService({ pool, config, clock, nameRules }) {
     return email;
   }
 
-  async function createUser(actorId, { email, firstName, lastName, nickname }) {
+  async function createUser(actorId, { email, firstName, lastName, nickname, role = 'student' }) {
     const clean = await checkEmail(email);
     await nameRules.assertAllowed(firstName, lastName, nickname);
     const now = clock.now();
@@ -189,7 +205,7 @@ export function createAdminService({ pool, config, clock, nameRules }) {
          VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?)`,
         [
           clean,
-          clean === config.adminEmail ? 'admin' : 'student',
+          clean === config.adminEmail ? 'admin' : role,
           firstName,
           lastName,
           nickname || null,
@@ -201,6 +217,7 @@ export function createAdminService({ pool, config, clock, nameRules }) {
         studentId: inserted.insertId,
         actorId,
         type: 'account_created',
+        detail: role === 'admin' ? 'role admin' : null,
       });
       return userView(await loadUser(inserted.insertId));
     } catch (error) {
@@ -236,8 +253,6 @@ export function createAdminService({ pool, config, clock, nameRules }) {
       throw new AppError(400, 'INVALID_INPUT', 'Unknown status.');
     }
     const current = await loadManageable(id);
-    if (current.status === 'deleted')
-      throw new AppError(409, 'DELETED', 'The account was deleted.');
     const now = clock.now();
     await withTransaction(pool, async (conn) => {
       // Team first, then student (same lock order as everywhere else).
@@ -296,22 +311,62 @@ export function createAdminService({ pool, config, clock, nameRules }) {
     await recordEvent(pool, clock.now(), { studentId: id, actorId, type: 'forced_logout' });
   }
 
-  /** BR47: soft delete, restorable. */
+  /** BR47: the account and everything that belongs to it is deleted for good. */
   async function deleteUser(actorId, id) {
     await loadManageable(id);
-    await accounts.softDeleteAccount(id, { actorId });
+    await accounts.deleteAccount(id, { actorId });
   }
 
-  async function restoreUser(actorId, id) {
-    await loadManageable(id);
-    await accounts.restoreAccount(id, { actorId });
+  /**
+   * BR26, BR53: an admin makes a student an administrator or an administrator a student. Administrators are
+   * in no team and no ranking and test with zero points, so a change in either direction takes the person out
+   * of their team and clears their quiz history and points; otherwise a test pass would block the quest for the
+   * new student, or real points would sit in an account that no ranking shows. The new role applies on the very
+   * next request, because every request reads the role from the database.
+   */
+  async function setRole(actorId, id, role) {
+    if (!ROLES.includes(role)) throw new AppError(400, 'INVALID_INPUT', 'Unknown role.');
+    const now = clock.now();
+    await withTransaction(pool, async (conn) => {
+      const [[preview]] = await conn.query('SELECT team_id FROM students WHERE student_id = ?', [
+        id,
+      ]);
+      if (!preview) throw notFound('Account not found.');
+      if (preview.team_id) {
+        await conn.query('SELECT team_id FROM teams WHERE team_id = ? FOR UPDATE', [
+          preview.team_id,
+        ]);
+      }
+      const [[target]] = await conn.query(
+        'SELECT student_id, email, role, team_id FROM students WHERE student_id = ? FOR UPDATE',
+        [id],
+      );
+      if (target.student_id === actorId) {
+        throw new AppError(403, 'FORBIDDEN', 'You cannot change your own role.');
+      }
+      if (target.email === config.adminEmail) {
+        throw new AppError(403, 'FORBIDDEN', 'The main administrator account cannot be changed.');
+      }
+      if (target.role === role) return;
+      await conn.query(
+        "UPDATE team_invitations SET status = 'invalid', responded_at = ? WHERE (invitee_id = ? OR inviter_id = ?) AND status = 'pending'",
+        [at(now), id, id],
+      );
+      await eraseStudentData(conn, id);
+      await conn.query(
+        `UPDATE students SET role = ?, team_id = NULL, team_joined_at = NULL, total_points = 0,
+           points_exact_x100 = 0, points_updated_at = ? WHERE student_id = ?`,
+        [role, at(now), id],
+      );
+      if (target.team_id) await leaveTeam(conn, target.team_id, now);
+      await recordEvent(conn, now, {
+        studentId: id,
+        actorId,
+        type: 'role_changed',
+        detail: `${target.role} to ${role}`,
+      });
+    });
     return userView(await loadUser(id));
-  }
-
-  /** BR47: the second confirmation, which erases the personal data. */
-  async function purgeUser(actorId, id) {
-    await loadManageable(id);
-    await accounts.purgeAccount(id, { actorId });
   }
 
   /** BR46: an admin puts a student into any team, for example when an invitation has expired. */
@@ -496,8 +551,7 @@ export function createAdminService({ pool, config, clock, nameRules }) {
     clearReport,
     forceLogout,
     deleteUser,
-    restoreUser,
-    purgeUser,
+    setRole,
     addTeamMember,
     listTeams,
     renameTeam,

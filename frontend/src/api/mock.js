@@ -10,8 +10,9 @@ const STORAGE_KEY = 'cq-mock-v2';
 const SECOND = 1000;
 const OTP = '123456';
 const DOMAIN = 'heilbronn.dhbw.de';
-const MAX_ACCURACY_M = 100;
-const GEOFENCE_SLACK_M = 25; // grace zone added to every radius
+const MAX_ACCURACY_M = 200;
+const GEOFENCE_SLACK_M = 30; // grace zone added to every radius
+const ACCURACY_CREDIT_M = 50; // at most this much of a reading's error margin counts for the student
 const NEARER_MARGIN_M = 20; // another checkpoint must be this much nearer to win
 const MAX_POSITION_AGE_MS = 30_000;
 const ADMIN_EMAIL = `sekretariat.dski@${DOMAIN}`;
@@ -50,14 +51,14 @@ const bannedWord = (text, extra = []) => {
 
 // Same centres, radii and status as backend/src/db/seed.js (Bildungscampus Heilbronn).
 const CHECKPOINTS = [
-  ['Mensa', 49.148464, 9.215808, 60, 5, 4, true, true],
-  ['Library', 49.149493, 9.216467, 60, 5, 4, true, true],
-  ['CAS Cafe', 49.148951, 9.216205, 40, 3, 2, false, true],
-  ['Campus Garden', 49.147082, 9.217206, 50, 3, 2, false, true],
-  ['Care.box and Shop.box', 49.149088, 9.21727, 40, 3, 2, false, true],
-  ['Building B', 49.147126, 9.218486, 60, 5, 4, true, true],
-  ['Building C', 49.147316, 9.2179, 60, 5, 4, true, true],
-  ['Sensoricum', 49.14762, 9.217807, 40, 3, 2, false, true],
+  ['Mensa', 49.148464, 9.215808, 80, 5, 4, true, true],
+  ['Library', 49.149493, 9.216467, 80, 5, 4, true, true],
+  ['CAS Cafe', 49.148951, 9.216205, 60, 3, 2, false, true],
+  ['Campus Garden', 49.147082, 9.217206, 70, 3, 2, false, true],
+  ['Care.box and Shop.box', 49.149088, 9.21727, 60, 3, 2, false, true],
+  ['Building B', 49.147126, 9.218486, 80, 5, 4, true, true],
+  ['Building C', 49.147316, 9.2179, 80, 5, 4, true, true],
+  ['Sensoricum', 49.14762, 9.217807, 60, 3, 2, false, true],
 ].map(([name, latitude, longitude, radius, questionCount, passThreshold, hard, isActive], i) => ({
   id: i + 1,
   name,
@@ -196,8 +197,6 @@ const fresh = () => ({
       questsPassed,
       createdAt: new Date(Date.now() - (9 - i) * 86400e3).toISOString(),
       lastLoginAt: new Date(Date.now() - (i + 1) * 5 * 3600e3).toISOString(),
-      deletedAt: null,
-      erased: false,
     })),
     teams: [
       { id: 1, name: 'Bildungscampus Bandits', score: 6800, members: [100, 101] },
@@ -643,7 +642,8 @@ export function createMockApi(ApiError, getUnauthorized) {
         throw fail(422, 'ACCURACY_TOO_LOW', 'Your location is not precise enough.');
       const metres = distance(latitude, longitude, cp.latitude, cp.longitude);
       const distanceM = Math.round(metres / 10) * 10;
-      if (metres > cp.radius + GEOFENCE_SLACK_M) {
+      const credit = Math.min(accuracy, ACCURACY_CREDIT_M);
+      if (metres > cp.radius + GEOFENCE_SLACK_M + credit) {
         return {
           status: 'OUTSIDE',
           distanceM,
@@ -1095,6 +1095,7 @@ export function createMockApi(ApiError, getUnauthorized) {
     lat: q.latitude,
     lng: q.longitude,
     radius: q.radius,
+    graceM: GEOFENCE_SLACK_M,
     questionCount: q.questionCount,
     passThreshold: q.passThreshold,
     timeLimitSeconds: q.timeLimitSeconds,
@@ -1207,7 +1208,7 @@ export function createMockApi(ApiError, getUnauthorized) {
       needAdmin();
       const q = {
         description: '',
-        radius: 50,
+        radius: 80,
         timeLimitSeconds: null,
         hardQuestionEnabled: false,
         typeMode: 'MCQ_ONLY',
@@ -1452,7 +1453,7 @@ export function createMockApi(ApiError, getUnauthorized) {
           questsPassedYesterday: daily[12].passed,
         },
         daily,
-        usersByStatus: { active: 4, blocked: 1, archived: 1, deleted: 0 },
+        usersByStatus: { active: 4, blocked: 1, archived: 1 },
         checkpoints: state.quests.map((c, i) => ({
           id: c.id,
           name: c.name,
@@ -1507,15 +1508,15 @@ export function createMockApi(ApiError, getUnauthorized) {
           active: count('active'),
           blocked: count('blocked'),
           archived: count('archived'),
-          deleted: count('deleted'),
         },
+        admins: state.admin.users.filter((u) => u.role === 'admin').length + 1,
         activeSessions: 3,
         questsPassedToday: 11,
         loginsToday: 17,
         teams: state.admin.teams.length,
       };
     },
-    async users({ q = '', status = '', noTeam = false } = {}) {
+    async users({ q = '', status = '', role = '', noTeam = false } = {}) {
       needAdmin();
       const needle = q.toLowerCase();
       return {
@@ -1526,6 +1527,7 @@ export function createMockApi(ApiError, getUnauthorized) {
               `${u.email} ${u.firstName} ${u.lastName} ${u.nickname}`
                 .toLowerCase()
                 .includes(needle)) &&
+            (!role || u.role === role) &&
             (!status || (status === 'reported' ? u.reported : u.status === status)),
         ),
       };
@@ -1535,7 +1537,7 @@ export function createMockApi(ApiError, getUnauthorized) {
       const user = adminUser(id);
       return { user, ...logFor(user) };
     },
-    async createUser({ email, firstName, lastName, nickname }) {
+    async createUser({ email, firstName, lastName, nickname, role = 'student' }) {
       needAdmin();
       const clean = checkAdminEmail(email);
       if (bannedWord(`${firstName} ${lastName} ${nickname ?? ''}`, state.admin.terms))
@@ -1547,7 +1549,7 @@ export function createMockApi(ApiError, getUnauthorized) {
         lastName,
         nickname: nickname || null,
         displayName: nickname || `${firstName} ${lastName.charAt(0)}.`,
-        role: 'student',
+        role: role === 'admin' ? 'admin' : 'student',
         status: 'active',
         statusReason: null,
         reported: false,
@@ -1558,8 +1560,6 @@ export function createMockApi(ApiError, getUnauthorized) {
         questsPassed: 0,
         createdAt: new Date().toISOString(),
         lastLoginAt: null,
-        deletedAt: null,
-        erased: false,
       };
       state.admin.users.unshift(user);
       save();
@@ -1607,48 +1607,36 @@ export function createMockApi(ApiError, getUnauthorized) {
       adminUser(id);
       return null;
     },
-    // An admin delete is soft: the account can be restored until it is erased for good (BR47).
+    // BR47: an admin delete removes the account for good, so it appears nowhere any more.
     async deleteUser(id) {
       needAdmin();
       const user = adminUser(id);
-      user.status = 'deleted';
-      user.deletedAt = new Date().toISOString();
-      user.teamName = null;
-      user.teamId = null;
+      if (user.role === 'admin')
+        throw fail(403, 'FORBIDDEN', 'Administrator accounts cannot be deleted.');
+      state.admin.users = state.admin.users.filter((u) => u.id !== user.id);
       for (const team of state.admin.teams)
         team.members = team.members.filter((m) => m !== user.id);
+      state.admin.teams = state.admin.teams.filter((team) => team.members.length > 0);
       save();
       return null;
     },
-    async restoreUser(id) {
+    // BR53: students and admins change places; an admin is in no team and starts with no points.
+    async setRole(id, role) {
       needAdmin();
+      if (!['student', 'admin'].includes(role)) throw fail(400, 'INVALID_INPUT', 'Unknown role.');
       const user = adminUser(id);
-      if (user.status !== 'deleted' || user.erased)
-        throw fail(
-          409,
-          'NOT_RESTORABLE',
-          'Only a deleted account that is not erased can be restored.',
-        );
-      user.status = 'active';
-      user.deletedAt = null;
-      save();
+      if (user.role !== role) {
+        user.role = role;
+        user.teamId = null;
+        user.teamName = null;
+        user.totalPoints = 0;
+        user.questsPassed = 0;
+        for (const team of state.admin.teams)
+          team.members = team.members.filter((m) => m !== user.id);
+        state.admin.teams = state.admin.teams.filter((team) => team.members.length > 0);
+        save();
+      }
       return { user };
-    },
-    async purgeUser(id) {
-      needAdmin();
-      const user = adminUser(id);
-      if (user.status !== 'deleted' || user.erased)
-        throw fail(409, 'NOT_DELETED', 'Only a deleted account can be erased for good.');
-      Object.assign(user, {
-        erased: true,
-        email: `deleted-${user.id}@deleted.invalid`,
-        firstName: 'Deleted',
-        lastName: 'User',
-        nickname: null,
-        displayName: 'Deleted user',
-      });
-      save();
-      return null;
     },
     async addTeamMember(teamId, studentId) {
       needAdmin();

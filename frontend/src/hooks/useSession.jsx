@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { api, setUnauthorizedHandler } from '../api/client.js';
 import { t } from '../i18n.js';
 import { forgetMapStyle, loadMapStyle } from '../mapStyle.js';
+import { useAutoRefresh } from './useAutoRefresh.js';
 import { useToast } from './useToast.jsx';
 
 const SessionContext = createContext(null);
@@ -41,6 +42,21 @@ export function SessionProvider({ children }) {
     if (studentId) loadMapStyle(api);
     else if (ready) forgetMapStyle();
   }, [studentId, ready]);
+
+  // The role, the status and the points can change while the page is open (an admin makes someone an admin, the
+  // points grow on another device). Looking again every so often keeps the menus and the admin area in step.
+  const syncStudent = useCallback(() => {
+    api
+      .me()
+      .then(({ student: me }) =>
+        setStudent((current) =>
+          current && JSON.stringify(current) !== JSON.stringify(me) ? me : current,
+        ),
+      )
+      // A lost connection is shown by the offline banner; an ended session is handled by the 401 handler.
+      .catch(() => {});
+  }, []);
+  useAutoRefresh(syncStudent, 15_000, studentId !== null);
 
   const logout = useCallback(async () => {
     try {

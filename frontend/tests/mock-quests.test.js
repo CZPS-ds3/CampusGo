@@ -155,21 +155,35 @@ describe('BR44 BR45 BR47 BR48 team and account rules in the mock', () => {
     await expect(api.removeFromTeam(1)).rejects.toMatchObject({ code: 'CANNOT_REMOVE_SELF' });
   });
 
-  it('BR47 a deleted account can be restored, or erased for good', async () => {
+  it('BR47 a deleted account is gone for good: no list entry, no detail, no restore', async () => {
     await signInAsAdmin();
     const { users } = await api.admin.users({ q: 'Lars' });
     const lars = users[0];
     await api.admin.deleteUser(lars.id);
-    const deleted = (await api.admin.user(lars.id)).user;
-    expect(deleted).toMatchObject({ status: 'deleted', erased: false });
-    expect(deleted.deletedAt).toBeTruthy();
-    await api.admin.restoreUser(lars.id);
-    expect((await api.admin.user(lars.id)).user.status).toBe('active');
-    await api.admin.deleteUser(lars.id);
-    await api.admin.purgeUser(lars.id);
-    const erased = (await api.admin.user(lars.id)).user;
-    expect(erased).toMatchObject({ erased: true, firstName: 'Deleted' });
-    await expect(api.admin.restoreUser(lars.id)).rejects.toMatchObject({ code: 'NOT_RESTORABLE' });
+    expect((await api.admin.users({ q: 'Lars' })).users).toEqual([]);
+    await expect(api.admin.user(lars.id)).rejects.toMatchObject({ status: 404 });
+    expect(api.admin.restoreUser).toBeUndefined();
+    expect(api.admin.purgeUser).toBeUndefined();
+    const overview = await api.admin.overview();
+    expect(overview.users).not.toHaveProperty('deleted');
+  });
+
+  it('BR53 an admin changes a role; the person leaves their team and starts with no points', async () => {
+    await signInAsAdmin();
+    const { users } = await api.admin.users({ q: 'Mira' });
+    const mira = users[0];
+    expect(mira).toMatchObject({ role: 'student' });
+    expect(mira.teamId).not.toBeNull();
+    const { user } = await api.admin.setRole(mira.id, 'admin');
+    expect(user).toMatchObject({ role: 'admin', teamId: null, totalPoints: 0 });
+    expect((await api.admin.users({ role: 'admin' })).users.map((u) => u.id)).toContain(mira.id);
+    expect((await api.admin.users({ role: 'student' })).users.map((u) => u.id)).not.toContain(
+      mira.id,
+    );
+    await expect(api.admin.deleteUser(mira.id)).rejects.toMatchObject({ status: 403 });
+    await api.admin.setRole(mira.id, 'student');
+    await expect(api.admin.setRole(mira.id, 'owner')).rejects.toMatchObject({ status: 400 });
+    await api.admin.deleteUser(mira.id);
   });
 
   it('BR46 an admin adds a student without a team to a team', async () => {

@@ -159,17 +159,23 @@ def test_teams_have_a_leader_and_invitations_can_be_cancelled(db):
     assert "'cancelled'" in status
 
 
-def test_a_student_has_one_map_style_and_a_deleted_account_can_be_erased_for_good(db):
+def test_a_student_has_one_map_style_and_a_deleted_account_leaves_no_trace(db):
     columns = {
-        row["column_name"]: row["data_type"]
+        row["column_name"]: row["column_type"]
         for row in query(
             db,
-            "SELECT column_name, data_type FROM information_schema.columns "
+            "SELECT column_name, column_type FROM information_schema.columns "
             "WHERE table_schema = DATABASE() AND table_name = 'students' "
-            "AND column_name IN ('map_style', 'purged_at')",
+            "AND column_name IN ('map_style', 'status', 'deleted_at', 'purged_at')",
         )
     }
-    assert columns == {"map_style": "json", "purged_at": "datetime"}
+    # BR47: an account is deleted for good, so there is no "deleted" status and no erase marker any more.
+    assert columns == {"map_style": "json", "status": "enum('active','blocked','archived')"}
+
+
+def test_no_checkpoint_circle_is_smaller_than_60_m_br12(db):
+    smallest = query(db, "SELECT MIN(radius) AS smallest FROM checkpoints")[0]["smallest"]
+    assert smallest >= 60
 
 
 def test_each_checkpoint_has_enough_questions_for_a_fresh_draw(db):

@@ -7,9 +7,18 @@ import { Icon } from '../../components/icons.jsx';
 import { Skeleton } from '../../components/Screen.jsx';
 import { Modal } from '../../components/Sheet.jsx';
 import { Chip, Display, Input } from '../../components/ui.jsx';
+import { useAutoRefresh } from '../../hooks/useAutoRefresh.js';
 import { useToast } from '../../hooks/useToast.jsx';
 import { formatNumber, t } from '../../i18n.js';
-import { STATUS_TONE, attemptLabel, eventLabel, formatDateTime, statusLabel } from './format.js';
+import { useSession } from '../../hooks/useSession.jsx';
+import {
+  STATUS_TONE,
+  attemptLabel,
+  eventLabel,
+  formatDateTime,
+  roleLabel,
+  statusLabel,
+} from './format.js';
 
 function EditForm({ user, onSaved }) {
   const toast = useToast();
@@ -74,14 +83,53 @@ function EditForm({ user, onSaved }) {
   );
 }
 
+/** Role of the account: student or admin. Admins can change everyone's role except their own and the main admin's. */
+function RoleCard({ user, isSelf, busy, onPick }) {
+  const locked = isSelf || user.mainAdmin;
+  const options = ['student', 'admin'];
+  return (
+    <section className="card stack" aria-labelledby="role-h" data-testid="role-card">
+      <Display as="h2" size="h3" id="role-h">
+        {t('Role')}
+      </Display>
+      <div className="seg seg--2" role="radiogroup" aria-labelledby="role-h">
+        {options.map((role) => (
+          <button
+            key={role}
+            type="button"
+            role="radio"
+            aria-checked={user.role === role}
+            disabled={locked || busy}
+            onClick={() => user.role !== role && onPick(role)}
+          >
+            {roleLabel(role)}
+          </button>
+        ))}
+      </div>
+      <p className="small muted">
+        {user.mainAdmin
+          ? t('This is the main administrator account. It always stays an admin.')
+          : isSelf
+            ? t('You cannot change your own role.')
+            : user.role === 'admin'
+              ? t(
+                  'Admins can use everything in the admin area. Make this person a student before deleting the account.',
+                )
+              : t('Make this person an admin to give them the whole admin area.')}
+      </p>
+    </section>
+  );
+}
+
 export default function AdminUser() {
   const { id } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
+  const { student: me } = useSession();
   const [data, setData] = useState(null);
   const [reason, setReason] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [confirmErase, setConfirmErase] = useState(false);
+  const [pendingRole, setPendingRole] = useState(null);
   const [busy, setBusy] = useState('');
 
   const load = useCallback(() => {
@@ -98,6 +146,18 @@ export default function AdminUser() {
     load();
   }, [load]);
 
+  // Changes by another admin (a role, a block, a deletion) appear here by themselves. A failed refresh stays
+  // quiet, except when the account is gone.
+  const quietReload = useCallback(() => {
+    api.admin
+      .user(id)
+      .then(setData)
+      .catch((error) => {
+        if (error.status === 404) navigate('/admin/users', { replace: true });
+      });
+  }, [id, navigate]);
+  useAutoRefresh(quietReload);
+
   const act = async (key, work, done) => {
     setBusy(key);
     try {
@@ -111,11 +171,22 @@ export default function AdminUser() {
     }
   };
 
+  // The account no longer exists afterwards, so go back to the list instead of reloading it.
+  const remove = async () => {
+    setBusy('delete');
+    try {
+      await api.admin.deleteUser(id);
+      toast.info(t('Account deleted'));
+      navigate('/admin/users', { replace: true });
+    } catch (error) {
+      toast.error(errorText(error));
+      setBusy('');
+    }
+  };
+
   if (!data) return <Skeleton rows={3} height={96} />;
   const { user, sessions, attempts, events } = data;
   const isAdmin = user.role === 'admin';
-  const deleted = user.status === 'deleted';
-  const erased = deleted && user.erased;
 
   return (
     <section className="stack" aria-labelledby="user-title">
@@ -130,7 +201,7 @@ export default function AdminUser() {
           <span className="admin-user__chips">
             <Chip tone={STATUS_TONE[user.status]}>{statusLabel(user.status)}</Chip>
             {user.reported && <Chip tone="warn">{t('Reported')}</Chip>}
-            {isAdmin && <Chip tone="sub">{t('Admin')}</Chip>}
+            {isAdmin && <Chip tone="sub">{roleLabel('admin')}</Chip>}
           </span>
         </div>
         <p className="small muted break">{user.email}</p>
@@ -150,41 +221,14 @@ export default function AdminUser() {
         )}
       </div>
 
-      {deleted && (
-        <div className="card stack" data-testid="deleted-panel">
-          <Display as="h2" size="h3">
-            {erased ? t('Erased account') : t('Deleted account')}
-          </Display>
-          <p className="small">
-            {erased
-              ? t('This account was erased for good on {when}. Nothing can be restored.', {
-                  when: formatDateTime(user.deletedAt),
-                })
-              : t('This account was deleted on {when}. You can restore it, or erase it for good.', {
-                  when: formatDateTime(user.deletedAt),
-                })}
-          </p>
-          {!erased && (
-            <div className="admin-actions">
-              <Button
-                small
-                variant="ok"
-                busy={busy === 'restore'}
-                onClick={() =>
-                  act('restore', () => api.admin.restoreUser(user.id), t('Account restored'))
-                }
-              >
-                {t('Restore account')}
-              </Button>
-              <Button small variant="dark" onClick={() => setConfirmErase(true)}>
-                <Icon name="close" size={18} /> {t('Delete permanently')}
-              </Button>
-            </div>
-          )}
-        </div>
-      )}
+      <RoleCard
+        user={user}
+        isSelf={user.id === me?.id}
+        busy={busy === 'role'}
+        onPick={(role) => setPendingRole(role)}
+      />
 
-      {!isAdmin && !deleted && (
+      {!isAdmin && (
         <div className="card stack">
           <Display as="h2" size="h3">
             {t('Account actions')}
@@ -283,7 +327,12 @@ export default function AdminUser() {
             >
               {t('Sign out everywhere')}
             </Button>
-            <Button small variant="dark" onClick={() => setConfirmDelete(true)}>
+            <Button
+              small
+              variant="dark"
+              busy={busy === 'delete'}
+              onClick={() => setConfirmDelete(true)}
+            >
               <Icon name="close" size={18} /> {t('Delete account')}
             </Button>
           </div>
@@ -293,9 +342,7 @@ export default function AdminUser() {
         </div>
       )}
 
-      {!isAdmin && !deleted && (
-        <EditForm key={user.email + user.firstName} user={user} onSaved={load} />
-      )}
+      {!isAdmin && <EditForm key={user.email + user.firstName} user={user} onSaved={load} />}
 
       <div className="twocol">
         <section className="card stack" aria-labelledby="sessions-h">
@@ -358,7 +405,7 @@ export default function AdminUser() {
           </Display>
           <p className="muted mt-s">
             {t(
-              'The account is marked as deleted, the person is signed out and leaves their team. You can restore it later, or erase it for good.',
+              'The account, its quiz history and its log are removed for good and cannot be restored. The person is signed out and leaves their team. The e-mail address can be used for a new account.',
             )}
           </p>
           <div className="grid2 mt">
@@ -369,7 +416,7 @@ export default function AdminUser() {
               small
               onClick={() => {
                 setConfirmDelete(false);
-                act('delete', () => api.admin.deleteUser(user.id), t('Account deleted'));
+                remove();
               }}
             >
               {t('Delete account')}
@@ -378,29 +425,39 @@ export default function AdminUser() {
         </Modal>
       )}
 
-      {confirmErase && (
-        <Modal title={t('Confirm permanent delete')} onClose={() => setConfirmErase(false)}>
+      {pendingRole && (
+        <Modal title={t('Confirm role change')} onClose={() => setPendingRole(null)}>
           <Display as="h2" size="h2">
-            {t('Delete this account for good?')}
+            {pendingRole === 'admin'
+              ? t('Make {name} an admin?', { name: user.firstName })
+              : t('Make {name} a student?', { name: user.firstName })}
           </Display>
           <p className="muted mt-s">
-            {t(
-              'Name, e-mail address and picture are erased and can never be restored. Points and quest history stay without a name.',
-            )}
+            {pendingRole === 'admin'
+              ? t(
+                  'They get the whole admin area at once. Admins are in no team and no ranking, so they leave their team and their quiz history and points are cleared.',
+                )
+              : t(
+                  'They lose the admin area at once. Their test history is cleared, and from now on they play and appear in the rankings like any student.',
+                )}
           </p>
           <div className="grid2 mt">
-            <Button small variant="ghost" onClick={() => setConfirmErase(false)} data-autofocus>
-              {t('Keep the account')}
+            <Button small variant="ghost" onClick={() => setPendingRole(null)} data-autofocus>
+              {t('Cancel')}
             </Button>
             <Button
               small
-              busy={busy === 'erase'}
               onClick={() => {
-                setConfirmErase(false);
-                act('erase', () => api.admin.purgeUser(user.id), t('Account erased for good'));
+                const role = pendingRole;
+                setPendingRole(null);
+                act(
+                  'role',
+                  () => api.admin.setRole(user.id, role),
+                  role === 'admin' ? t('Now an admin') : t('Now a student'),
+                );
               }}
             >
-              {t('Yes, delete permanently')}
+              {pendingRole === 'admin' ? t('Make admin') : t('Make student')}
             </Button>
           </div>
         </Modal>

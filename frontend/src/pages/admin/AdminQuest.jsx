@@ -10,6 +10,7 @@ import { Chip, Display, Input } from '../../components/ui.jsx';
 import { useToast } from '../../hooks/useToast.jsx';
 import { t } from '../../i18n.js';
 import { TYPE_MODES, questState } from './AdminQuests.jsx';
+import { GeofenceEditor } from './GeofenceEditor.jsx';
 import { Check, Select, Textarea } from './quest-fields.jsx';
 
 const MAX_FACTS = 5;
@@ -30,7 +31,7 @@ const emptyForm = {
   name: '',
   description: '',
   mapLink: '',
-  radius: '50',
+  radius: '80',
   questionCount: '3',
   passThreshold: '2',
   timeLimit: '',
@@ -67,6 +68,12 @@ function DetailsForm({ quest, onSaved }) {
     }));
 
   const linkChanged = !quest || form.mapLink.trim() !== (quest.mapUrl ?? '');
+  // The circle is drawn at the checked link, or at the saved place while the link is unchanged.
+  const place = linkState?.ok
+    ? { lat: linkState.place.lat, lng: linkState.place.lng }
+    : quest
+      ? { lat: quest.lat, lng: quest.lng }
+      : null;
 
   const checkLink = async () => {
     setBusy('link');
@@ -202,16 +209,14 @@ function DetailsForm({ quest, onSaved }) {
           onChange={set('timeLimit')}
           hint={t('For the whole quiz. Leave empty for one minute per question.')}
         />
-        <Input
-          label={t('Radius (metres)')}
-          type="number"
-          inputMode="numeric"
-          min={10}
-          max={500}
-          value={form.radius}
-          onChange={set('radius')}
-        />
       </div>
+      <GeofenceEditor
+        value={form.radius}
+        onChange={(radius) => setForm((now) => ({ ...now, radius }))}
+        place={place}
+        graceM={quest?.graceM}
+        selfId={quest?.id ?? null}
+      />
       <Select
         label={t('Question types')}
         value={form.typeMode}

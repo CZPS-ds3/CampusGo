@@ -101,7 +101,7 @@ test.describe('full player journey (mock API)', () => {
 test.describe('location problems never use an attempt', () => {
   test('poor accuracy asks to check again', async ({ page, context }) => {
     await login(page);
-    await context.setGeolocation({ ...LIBRARY, accuracy: 200 });
+    await context.setGeolocation({ ...LIBRARY, accuracy: 500 });
     await openCheckpoint(page, 'Library');
     await page.getByRole('link', { name: 'Start quest' }).click();
     await page.getByRole('button', { name: "I'm ready" }).click();

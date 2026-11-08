@@ -136,7 +136,7 @@ class Player:
         assert found, f"checkpoint {name} is not listed"
         return found[0]
 
-    def start_quiz(self, name, dx_m=0.0, dy_m=0.0):
+    def start_quiz(self, name, dx_m=0.0, dy_m=0.0, accuracy=10):
         """Location check at (or a few metres away from) a checkpoint centre. Returns the response."""
         self.post("/me/location-consent")
         cp = self.checkpoint(name)
@@ -144,7 +144,7 @@ class Player:
         lng = cp["longitude"] + dx_m / 71_900
         return self.post(
             f"/checkpoints/{cp['id']}/verify",
-            {"lat": lat, "lng": lng, "accuracy": 10, "ageMs": 0},
+            {"lat": lat, "lng": lng, "accuracy": accuracy, "ageMs": 0},
         )
 
     def answer_all(self, attempt, correct=True):

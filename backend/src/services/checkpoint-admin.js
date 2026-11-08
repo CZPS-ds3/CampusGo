@@ -114,6 +114,8 @@ export function createCheckpointAdminService({ pool, config, clock, uploadDir, f
     lat: Number(row.latitude),
     lng: Number(row.longitude),
     radius: row.radius,
+    // The grace zone students get on top of the radius, so the admin can draw the real reach.
+    graceM: config.geofenceSlackM,
     questionCount: row.question_count,
     passThreshold: row.pass_threshold,
     timeLimitSeconds: row.time_limit_seconds,
@@ -280,7 +282,7 @@ export function createCheckpointAdminService({ pool, config, clock, uploadDir, f
     const now = clock.now();
     const merged = {
       description: '',
-      radius: 50,
+      radius: 80,
       timeLimitSeconds: null,
       hardQuestionEnabled: false,
       typeMode: 'MCQ_ONLY',

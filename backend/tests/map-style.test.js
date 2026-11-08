@@ -106,13 +106,13 @@ describe('BR48 one map style per account', () => {
     await request(ctx.app).put('/api/me/map-style').send({}).expect(401);
   });
 
-  it('BR48 erasing an account clears its map style', async () => {
+  it('BR48 deleting an account removes its map style with it', async () => {
     const student = await ctx.login('erased');
     await student.agent.put('/api/me/map-style').send({ base: 'dark' }).expect(200);
     await student.agent.delete('/api/me').expect(204);
-    const [[row]] = await ctx.pool.query('SELECT map_style FROM students WHERE student_id = ?', [
+    const [rows] = await ctx.pool.query('SELECT map_style FROM students WHERE student_id = ?', [
       student.student.id,
     ]);
-    expect(row.map_style).toBeNull();
+    expect(rows).toHaveLength(0);
   });
 });

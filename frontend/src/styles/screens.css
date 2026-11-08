@@ -1300,7 +1300,7 @@ ol.stack {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
   .admin-filters {
-    grid-template-columns: 2fr 1fr;
+    grid-template-columns: 2fr 1fr 1fr;
   }
   .admin-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1537,4 +1537,92 @@ ol.stack {
 .leaflet-control-attribution a {
   color: #0b4f8a;
   text-decoration: underline;
+}
+
+/* The checkpoint radius editor (BR12, BR49): number, slider and presets next to a map with the circle drawn to scale. */
+.geo {
+  border: 0;
+  margin: 0;
+  min-width: 0;
+}
+.geo > legend {
+  padding: 0;
+  margin-bottom: 8px;
+}
+.geo__controls {
+  display: grid;
+  gap: 12px;
+}
+.geo__slider {
+  display: grid;
+  gap: 6px;
+}
+.geo__slider input[type='range'] {
+  width: 100%;
+  min-height: 44px;
+  accent-color: var(--signal);
+}
+.geo-preview {
+  display: grid;
+  gap: 8px;
+}
+.geo-preview__map {
+  position: relative;
+  height: clamp(240px, 46vh, 380px);
+  border: 1px solid var(--line2);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--map-bg);
+}
+.geo-preview__map .leaflet-top {
+  top: 0;
+}
+.geo-tip.leaflet-tooltip {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  color: var(--mute);
+  font-size: 11px;
+  font-weight: 700;
+  text-shadow:
+    0 0 3px var(--surface),
+    0 0 3px var(--surface);
+}
+.geo-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.875rem;
+  color: var(--mute);
+}
+.geo-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.geo-legend__swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--signal);
+}
+.geo-legend__swatch--circle {
+  background: color-mix(in srgb, var(--signal) 25%, transparent);
+}
+.geo-legend__swatch--ring {
+  border-style: dashed;
+}
+.geo-legend__swatch--other {
+  border-color: var(--line2);
+  border-style: dashed;
+  background: color-mix(in srgb, var(--line2) 20%, transparent);
+}
+@media (min-width: 768px) {
+  .geo__controls {
+    grid-template-columns: minmax(140px, 200px) 1fr;
+    align-items: end;
+  }
 }

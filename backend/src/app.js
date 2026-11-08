@@ -61,7 +61,8 @@ const schemas = {
     .refine((body) => Boolean(body.email) !== Boolean(body.playerId)),
   adminUsers: z.object({
     q: z.string().trim().max(80).optional(),
-    status: z.enum(['active', 'blocked', 'archived', 'deleted', 'reported']).optional(),
+    status: z.enum(['active', 'blocked', 'archived', 'reported']).optional(),
+    role: z.enum(['student', 'admin']).optional(),
     noTeam: z.enum(['1']).optional(),
     limit: z.coerce.number().int().min(1).max(200).optional(),
     offset: z.coerce.number().int().min(0).optional(),
@@ -71,7 +72,9 @@ const schemas = {
     firstName: name,
     lastName: name,
     nickname: z.string().trim().max(20).optional(),
+    role: z.enum(['student', 'admin']).optional(),
   }),
+  adminRole: z.object({ role: z.enum(['student', 'admin']) }),
   adminPatch: z.object({
     email: email.optional(),
     firstName: name.optional(),
@@ -483,16 +486,10 @@ export function createApp({ pool, config, mailer, clock, fetchImpl }) {
     }),
   );
   adminApi.post(
-    '/users/:id/restore',
-    handle(async (req, res) =>
-      res.json({ user: await admin.restoreUser(actor(req), id.parse(req.params.id)) }),
-    ),
-  );
-  adminApi.delete(
-    '/users/:id/permanent',
+    '/users/:id/role',
     handle(async (req, res) => {
-      await admin.purgeUser(actor(req), id.parse(req.params.id));
-      res.status(204).end();
+      const body = schemas.adminRole.parse(req.body);
+      res.json({ user: await admin.setRole(actor(req), id.parse(req.params.id), body.role) });
     }),
   );
   adminApi.post(

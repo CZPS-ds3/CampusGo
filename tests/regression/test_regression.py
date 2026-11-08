@@ -74,9 +74,9 @@ def test_bug_team_score_must_be_the_average_rounded_up_br43(player):
 
 def test_bug_building_b_blocked_students_standing_a_little_outside_br12(player):
     student = player("lenient")
-    reply = student.start_quiz("Building B", dy_m=70)
+    reply = student.start_quiz("Building B", dy_m=100)
     assert reply.json()["status"] == "OK", reply.text
-    far = player("too-far").start_quiz("Building B", dy_m=130)
+    far = player("too-far").start_quiz("Building B", dy_m=170)
     assert far.json()["status"] == "OUTSIDE"
 
 
@@ -220,8 +220,25 @@ def test_bug_a_cancelled_invitation_could_still_be_accepted_br45(player):
     assert guest.get("/teams/me").json()["team"] is None
 
 
-def test_bug_an_admin_deleted_account_could_not_be_brought_back_br47(admin, player):
-    student = player("comeback")
+def test_bug_a_deleted_account_still_showed_up_as_a_deleted_status_br47(admin, player):
+    student = player("vanish")
     admin.delete(f"/admin/users/{student.id}")
-    assert admin.post(f"/admin/users/{student.id}/restore").status_code == 200
-    assert Player(student.email).sign_in().get("/me").status_code == 200
+    listed = admin.get("/admin/users?limit=200").json()["users"]
+    assert student.id not in [user["id"] for user in listed]
+    assert admin.get(f"/admin/users/{student.id}").status_code == 404
+    # The address is free again, so signing in starts a brand-new account.
+    assert Player(student.email).sign_in().id != student.id
+
+
+def test_bug_a_promoted_admin_had_to_log_in_again_to_get_the_admin_area_br53(admin, player):
+    person = player("promoted")
+    admin.post(f"/admin/users/{person.id}/role", {"role": "admin"})
+    assert person.get("/admin/users").status_code == 200
+    admin.post(f"/admin/users/{person.id}/role", {"role": "student"})
+    assert person.get("/admin/users").status_code == 403
+
+
+def test_bug_a_student_at_the_checkpoint_with_a_weak_signal_was_turned_away_br12(player):
+    student = player("weak-signal")
+    reply = student.start_quiz("Mensa", accuracy=150)
+    assert reply.json()["status"] == "OK", reply.text

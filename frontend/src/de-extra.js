@@ -589,4 +589,74 @@ export const DE_EXTRA = new Map([
   ['Yes, remove', 'Ja, entfernen'],
   ['Open to change colours', 'Öffnen, um Farben zu ändern'],
   ['Colours', 'Farben'],
+  ['Role', 'Rolle'],
+  [
+    'This is the main administrator account. It always stays an admin.',
+    'Das ist das Hauptadministrator-Konto. Es bleibt immer Admin.',
+  ],
+  ['You cannot change your own role.', 'Du kannst deine eigene Rolle nicht ändern.'],
+  [
+    'Admins can use everything in the admin area. Make this person a student before deleting the account.',
+    'Admins können alles im Admin-Bereich nutzen. Mache die Person zuerst zur Studentin bzw. zum Studenten, bevor du das Konto löschst.',
+  ],
+  [
+    'Make this person an admin to give them the whole admin area.',
+    'Mache diese Person zum Admin, damit sie den gesamten Admin-Bereich bekommt.',
+  ],
+  [
+    'The account, its quiz history and its log are removed for good and cannot be restored. The person is signed out and leaves their team. The e-mail address can be used for a new account.',
+    'Das Konto, der Quiz-Verlauf und das Protokoll werden endgültig entfernt und können nicht wiederhergestellt werden. Die Person wird abgemeldet und verlässt ihr Team. Die E-Mail-Adresse kann für ein neues Konto verwendet werden.',
+  ],
+  ['Confirm role change', 'Rollenwechsel bestätigen'],
+  ['Make {name} an admin?', '{name} zum Admin machen?'],
+  ['Make {name} a student?', '{name} zum Studenten machen?'],
+  [
+    'They get the whole admin area at once. Admins are in no team and no ranking, so they leave their team and their quiz history and points are cleared.',
+    'Die Person bekommt sofort den gesamten Admin-Bereich. Admins sind in keinem Team und keiner Rangliste, daher verlässt sie ihr Team und Quiz-Verlauf und Punkte werden gelöscht.',
+  ],
+  [
+    'They lose the admin area at once. Their test history is cleared, and from now on they play and appear in the rankings like any student.',
+    'Die Person verliert sofort den Admin-Bereich. Ihr Testverlauf wird gelöscht, und sie spielt und erscheint ab jetzt wie alle Studierenden in den Ranglisten.',
+  ],
+  ['Now an admin', 'Jetzt Admin'],
+  ['Now a student', 'Jetzt Student'],
+  ['Make admin', 'Zum Admin machen'],
+  ['Make student', 'Zum Studenten machen'],
+  [
+    'Admins get the whole admin area. They are in no team and no ranking.',
+    'Admins bekommen den gesamten Admin-Bereich. Sie sind in keinem Team und keiner Rangliste.',
+  ],
+  ['Student', 'Student'],
+  ['Role changed by an admin', 'Rolle von einem Admin geändert'],
+  ['Drag to change the size', 'Ziehen, um die Größe zu ändern'],
+  ['Quick sizes', 'Schnellgrößen'],
+  ['Checkpoint circle', 'Checkpoint-Kreis'],
+  ['Extra tolerance', 'Zusätzliche Toleranz'],
+  ['Other checkpoints', 'Andere Checkpoints'],
+  [
+    'Check the Google Maps link above to see the circle on the map.',
+    'Prüfe oben den Google-Maps-Link, um den Kreis auf der Karte zu sehen.',
+  ],
+  ['Enter the radius as a whole number of metres.', 'Gib den Radius als ganze Zahl in Metern ein.'],
+  [
+    'The radius must be between {min} and {max} metres.',
+    'Der Radius muss zwischen {min} und {max} Metern liegen.',
+  ],
+  [
+    'The circle is about {size} across. A student also counts as inside up to {extra} m beyond it, so the zone reaches {reach} m from the centre.',
+    'Der Kreis ist etwa {size} breit. Studierende gelten auch bis zu {extra} m außerhalb noch als drinnen, die Zone reicht also {reach} m vom Mittelpunkt.',
+  ],
+  [
+    'This circle overlaps {names}. That is fine: a spot always belongs to the checkpoint whose centre is nearest.',
+    'Dieser Kreis überschneidet sich mit {names}. Das ist in Ordnung: Ein Ort gehört immer zum Checkpoint mit dem nächsten Mittelpunkt.',
+  ],
+  [
+    'You are about {distance} m from {name}. Walk closer and check again. No attempt used.',
+    'Du bist etwa {distance} m von {name} entfernt. Geh näher heran und prüfe erneut. Es wurde kein Versuch verbraucht.',
+  ],
+  [
+    'Tip: go outside or next to a window, and switch on location and Wi-Fi.',
+    'Tipp: Geh nach draußen oder an ein Fenster und schalte Standort und WLAN ein.',
+  ],
+  ['Area for the location check', 'Bereich für die Standortprüfung'],
 ]);

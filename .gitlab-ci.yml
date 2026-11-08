@@ -33,6 +33,8 @@ default:
 variables:
   # Never start Docker from the npm scripts: the database is the MySQL service below.
   SKIP_DOCKER: '1'
+  # The MySQL service needs a few seconds to start; the migration waits for it instead of failing at once.
+  DB_WAIT_SECONDS: '90'
   NPM_CONFIG_UPDATE_NOTIFIER: 'false'
 
 lint:
@@ -43,9 +45,16 @@ lint:
 
 backend-tests:
   stage: test
+  # A MySQL service that did not start (for example a runner with a full disk) is an infrastructure problem,
+  # not a code problem: one automatic retry runs the job again on a fresh container.
+  retry:
+    max: 1
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+      - script_failure
   services:
     - name: mysql:8.4
-      alias: mysql
       command:
         - --character-set-server=utf8mb4
         - --collation-server=utf8mb4_0900_ai_ci
@@ -107,7 +116,6 @@ integration-tests:
   allow_failure: true
   services:
     - name: mysql:8.4
-      alias: mysql
       command:
         - --character-set-server=utf8mb4
         - --collation-server=utf8mb4_0900_ai_ci

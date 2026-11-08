@@ -110,7 +110,6 @@ export function createStatsService({ pool, clock }) {
         active: counts.active ?? 0,
         blocked: counts.blocked ?? 0,
         archived: counts.archived ?? 0,
-        deleted: counts.deleted ?? 0,
       };
     });
 

@@ -89,35 +89,53 @@ test.describe('admin: students, teams and deleted accounts', () => {
     await expect(page.getByText('Lars').first()).toBeVisible();
   });
 
-  test('BR47 a deleted account can be restored, or deleted permanently after a confirmation', async ({
+  test('BR47 deleting an account removes it for good: it leaves the list and no "deleted" status exists', async ({
     page,
   }, testInfo) => {
     await login(page, ADMIN);
     await page.goto('/admin/users');
+    await expect(page.getByLabel('Status').locator('option', { hasText: 'Deleted' })).toHaveCount(
+      0,
+    );
     await page.getByLabel('Search').fill('Sam');
     await page.getByRole('link', { name: /Sam/ }).first().click();
     await page.getByRole('button', { name: 'Delete account' }).click();
-    await page.getByRole('alertdialog').getByRole('button', { name: 'Delete account' }).click();
-    await expect(page.getByTestId('deleted-panel')).toBeVisible();
-    await shot(page, testInfo, '31-admin-deleted-account');
+    const dialog = page.getByRole('alertdialog');
+    await expect(dialog).toContainText('removed for good');
+    await shot(page, testInfo, '31-admin-delete-account');
+    await dialog.getByRole('button', { name: 'Delete account' }).click();
+    await expect(page.getByText('Account deleted')).toBeVisible();
+    await expect(page).toHaveURL(/\/admin\/users$/);
+    await expect(page.getByRole('link', { name: /Sam Whitfield/ })).toHaveCount(0);
+    await expectNoHorizontalScroll(page);
+  });
 
-    await page.getByRole('button', { name: 'Restore account' }).click();
-    await expect(page.getByText('Account restored')).toBeVisible();
-    await expect(page.getByTestId('deleted-panel')).toHaveCount(0);
+  test('BR53 an admin makes a student an admin and back, and the role shows at once', async ({
+    page,
+  }, testInfo) => {
+    await login(page, ADMIN);
+    await page.goto('/admin/users');
+    await page.getByLabel('Search').fill('Aiko');
+    await page.getByRole('link', { name: /Aiko/ }).first().click();
+    const card = page.getByTestId('role-card');
+    await expect(card.getByRole('radio', { name: 'Student' })).toBeChecked();
+    await card.getByRole('radio', { name: 'Admin' }).click();
+    await expect(page.getByRole('alertdialog')).toContainText('Make Aiko an admin?');
+    await shot(page, testInfo, '33-admin-role-confirm');
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Make admin' }).click();
+    await expect(page.getByText('Now an admin')).toBeVisible();
+    await expect(card.getByRole('radio', { name: 'Admin' })).toBeChecked();
+    await expect(page.getByRole('heading', { name: 'Account actions' })).toHaveCount(0);
 
-    await page.getByRole('button', { name: 'Delete account' }).click();
-    await page.getByRole('alertdialog').getByRole('button', { name: 'Delete account' }).click();
-    await page.getByRole('button', { name: 'Delete permanently' }).click();
-    await expect(page.getByRole('alertdialog')).toContainText('Delete this account for good?');
-    await page.getByRole('alertdialog').getByRole('button', { name: 'Keep the account' }).click();
-    await expect(page.getByRole('button', { name: 'Restore account' })).toBeVisible();
-    await page.getByRole('button', { name: 'Delete permanently' }).click();
-    await page
-      .getByRole('alertdialog')
-      .getByRole('button', { name: 'Yes, delete permanently' })
-      .click();
-    await expect(page.getByTestId('deleted-panel')).toContainText('erased for good');
-    await expect(page.getByRole('button', { name: 'Restore account' })).toHaveCount(0);
+    await page.goto('/admin/users');
+    await page.getByLabel('Role').selectOption('admin');
+    await expect(page.getByRole('link', { name: /Aiko/ })).toBeVisible();
+    await page.getByRole('link', { name: /Aiko/ }).first().click();
+    await page.getByTestId('role-card').getByRole('radio', { name: 'Student' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Make student' }).click();
+    await expect(page.getByText('Now a student')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Account actions' })).toBeVisible();
+    await expectNoHorizontalScroll(page);
   });
 });
 
@@ -295,5 +313,29 @@ test.describe('map style', () => {
     await page.goto('/map');
     await expect(page.getByRole('region', { name: 'Campus map' })).toBeVisible();
     await expect(page.locator('html')).toHaveAttribute('data-map-base', 'light');
+  });
+});
+
+test.describe('admin: the checkpoint circle', () => {
+  test('BR12 BR49 the admin sees the circle on a map and it follows the radius', async ({
+    page,
+  }, testInfo) => {
+    await login(page, ADMIN);
+    await page.goto('/admin/quests');
+    await page.getByTestId('quest-card').first().getByRole('link').first().click();
+    const map = page.locator('.geo-preview__map');
+    await expect(map).toBeVisible();
+    await expect(map.locator('path')).not.toHaveCount(0);
+    const radius = page.getByRole('spinbutton', { name: 'Radius (metres)' });
+    await radius.fill('150');
+    await expect(page.getByText(/about 300 m across/)).toBeVisible();
+    await expect(page.getByLabel('Drag to change the size')).toHaveValue('150');
+    await page.getByRole('radio', { name: '60 m' }).click();
+    await expect(radius).toHaveValue('60');
+    await radius.fill('900');
+    await expect(page.getByRole('alert').filter({ hasText: 'between 10 and 500' })).toBeVisible();
+    await radius.fill('100');
+    await shot(page, testInfo, '34-admin-quest-circle');
+    await expectNoHorizontalScroll(page);
   });
 });

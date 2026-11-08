@@ -177,7 +177,7 @@ Reading notes:
 | 34 | Team_Invitation | Status transitions follow `business-rules.md` R-44; terminal statuses never change | Rule | App |
 | 35 | Difficulty, Bonus, Scoring_Multiplier | `points_awarded >= 0`; `percentage BETWEEN 0 AND 100`; `attempt_number >= 1` | CHECK | DB |
 | 36 | Location_Check | `inside_radius` NOT NULL; unique `used_by_attempt_id`; no column for coordinates, accuracy or failure reason (DM-P10); rows older than 7 days deleted | NOT NULL, UK | DB + job |
-| 37 | All | Foreign keys use RESTRICT on delete: students, attempts, questions and checkpoints are retired (`is_active`), never deleted | FK | DB |
+| 37 | All | Foreign keys use RESTRICT on delete: attempts, questions and checkpoints are retired (`is_active`), never deleted. The exception is a student account: BR47 deletes it together with its attempts, answers, location checks, sessions, invitations and log in one transaction (`account.js`) | FK | DB |
 | 38 | All | Timestamps are set by the server (`now()`); the client time is never stored as a decision input | Rule | App |
 
 Suggested extra indexes: `Attempt(student_id, checkpoint_id)`, `Attempt(status, expires_at)` (expiry job), `Question(checkpoint_id, difficulty, is_active)`, `Student(total_points desc, points_updated_at asc)` (solo leaderboard), `Team_Invitation(invitee_id, status)`, `Team_Invitation(status, expires_at)`, `Location_Check(student_id, checkpoint_id, checked_at desc)`.
@@ -225,11 +225,12 @@ erDiagram
 - `Student.avatar_preset` (0 to 5, nullable): the drawn avatar picked at sign-up; an uploaded picture wins over it.
 - `Checkpoint_Fact (checkpoint_id, position 1-5, fact_text)`: the "read these first" facts of the info page (Should item). Seeded with PLACEHOLDER texts.
 - `Location_Check` (see R-62 and R-63) holds only inside yes/no and a time.
-- `Student.role` (student/admin), `Student.status` (active/blocked/archived/deleted) with `status_reason`, `reported_at`, `report_reason`, `deleted_at` (BR26, BR28, BR30); table `Audit_Event` (BR29); table `Banned_Term` (admin additions to the built-in list, BR27); table `Checkpoint_Image` (photo url, alt text, credit). Migration `005_admin_and_media.sql`. `Team_Invitation.invited_email` (nullable): the address the inviter typed (BR40), migration `006_invitation_email.sql`. Migration `007_recompute_team_scores.sql` recalculates `Team.team_score` as the rounded-up average of the active students (BR43). Yuri's migrations `003_bildungscampus_checkpoints.sql` and `004_sensoricum.sql` come before ours.
+- `Student.role` (student/admin), `Student.status` (active/blocked/archived) with `status_reason`, `reported_at`, `report_reason` (BR26, BR28, BR30; the `deleted` value and `deleted_at` were removed by migration 011, BR47); table `Audit_Event` (BR29); table `Banned_Term` (admin additions to the built-in list, BR27); table `Checkpoint_Image` (photo url, alt text, credit). Migration `005_admin_and_media.sql`. `Team_Invitation.invited_email` (nullable): the address the inviter typed (BR40), migration `006_invitation_email.sql`. Migration `007_recompute_team_scores.sql` recalculates `Team.team_score` as the rounded-up average of the active students (BR43). Yuri's migrations `003_bildungscampus_checkpoints.sql` and `004_sensoricum.sql` come before ours.
 
 ### 3.y Round 6 additions (2026-10-29, migrations 008 to 010)
 
-- `008_team_leader_and_account_states.sql`: `Team.leader_id` (nullable, FK to `Student`, backfilled with the earliest active member, BR44); `Team_Invitation.status` gets the value `cancelled` (BR45); `Student.purged_at` (BR47, backfilled for accounts erased before).
+- `008_team_leader_and_account_states.sql`: `Team.leader_id` (nullable, FK to `Student`, backfilled with the earliest active member, BR44); `Team_Invitation.status` gets the value `cancelled` (BR45); `Student.purged_at` (BR47; removed again by migration 011).
+- `011_hard_delete_and_lenient_radius.sql`: deletes the accounts that earlier versions only marked as deleted, with their data (BR47); drops `Student.deleted_at`, `Student.purged_at` and the `deleted` status; raises every checkpoint radius below 60 m to 60 m (BR12).
 - `009_map_style.sql`: `Student.map_style` (JSON, nullable; one style per account, BR48).
 - `010_quests_and_question_types.sql`:
   - `Checkpoint`: `description`, `map_url`, `time_limit_seconds` (null = 60 s per question), `type_mode` (`MCQ_ONLY`, `MULTI_ONLY`, `MIXED`), `archived_at`; the check now allows 1 to 10 questions and a pass mark up to the question count (BR49).

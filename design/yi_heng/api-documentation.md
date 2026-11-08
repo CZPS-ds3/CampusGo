@@ -81,17 +81,16 @@ Status codes: 400 invalid input · 401 no valid session · 403 not allowed · 40
 | Endpoint | Body / query | Result |
 |---|---|---|
 | `GET /admin/stats` | none | dashboard numbers, see [admin-dashboard-spec.md](admin-dashboard-spec.md) section 2 |
-| `GET /admin/overview` | none | `{ users: { active, blocked, archived, deleted }, activeSessions, questsPassedToday, loginsToday, teams }` |
-| `GET /admin/users` | `?q=&status=active\|blocked\|archived\|deleted\|reported&limit=&offset=` | `{ users: [{ id, email, firstName, lastName, nickname, role, status, statusReason, reported, reportReason, teamName, totalPoints, questsPassed, createdAt, lastLoginAt }] }` |
-| `POST /admin/users` | `{ email, firstName, lastName, nickname? }` | `201 { user }`; `409 EMAIL_TAKEN`, `400 NAME_NOT_ALLOWED`, `400 INVALID_EMAIL` |
+| `GET /admin/overview` | none | `{ users: { active, blocked, archived }, admins, activeSessions, questsPassedToday, loginsToday, teams }` |
+| `GET /admin/users` | `?q=&status=active\|blocked\|archived\|reported&role=student\|admin&limit=&offset=` | `{ users: [{ id, email, firstName, lastName, nickname, role, status, statusReason, reported, reportReason, teamName, totalPoints, questsPassed, createdAt, lastLoginAt }] }` |
+| `POST /admin/users` | `{ email, firstName, lastName, nickname?, role?: student\|admin }` | `201 { user }`; `409 EMAIL_TAKEN`, `400 NAME_NOT_ALLOWED`, `400 INVALID_EMAIL` |
 | `GET /admin/users/:id` | none | `{ user, sessions: [{ id, startedAt, lastActiveAt, active }], attempts: [{ checkpoint, attemptNumber, startedAt, status, points }], events: [{ type, detail, at, byAdmin }] }` |
 | `PATCH /admin/users/:id` | any of `email, firstName, lastName, nickname` | `{ user }` |
 | `POST /admin/users/:id/status` | `{ status: active\|blocked\|archived, reason? }` | `{ user }`; ends all sessions unless `active` |
 | `POST /admin/users/:id/report` / `DELETE` | `{ reason }` / none | `{ user }` |
 | `POST /admin/users/:id/logout` | none | `204` (all sessions end) |
-| `DELETE /admin/users/:id` | none | `204`. **Soft delete (BR47):** status `deleted`, sessions end, leaves the team; restorable |
-| `POST /admin/users/:id/restore` | none | `{ user }` (status `active`, no team); `409 NOT_RESTORABLE` unless deleted and not erased |
-| `DELETE /admin/users/:id/permanent` | none | `204`. Erases name, e-mail and picture for good (`purged_at`); `409 NOT_DELETED` unless the account is deleted |
+| `DELETE /admin/users/:id` | none | `204`. **Deleted for good (BR47):** the account, its sessions, invitations, quiz history and log are removed and the team is repaired; no restore. `403` for an administrator, `404` when it does not exist |
+| `POST /admin/users/:id/role` | `{ role: student\|admin }` | `{ user }` (BR53). Takes effect on the next request; the person leaves their team and quiz history and points are cleared. `403` for your own account and the main administrator, `404`, `400` for an unknown role |
 | `POST /admin/teams/:id/members` | `{ studentId }` | `204`; `404`, `409 NOT_A_STUDENT \| STUDENT_NOT_ACTIVE \| ALREADY_IN_TEAM \| TEAM_FULL` (BR46) |
 | `GET /admin/users?noTeam=1` | `q` too | only active students without a team (for the add-member pop-up) |
 | `GET /admin/teams` | none | `{ teams: [{ id, name, score, size, members: [{ id, displayName }] }] }` |

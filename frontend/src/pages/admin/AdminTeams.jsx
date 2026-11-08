@@ -6,6 +6,7 @@ import { Icon } from '../../components/icons.jsx';
 import { Skeleton } from '../../components/Screen.jsx';
 import { Modal } from '../../components/Sheet.jsx';
 import { Display, EmptyState, Input } from '../../components/ui.jsx';
+import { useAutoRefresh } from '../../hooks/useAutoRefresh.js';
 import { useToast } from '../../hooks/useToast.jsx';
 import { formatNumber, t } from '../../i18n.js';
 
@@ -235,6 +236,14 @@ export default function AdminTeams() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const quietReload = useCallback(() => {
+    api.admin
+      .teams()
+      .then((result) => setTeams(result.teams))
+      .catch(() => {});
+  }, []);
+  useAutoRefresh(quietReload);
 
   if (!teams) return <Skeleton rows={3} height={120} />;
   return (

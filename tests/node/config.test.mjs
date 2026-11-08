@@ -15,8 +15,9 @@ test('production refuses to start with the development secrets and without an SM
 
 test('the lenient geofence defaults are in place and can be tuned by environment', () => {
   const config = loadConfig({ NODE_ENV: 'development' });
-  assert.equal(config.maxAccuracyM, 100);
-  assert.equal(config.geofenceSlackM, 25);
+  assert.equal(config.maxAccuracyM, 200);
+  assert.equal(config.geofenceSlackM, 30);
+  assert.equal(config.accuracyCreditM, 50);
   assert.equal(config.nearerMarginM, 20);
   assert.equal(loadConfig({ GEOFENCE_SLACK_M: '10' }).geofenceSlackM, 10);
 });
