@@ -100,3 +100,7 @@ frontend/dist/
 
 # ---------- User uploads (profile pictures are personal data) ----------
 backend/uploads/
+# ---------- Python test tools (tests/) ----------
+*.pyc
+.pytest_cache/
+tests/reports/

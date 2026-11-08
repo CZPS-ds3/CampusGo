@@ -82,14 +82,14 @@ describe('Figure 3: freshness, then accuracy, then distance', () => {
 
 describe('BR07 BR08 seeded checkpoints are on the Bildungscampus Heilbronn', () => {
   const RADIUS = {
-    Mensa: 60,
-    Library: 60,
-    'Building B': 60,
-    'Building C': 60,
-    'Campus Garden': 50,
+    Mensa: 80,
+    Library: 80,
+    'Building B': 80,
+    'Building C': 80,
+    'Campus Garden': 70,
   };
 
-  it('has the eight pilot checkpoints with the starting radii and question counts of section 5', () => {
+  it('has the eight pilot checkpoints with lenient starting radii (60-80 m) and the question counts of section 5', () => {
     expect(CHECKPOINTS.map(([name]) => name).sort()).toEqual(
       [
         'Building B',
@@ -103,8 +103,8 @@ describe('BR07 BR08 seeded checkpoints are on the Bildungscampus Heilbronn', () 
       ].sort(),
     );
     for (const [name, , , radius, count, threshold] of CHECKPOINTS) {
-      expect(radius).toBe(RADIUS[name] ?? 40);
-      expect(count).toBe(RADIUS[name] === 60 ? 5 : 3); // BR09
+      expect(radius).toBe(RADIUS[name] ?? 60);
+      expect(count).toBe(RADIUS[name] === 80 ? 5 : 3); // BR09
       expect(threshold).toBe(count === 5 ? 4 : 2); // BR15
     }
   });

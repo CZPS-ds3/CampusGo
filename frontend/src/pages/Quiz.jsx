@@ -43,13 +43,14 @@ function Timer({ seconds }) {
   );
 }
 
-function Option({ option, index, state, disabled, onPick }) {
+function Option({ option, index, state, disabled, multi, onPick }) {
   return (
     <li>
       <button
         type="button"
-        className={`opt${state ? ` is-${state}` : ''}${state === 'wrong' ? ' anim-shake' : ''}`}
+        className={`opt${multi ? ' opt--multi' : ''}${state ? ` is-${state}` : ''}${state === 'wrong' ? ' anim-shake' : ''}`}
         aria-disabled={disabled || undefined}
+        aria-pressed={multi ? state === 'ticked' : undefined}
         onClick={() => onPick(option.id)}
       >
         <span className="opt__key display h3" aria-hidden="true">
@@ -58,6 +59,7 @@ function Option({ option, index, state, disabled, onPick }) {
         <span className="opt__text">{option.text}</span>
         {state === 'correct' && <Icon name="check" title={t('Right answer')} />}
         {state === 'wrong' && <Icon name="close" title={t('Your answer')} />}
+        {state === 'ticked' && <Icon name="check" title={t('Selected')} />}
         {state === 'pending' && <span className="spinner" aria-label={t('Saving…')} />}
       </button>
     </li>
@@ -72,10 +74,11 @@ export default function Quiz() {
   const [shown, setShown] = useState(null);
   const [feedback, setFeedback] = useState(null);
   const [pendingId, setPendingId] = useState(null);
+  const [ticked, setTicked] = useState([]);
   const [layer, setLayer] = useState(null);
   const [hardOpen, setHardOpen] = useState(false);
   const [retries, setRetries] = useState(0);
-  const [retryOption, setRetryOption] = useState(null);
+  const [retryIds, setRetryIds] = useState(null);
   const inFlight = useRef(false);
   const nextButton = useRef(null);
   const expiredButton = useRef(null);
@@ -92,13 +95,13 @@ export default function Quiz() {
       setAttempt(loaded);
       setShown(loaded.currentQuestion);
       setLayer(null);
-      const fifth = loaded.questions[4];
+      const lastSlot = loaded.questions[loaded.questionCount - 1];
       if (
         loaded.hardUnlocked &&
         !loaded.hardAccepted &&
-        loaded.currentQuestion === 5 &&
-        fifth &&
-        !fifth.answered
+        loaded.currentQuestion === loaded.questionCount &&
+        lastSlot &&
+        !lastSlot.answered
       ) {
         setHardOpen(true);
       }
@@ -129,18 +132,18 @@ export default function Quiz() {
     if (feedback) nextButton.current?.focus();
   }, [feedback]);
 
-  const pick = useCallback(
-    async (optionId) => {
+  const submit = useCallback(
+    async (optionIds) => {
       if (inFlight.current || feedback || !online || layer || hardOpen || !attempt) return;
       inFlight.current = true;
-      setPendingId(optionId);
+      setPendingId(optionIds.length === 1 ? optionIds[0] : -2);
       try {
-        const response = await api.answer(attempt.id, optionId, shown);
+        const response = await api.answer(attempt.id, optionIds, shown);
         setAttempt(response.attempt);
         setFeedback({
-          pickedId: optionId,
+          pickedIds: optionIds,
           correct: response.correct,
-          correctOptionId: response.correctOptionId,
+          correctOptionIds: response.correctOptionIds ?? [],
           result: response.result ?? null,
         });
         setRetries(0);
@@ -149,7 +152,7 @@ export default function Quiz() {
           setLayer({ kind: 'expired' });
         } else {
           setRetries((n) => n + 1);
-          setLayer({ kind: 'error', message: errorText(error), optionId });
+          setLayer({ kind: 'error', message: errorText(error), optionIds });
         }
       } finally {
         inFlight.current = false;
@@ -159,13 +162,13 @@ export default function Quiz() {
     [attempt, feedback, hardOpen, layer, online, shown],
   );
 
-  // A retry waits until the error layer is gone, so `pick` sees the cleared state.
+  // A retry waits until the error layer is gone, so `submit` sees the cleared state.
   useEffect(() => {
-    if (retryOption && !layer) {
-      setRetryOption(null);
-      pick(retryOption);
+    if (retryIds && !layer) {
+      setRetryIds(null);
+      submit(retryIds);
     }
-  }, [retryOption, layer, pick]);
+  }, [retryIds, layer, submit]);
 
   const next = () => {
     if (!feedback) return;
@@ -175,8 +178,10 @@ export default function Quiz() {
     }
     const upcoming = attempt.currentQuestion;
     setFeedback(null);
+    setTicked([]);
     setShown(upcoming);
-    if (upcoming === 5 && attempt.hardUnlocked && !attempt.hardAccepted) setHardOpen(true);
+    if (upcoming === attempt.questionCount && attempt.hardUnlocked && !attempt.hardAccepted)
+      setHardOpen(true);
   };
 
   const goHard = async () => {
@@ -224,12 +229,25 @@ export default function Quiz() {
   const total = attempt.questionCount;
   const locked = Boolean(pendingId || feedback || !online || layer || hardOpen);
   const isHard = question.difficulty === 'HARD';
+  const multi = question.type === 'MULTI';
+  // A multi-select question is answered with the Check button; a single-choice one by tapping an option.
+  const pickOption = (optionId) => {
+    if (!multi) {
+      submit([optionId]);
+      return;
+    }
+    if (locked) return;
+    setTicked((now) =>
+      now.includes(optionId) ? now.filter((x) => x !== optionId) : [...now, optionId],
+    );
+  };
   const stateOf = (option) => {
     if (pendingId === option.id) return 'pending';
-    if (!feedback) return null;
-    if (option.id === feedback.pickedId) return feedback.correct ? 'correct' : 'wrong';
-    if (option.id === feedback.correctOptionId) return 'correct';
-    return 'dim';
+    if (!feedback) return ticked.includes(option.id) ? 'ticked' : null;
+    const picked = feedback.pickedIds.includes(option.id);
+    const right = feedback.correct ? picked : feedback.correctOptionIds.includes(option.id);
+    if (picked) return right ? 'correct' : 'wrong';
+    return right ? 'correct' : 'dim';
   };
   const lastQuestion = feedback && (feedback.result || attempt.status !== 'active');
 
@@ -247,14 +265,18 @@ export default function Quiz() {
             {t('round')}
           </Display>
           <p>
-            {t('Q1–4 all correct on your first try. Swap Q5 for one hard question worth')}{' '}
+            {t('Q1–{n} all correct on your first try. Swap Q{last} for one hard question worth', {
+              n: attempt.questionCount - 1,
+              last: attempt.questionCount,
+            })}{' '}
             <b className="mono accent">{formatNumber(2000)}</b>.
           </p>
           <p className="small muted">{t('Timer keeps running. One shot, no retry.')}</p>
           <p className="risk small">
             <Icon name="warn" />
             {t(
-              'You already have 4 of 5 right, so you have passed. A hard question is worth 2,000 instead of 1,000. If you get it wrong you lose the 1,000 for question 5 and the 200 full-clear bonus. You cannot switch back, and the clock keeps running.',
+              'You already have {n} of {total} right, so you have passed. A hard question is worth 2,000 instead of 1,000. If you get it wrong you lose the 1,000 for question {total} and the 200 full-clear bonus. You cannot switch back, and the clock keeps running.',
+              { n: attempt.questionCount - 1, total: attempt.questionCount },
             )}
           </p>
           <div className="stack mt">
@@ -262,7 +284,7 @@ export default function Quiz() {
               {t('Accept bonus')} <Icon name="bolt" />
             </Button>
             <Button variant="ghost" onClick={() => setHardOpen(false)}>
-              {t('Decline, normal Q5')}
+              {t('Decline, normal question')}
             </Button>
           </div>
         </div>
@@ -317,9 +339,9 @@ export default function Quiz() {
             <p>{layer.message}</p>
             <Button
               onClick={() => {
-                const again = layer.optionId;
+                const again = layer.optionIds;
                 setLayer(null);
-                if (again) setRetryOption(again);
+                if (again) setRetryIds(again);
                 else load();
               }}
             >
@@ -342,6 +364,9 @@ export default function Quiz() {
               <h2 id="question-text" className="quiz__question">
                 {question.text}
               </h2>
+              <p className="caption muted">
+                {multi ? t('Choose all that apply') : t('Choose one answer')}
+              </p>
             </section>
             <ul className="options">
               {question.options.map((option, index) => (
@@ -351,10 +376,21 @@ export default function Quiz() {
                   index={index}
                   state={stateOf(option)}
                   disabled={locked}
-                  onPick={pick}
+                  multi={multi}
+                  onPick={pickOption}
                 />
               ))}
             </ul>
+            {multi && !feedback && (
+              <Button
+                variant="sub"
+                busy={pendingId === -2}
+                disabled={ticked.length === 0 || locked}
+                onClick={() => submit(ticked)}
+              >
+                {t('Check answer')} <Icon name="check" />
+              </Button>
+            )}
             <div className="quiz__feedback" role="status" aria-live="polite">
               {feedback && (
                 <p className={`feedback ${feedback.correct ? 'is-right' : 'is-wrong'}`}>

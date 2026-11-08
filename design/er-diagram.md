@@ -23,6 +23,9 @@ erDiagram
     QUESTIONS ||--o{ ATTEMPT_QUESTIONS : "is drawn as"
     OPTIONS ||--o{ ATTEMPT_QUESTIONS : "is selected in"
     ATTEMPTS ||--o| LOCATION_CHECKS : "is unlocked by one"
+    ATTEMPT_QUESTIONS ||--o{ ATTEMPT_ANSWERS : "keeps every ticked option"
+    OPTIONS ||--o{ ATTEMPT_ANSWERS : "is ticked in"
+    STUDENTS ||--o{ TEAMS : "leads (leader_id)"
     SCORING_MULTIPLIER {
         int attempt_number PK
         int percentage
@@ -38,6 +41,7 @@ erDiagram
     TEAMS {
         bigint team_id PK
         string team_name UK
+        bigint leader_id FK
         string profile_picture
         int team_score
         datetime score_updated_at
@@ -56,10 +60,18 @@ erDiagram
         datetime reported_at
         string report_reason
         datetime deleted_at
+        datetime purged_at
+        json map_style
         int total_points
         bigint points_exact_x100
         datetime points_updated_at
         datetime location_consent_at
+    }
+    ATTEMPT_ANSWERS {
+        bigint attempt_id PK
+        int question_number PK
+        bigint question_id
+        bigint option_id PK
     }
     OTP_CODES {
         bigint otp_id PK
@@ -163,3 +175,5 @@ erDiagram
 ```
 
 `OTP_CODES` is keyed by the e-mail address, not by a student, because a student may not exist yet when the first code is requested. Scoring tables (`SCORING_MULTIPLIER`, `BONUS`, `DIFFICULTY`) are read by the code at run time (BR11); no point value is written into the program.
+
+Round 6 (migrations 008 to 010) adds, beyond what the diagram lists: `CHECKPOINTS.description`, `map_url`, `time_limit_seconds`, `type_mode` and `archived_at`; `QUESTIONS.question_type` (`MCQ` or `MULTI`, so a question has 1 right option or 2 to 3, enforced in the service and the draw query); `ATTEMPTS.question_count` and `pass_threshold` (snapshots); `ATTEMPT_QUESTIONS.is_correct`; and the status `cancelled` for `TEAM_INVITATIONS`. See [docs/data-model.md](../docs/data-model.md) section 3.y.

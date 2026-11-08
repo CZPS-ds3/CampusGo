@@ -5,6 +5,7 @@ import { errorText } from '../api/errorText.js';
 import { Button } from '../components/Button.jsx';
 import { Carousel } from '../components/Carousel.jsx';
 import { Icon, IconButton } from '../components/icons.jsx';
+import { QuestTypes } from '../components/QuestTypes.jsx';
 import { Skeleton } from '../components/Screen.jsx';
 import { Display } from '../components/ui.jsx';
 import { formatClock } from '../hooks/useServerTimer.js';
@@ -66,6 +67,7 @@ export default function Info() {
           label={t('Photos of {name}', { name: checkpoint.name })}
         />
       </div>
+      {checkpoint.description && <p className="mt-s">{checkpoint.description}</p>}
       <p className="muted mt-s">{t('Read these first. No timer is running yet.')}</p>
       <ol className="facts">
         {checkpoint.facts.map((fact, i) => (
@@ -80,8 +82,11 @@ export default function Info() {
           {checkpoint.questionCount} {t('questions')} · {t('pass')} {checkpoint.passThreshold}/
           {checkpoint.questionCount}
         </span>
-        <span className="mono">{formatClock(checkpoint.questionCount * 60)}</span>
+        <span className="mono">
+          {formatClock(checkpoint.timeLimitSeconds ?? checkpoint.questionCount * 60)}
+        </span>
       </div>
+      <QuestTypes types={checkpoint.questionTypes} />
       <Button className="mt" onClick={ready}>
         {t("I'm ready")} <Icon name="arrow" />
       </Button>

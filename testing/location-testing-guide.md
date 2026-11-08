@@ -24,28 +24,28 @@ Log in with an address ending in `heilbronn.dhbw.de`.
 2. Click **⋮** (top right of DevTools) → **More tools** → **Sensors**.
 3. Under **Location** choose **Other…**.
 4. Enter **Latitude** and **Longitude** from the tables below.
-5. Set **Accuracy to `10`**. This matters: if it is left empty or high, the server answers "weak signal" even at the right spot (limit: 50 m, `MAX_ACCURACY_M`).
+5. Set **Accuracy to `10`**. This matters: if it is left empty or high, the server answers "weak signal" even at the right spot (limit: 200 m, `MAX_ACCURACY_M`).
 6. Set the position **right before** you tap "I'm ready". The server rejects readings older than 30 s, and Chrome's fake location seems to keep the time at which you set it. If you get "Your location reading was too old", re-apply the location (retype one digit, or switch Location away and back to **Other…**) and tap **Try again**. No page refresh is needed. For a long session you can set `MAX_POSITION_AGE_MS=600000` in `backend/.env` and restart the backend; put it back to `30000` afterwards.
 7. In the app: map → checkpoint → **Start quest** → read the page → **I'm ready** → accept the location notice once.
 
 To test another position, change the numbers in Sensors and tap **Try again** on the result screen.
 
-**Keep `MAX_ACCURACY_M=50`** in `backend/.env`. Do not raise it to make tests pass; fix the Sensors accuracy instead. After editing `.env`, stop `npm run dev` (Ctrl+C) and start it again.
+**Keep `MAX_ACCURACY_M=200`** in `backend/.env`. Do not raise it to make tests pass; fix the Sensors accuracy instead. After editing `.env`, stop `npm run dev` (Ctrl+C) and start it again.
 
 ## 3. Test positions
 
-"Inside" is a point well within the circle that still belongs to this checkpoint. "Outside" is 40 m beyond the radius, where the answer must be *Not there yet*.
+"Inside" is a point well within the circle that still belongs to this checkpoint. "Outside" is 80 m beyond the radius, where the answer must be *Not there yet*.
 
 | Checkpoint | Radius | Questions (pass) | Centre: lat, lng → must unlock | Inside: lat, lng → must unlock | Outside: lat, lng → *Not there yet* |
 |---|---|---|---|---|---|
-| Mensa | 60 m | 5 (4) | 49.148464, 9.215808 | 49.148464, 9.216303 (36 m) | 49.149363, 9.215808 |
-| Library | 60 m | 5 (4) | 49.149493, 9.216467 | 49.149817, 9.216467 (36 m) | 49.150392, 9.216467 |
-| CAS Cafe | 40 m | 3 (2) | 49.148951, 9.216205 | 49.149167, 9.216205 (24 m) | 49.149670, 9.216205 |
-| Campus Garden | 50 m | 3 (2) | 49.147082, 9.217206 | 49.147352, 9.217206 (30 m) | 49.147891, 9.217206 |
-| Care.box and Shop.box | 40 m | 3 (2) | 49.149088, 9.217270 | 49.149304, 9.217270 (24 m) | 49.149807, 9.217270 |
-| Building B | 60 m | 5 (4) | 49.147126, 9.218486 | 49.147450, 9.218486 (36 m) | 49.148025, 9.218486 |
-| Building C | 60 m | 5 (4) | 49.147316, 9.217900 | 49.146992, 9.217900 (36 m) | 49.148215, 9.217900 |
-| Sensoricum | 40 m | 3 (2) | 49.147620, 9.217807 | 49.147836, 9.217807 (24 m) | 49.148339, 9.217807 |
+| Mensa | 80 m | 5 (4) | 49.148464, 9.215808 | 49.148464, 9.216248 (32 m) | 49.149903, 9.215808 |
+| Library | 80 m | 5 (4) | 49.149493, 9.216467 | 49.149781, 9.216467 (32 m) | 49.150932, 9.216467 |
+| CAS Cafe | 60 m | 3 (2) | 49.148951, 9.216205 | 49.149167, 9.216205 (24 m) | 49.150210, 9.216205 |
+| Campus Garden | 70 m | 3 (2) | 49.147082, 9.217206 | 49.147334, 9.217206 (28 m) | 49.148431, 9.217206 |
+| Care.box and Shop.box | 60 m | 3 (2) | 49.149088, 9.217270 | 49.149304, 9.217270 (24 m) | 49.150347, 9.217270 |
+| Building B | 80 m | 5 (4) | 49.147126, 9.218486 | 49.147414, 9.218486 (32 m) | 49.148565, 9.218486 |
+| Building C | 80 m | 5 (4) | 49.147316, 9.217900 | 49.147028, 9.217900 (32 m) | 49.148755, 9.217900 |
+| Sensoricum | 60 m | 3 (2) | 49.147620, 9.217807 | 49.147836, 9.217807 (24 m) | 49.148879, 9.217807 |
 
 Expected for **Centre** and **Inside**: "Locked on!", then the quiz opens and the timer starts at `questions × 60 s`
 (5 questions = 5:00, 3 questions = 3:00).
@@ -70,8 +70,8 @@ Then tap the checkpoint you are really standing at: it must unlock.
 
 | What to do | Expected |
 |---|---|
-| Accuracy `80` in Sensors, position at a centre | "GPS signal weak — try again. No attempt used." (server answer `ACCURACY_TOO_LOW`) |
-| Accuracy `50` (exactly the limit) | Unlocks |
+| Accuracy `250` in Sensors, position at a centre | "GPS signal weak — try again. No attempt used." (server answer `ACCURACY_TOO_LOW`) |
+| Accuracy `200` (exactly the limit) | Unlocks |
 | Set the position, wait over 30 s, then tap "I'm ready" | "Your location reading was too old" (`STALE_POSITION`) |
 | Sensors → Location → **Location unavailable** | "Your browser could not find a position" |
 | Lock icon in the address bar → Location → **Block** | "Location is off" with a *Check again* button |
@@ -85,7 +85,7 @@ Open DevTools → **Network**, tap "I'm ready" again, click the `verify` request
 
 | You see | Meaning | Fix |
 |---|---|---|
-| `ACCURACY_TOO_LOW` | Accuracy above 50 m, or the server still has an old limit | Set Sensors accuracy to 10; restart the backend after editing `.env` |
+| `ACCURACY_TOO_LOW` | Accuracy above 200 m, or the server still has an old limit | Set Sensors accuracy to 10; restart the backend after editing `.env` |
 | `STALE_POSITION` | Reading older than 30 s (Chrome keeps the time you set the fake location) | Re-apply the location in Sensors, then tap right away; or raise `MAX_POSITION_AGE_MS` for desktop tests only |
 | `"status": "OUTSIDE"` | Wrong coordinates, or a nearer checkpoint takes the spot | Check the numbers; see section 4 |
 | `CONSENT_REQUIRED` | Location notice not accepted | Accept it, tap again |

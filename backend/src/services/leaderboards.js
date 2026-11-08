@@ -2,6 +2,7 @@
 import { AppError } from '../middleware/errors.js';
 import { displayName } from './auth.js';
 import { assignRanks } from './scoring.js';
+import { rankedTeams } from './team-ranking.js';
 
 const LIST_LIMIT = 100;
 
@@ -34,19 +35,14 @@ export function createLeaderboardService({ pool }) {
     // BR06: only students who belong to a team may see the team board.
     if (!student?.team_id)
       throw new AppError(403, 'NO_TEAM', 'Join or create a team to see the team leaderboard.');
-    const [rows] = await pool.query(
-      `SELECT t.team_id, t.team_name, t.profile_picture, t.team_score, COUNT(s.student_id) AS size
-       FROM teams t JOIN students s ON s.team_id = t.team_id AND s.status = 'active'
-       GROUP BY t.team_id HAVING size >= 2
-       ORDER BY t.team_score DESC, t.score_updated_at ASC, t.team_id ASC`,
-    );
-    const entries = assignRanks(rows.map((r) => ({ ...r, points: r.team_score }))).map((r) => ({
+    const ranked = await rankedTeams(pool);
+    const entries = ranked.map((r) => ({
       rank: r.rank,
       id: r.team_id,
       name: r.team_name,
       pictureUrl: r.profile_picture,
       points: r.points,
-      members: Number(r.size),
+      members: r.size,
       isYourTeam: r.team_id === student.team_id,
     }));
     return { entries: top(entries), yourTeam: standing(entries.find((e) => e.isYourTeam)) };

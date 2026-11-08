@@ -22,11 +22,11 @@ Then open **http://localhost:5173** (the API runs on http://localhost:3000). The
 
 **How to use it**
 
-1. Press *Start* and enter an address that ends with `heilbronn.dhbw.de`. In development without SMTP settings no e-mail is sent: the code is printed in the terminal that runs `npm run dev`, and the code screen has an *Open mock inbox* button that shows it and fills it in for you. To receive real e-mails, fill in the `SMTP_*` values in `backend/.env` (examples are in `backend/.env.example`); the server prints `[mail] SMTP ready` when the login works. The sixth digit logs you in.
+1. Press *Start* and enter an address that ends with `heilbronn.dhbw.de`. In development without SMTP settings no e-mail is sent: the code is printed in the terminal that runs `npm run dev` (a line `LOGIN CODE for ...`), there is no resend cooldown, and if a code is refused (an old one after a restart, a typo) the page asks for a new code by itself, so you never have to press *Resend code*. The code screen also has an *Open mock inbox* button that shows it and fills it in for you. To receive real e-mails, fill in the `SMTP_*` values in `backend/.env` (examples are in `backend/.env.example`); the server prints `[mail] SMTP ready` when the login works. The sixth digit logs you in.
 2. New address: create your player card (name, nickname, one of six avatars or your own photo). Then you are on the map.
 3. Tap a checkpoint pin, then *Start quest*. Accept the location notice once; the phone is asked for its position (the *radar* screen). To test without walking across campus, set `VITE_DEV_FAKE_LOCATION=true` in `frontend/.env` and tick *Pretend I am here*, or use your browser's location override (Chrome DevTools → Sensors).
 4. Read the three facts on the info page (no timer yet), press *I'm ready*, answer the quiz, see the result and your rank change.
-5. The red hexagon at the bottom opens the menu: Map, Quests, Team, Ranks, Profile. In the profile you can switch dark mode, font size (S to XL) and the language (Deutsch / English).
+5. The red hexagon at the bottom opens the menu: Map, Quests, Team, Ranks, Profile. In the profile you can switch dark mode, font size (S to XL) and the language (Deutsch / English), and design your **map style** (light, dark or follow the app; presets; your own RGB colours for the pins, the highlight and the route). One map style is saved on your account.
 
 The questions in the seed data are **placeholders** (marked "PLACEHOLDER"); the real ones are added before the pilot (see [docs/question-bank.md](docs/question-bank.md)). The checkpoint centres are on the Bildungscampus Heilbronn (from OpenStreetMap) and still need the on-site check; the "Sensoricum" centre is an estimate next to Building C and must be confirmed on site (see [docs/geofencing.md](docs/geofencing.md); how to test the location check at a PC: [testing/location-testing-guide.md](testing/location-testing-guide.md)).
 
@@ -101,6 +101,8 @@ A mobile-responsive **web app** (no app-store download, no extra hardware — ju
 
 ### The 8 checkpoints
 
+The table shows the pilot seed. Admins can change every value and add quests (see "Demo data, admin area" below).
+
 | Checkpoint | Questions per attempt | Hard-question option (attempt 1) | Pass at |
 |---|---|---|---|
 | Mensa | 5 | yes | 4/5 |
@@ -123,12 +125,14 @@ A mobile-responsive **web app** (no app-store download, no extra hardware — ju
 | Attempt multiplier (applied **after** bonuses) | attempt 1: 100% · 2: 85% · 3: 70% · 4: 55% · 5: 40% · 6 and later: 0% |
 | Rounding | Fractions are rounded up (BR04) |
 
-`points = (correct-answer points + time bonus + full clear) × multiplier`. Hard question: on attempt 1 only, if questions 1–4 are correct you may swap question 5 for a hard one. Points are credited only when the attempt ends. All point values live in database tables, not in code (BR11).
+`points = (correct-answer points + time bonus + full clear) × multiplier`. Hard question: on attempt 1 only, if every question before the last is correct you may swap the last one for a hard one. Questions are **multiple choice** (one right answer) or **multi-select** (tick all right answers, exact match only); a quest tells you the types before you start. Points are credited only when the attempt ends. All point values live in database tables, not in code (BR11).
 
 ### Demo data, admin area, photos and route
 
 - `npm run dev` also loads **fictional demo data** (24 players, 6 teams, quests over several days, a pending invitation, a blocked, an archived and a reported account) so the ranks and the admin pages have something to show. It is never loaded in production (`npm run db:seed:demo` runs it alone; `npm run db:reset` starts from an empty database).
 - **Admin area** (`/admin`): sign in with `sekretariat.dski@heilbronn.dhbw.de` (the same e-mail code login; the address is set in `ADMIN_EMAIL`). Users (create, edit, block, archive, report, delete, sessions, quests and activity log), teams, and name rules. In development the code is printed in the terminal, or use *Open mock inbox* on the code screen.
+- **Quests (admin → Quests):** create, edit and delete quests: title, description, photos, information, number of questions, pass mark, time limit, hard question, question types (multiple choice, multi-select or both) and the questions with their four options. The location comes from a **Google Maps link** pasted into a box; an invalid link is explained and the place must lie inside the map students can see. A quest goes live only when it has enough questions.
+- **Teams:** the person who creates a team is its **leader** and can remove members; any member can cancel an invitation; an admin can add a student to any team (pop-up with search by e-mail). **Deleted accounts:** an admin delete (after a confirmation pop-up) and a student's own delete remove the account for good, with its data; it appears nowhere afterwards. **Roles:** an admin can make any account an admin or a student on the user page (BR53); it applies at once.
 - **Name rules:** German and English banned words, whole-word matching so "Cass" is fine. List: [docs/banned-terms.md](docs/banned-terms.md).
 - **Photos** of the places are in `frontend/public/places/` with credits in `CREDITS.md`. They are generic Bildungscampus photos from Wikimedia Commons, **not** pictures of the single places; replace them with the team's own photos before the pilot (list: `frontend/src/api/places.json`, then `npm run db:seed`).
 - **Walking route:** the *Show walking route* button in a checkpoint draws the way with OpenStreetMap data; your position is used in the browser only.
@@ -430,6 +434,17 @@ Use `npm ci` instead of `npm install` for a clean, reproducible install from `pa
 | Browser tests, 6 screen sizes (installs Chromium on first run) | `npm run test:e2e` |
 | Database: start / stop / reset / migrate / seed | `npm run db:up` / `db:down` / `db:reset` / `db:migrate` / `db:seed` |
 
+### 6.1 The `tests/` folder: every kind of test in one place
+
+| Command | What |
+|---|---|
+| `npm run test:all` | Runs **all** categories in order and **restarts everything** when one fails (2 restarts); prints one table |
+| `npm run test:cat -- python-api` | One category (`--list` shows them) |
+| `npm run lint:py` | `black --check` and `pylint` (must be 10/10) on the Python tests |
+| `npm run check:all` | `npm run check` + `lint:py` + `test:all` |
+
+Categories: unit (pytest + node:test), backend and frontend (Vitest), integration, database, security, regression (one test per fixed bug), performance (budgets), end-to-end (mock API and the real stack), UI/UX with accessibility scans, and a browser smoke test. One-time setup: `python -m pip install -r tests/requirements.txt`. Full guide: [tests/README.md](tests/README.md). The tests only ever touch the database `campusquest_test`, never your development data.
+
 `npm test` and `npm run dev` start the database themselves (`pretest` / `predev` hooks), so nobody has to remember it.
 
 ---
@@ -470,6 +485,7 @@ campus-city-quest/
 │   ├── git-workflow.md     branching strategy and workflow
 │   └── project_handbook.md full project plan
 ├── ai-logs/                one folder per member (catalina, yuri, ryan, yi_heng, akil)
+├── tests/                  all test kinds: run-all.mjs, manifest, Python suites, UI/UX, browser, performance
 ├── .gitlab/                issue and merge request templates
 └── scripts/                setup.mjs (runs after npm install), ensure-db.mjs (starts the database), setup-repo.sh
 ```

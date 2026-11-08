@@ -25,7 +25,7 @@ export const roundedDistance = (metres) => Math.round(metres / 10) * 10;
  * 'elsewhere' names that nearer checkpoint (a tie goes to the lower id).
  * @param {{ lat: number, lng: number, accuracy: number, ageMs: number }} reading
  * @param {{ checkpoint_id?: number, latitude: number|string, longitude: number|string, radius: number }} checkpoint
- * @param {{ maxAccuracyM: number, maxPositionAgeMs: number, geofenceSlackM?: number, nearerMarginM?: number }} limits
+ * @param {{ maxAccuracyM: number, maxPositionAgeMs: number, geofenceSlackM?: number, accuracyCreditM?: number, nearerMarginM?: number }} limits
  * @param {{ checkpoint_id: number, checkpoint_name: string, latitude: number|string, longitude: number|string, radius: number }[]} others
  *   the other ACTIVE checkpoints
  */
@@ -36,8 +36,11 @@ export function evaluateLocation(reading, checkpoint, limits, others = []) {
     distanceMeters(reading.lat, reading.lng, Number(c.latitude), Number(c.longitude));
   const distance = distanceTo(checkpoint);
   const distanceM = roundedDistance(distance);
-  // Phones are rarely exact indoors, so the circle gets a grace zone (GEOFENCE_SLACK_M) on top of its radius.
-  if (distance > checkpoint.radius + (limits.geofenceSlackM ?? 0)) {
+  // Phones are rarely exact indoors, so the circle gets a grace zone (GEOFENCE_SLACK_M) on top of its radius,
+  // plus the reading's own error margin: a phone that says "within 30 m" may really be 30 m closer. That credit
+  // is capped (ACCURACY_CREDIT_M) so a very vague reading cannot reach a checkpoint from far away.
+  const credit = Math.min(reading.accuracy, limits.accuracyCreditM ?? 0);
+  if (distance > checkpoint.radius + (limits.geofenceSlackM ?? 0) + credit) {
     return { outcome: 'outside', distanceM };
   }
 

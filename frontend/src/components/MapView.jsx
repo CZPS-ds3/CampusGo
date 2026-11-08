@@ -1,5 +1,6 @@
 import L from 'leaflet';
 import { useEffect, useRef } from 'react';
+import { useMapStyle } from '../mapStyle.js';
 import { t } from '../i18n.js';
 
 const TILE_URL =
@@ -51,6 +52,7 @@ export function MapView({ checkpoints, selectedId, onSelect, route = null, from 
   const markers = useRef(new Map());
   const fitted = useRef(false);
   const routeLayer = useRef(null);
+  const style = useMapStyle();
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
 
@@ -117,7 +119,7 @@ export function MapView({ checkpoints, selectedId, onSelect, route = null, from 
     if (!route) return undefined;
     const group = L.layerGroup();
     L.polyline(route.points, {
-      color: '#e2001a',
+      color: style.route,
       weight: 5,
       opacity: 0.9,
       dashArray: route.straight ? '2 10' : undefined,
@@ -143,7 +145,7 @@ export function MapView({ checkpoints, selectedId, onSelect, route = null, from 
     return () => {
       group.remove();
     };
-  }, [route, from]);
+  }, [route, from, style.route]);
 
   return (
     <div

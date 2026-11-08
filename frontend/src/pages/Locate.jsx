@@ -29,6 +29,7 @@ export default function Locate() {
   const [checkpoint, setCheckpoint] = useState(null);
   const [phase, setPhase] = useState('idle');
   const [elsewhere, setElsewhere] = useState(null);
+  const [distance, setDistance] = useState(null);
   const [weakWhy, setWeakWhy] = useState('accuracy'); // accuracy | stale | device
   const [asking, setAsking] = useState(false);
   const [pretend, setPretend] = useState(false);
@@ -88,6 +89,7 @@ export default function Locate() {
         );
       } else {
         setElsewhere(result.elsewhere ?? null);
+        setDistance(result.distanceM ?? null);
         setPhase('far');
       }
     } catch (error) {
@@ -168,9 +170,14 @@ export default function Locate() {
             other: elsewhere,
             name: checkpoint?.name ?? '',
           })
-        : t('You are not at {name} yet. Walk closer and check again. No attempt used.', {
-            name: checkpoint?.name ?? '',
-          }),
+        : distance
+          ? t(
+              'You are about {distance} m from {name}. Walk closer and check again. No attempt used.',
+              { distance, name: checkpoint?.name ?? '' },
+            )
+          : t('You are not at {name} yet. Walk closer and check again. No attempt used.', {
+              name: checkpoint?.name ?? '',
+            }),
       color: 'var(--warn)',
     },
     denied: {
@@ -229,6 +236,11 @@ export default function Locate() {
           {COPY.title}
         </Display>
         <p className="muted">{COPY.body}</p>
+        {phase === 'weak' && (
+          <p className="small muted">
+            {t('Tip: go outside or next to a window, and switch on location and Wi-Fi.')}
+          </p>
+        )}
       </div>
 
       <div className="stack mt">

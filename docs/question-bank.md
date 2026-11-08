@@ -157,3 +157,6 @@ Questions per attempt: **3**. Bank minimum: **6 normal**.
 | 5 | Normal |  |  |  |  |  |  | draft |
 | 6 | Normal |  |  |  |  |  |  | draft |
 
+## Question types (BR50)
+
+A question is either **MCQ** (multiple choice: four options, exactly one right) or **MULTI** (multi-select: four options, two or three right; the student must tick exactly the right ones). Admins add, edit and archive questions per quest in the admin area (Quests). The seed questions are all MCQ placeholders; a quest set to "both types" needs at least one normal question of each type before it can go live.

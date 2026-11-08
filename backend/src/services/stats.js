@@ -1,6 +1,7 @@
 // Numbers for the admin dashboard. "Day" means a Europe/Berlin calendar day; the boundaries are worked out
 // in Node, so no MySQL time zone tables are needed. Admins never count: every figure is about students.
 import { displayName } from './auth.js';
+import { rankedTeams } from './team-ranking.js';
 
 const DAYS = 14;
 const CACHE_MS = 30_000;
@@ -109,7 +110,6 @@ export function createStatsService({ pool, clock }) {
         active: counts.active ?? 0,
         blocked: counts.blocked ?? 0,
         archived: counts.archived ?? 0,
-        deleted: counts.deleted ?? 0,
       };
     });
 
@@ -164,17 +164,12 @@ export function createStatsService({ pool, clock }) {
     });
 
     const topTeams = await section(errors, 'topTeams', async () => {
-      const [rows] = await pool.query(
-        `SELECT t.team_name, t.team_score, COUNT(s.student_id) AS members
-         FROM teams t JOIN students s ON s.team_id = t.team_id AND s.status = 'active'
-         GROUP BY t.team_id HAVING members >= 2 AND t.team_score > 0
-         ORDER BY t.team_score DESC, t.score_updated_at ASC LIMIT 5`,
-      );
-      return rows.map((r, i) => ({
-        rank: i + 1,
-        name: r.team_name,
-        members: Number(r.members),
-        points: r.team_score,
+      const teams = (await rankedTeams(pool)).filter((t) => t.team_score > 0).slice(0, 5);
+      return teams.map((t) => ({
+        rank: t.rank,
+        name: t.team_name,
+        members: t.size,
+        points: t.team_score,
       }));
     });
 

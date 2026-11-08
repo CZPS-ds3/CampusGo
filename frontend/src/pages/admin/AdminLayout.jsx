@@ -7,6 +7,7 @@ const TABS = [
   ['/admin', 'Dashboard', true],
   ['/admin/users', 'Users', false],
   ['/admin/teams', 'Teams', false],
+  ['/admin/quests', 'Quests', false],
   ['/admin/names', 'Names', false],
   ['/admin/test-quests', 'Test quests', false],
 ];

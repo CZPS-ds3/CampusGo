@@ -6,14 +6,23 @@ import { Button } from '../../components/Button.jsx';
 import { Icon } from '../../components/icons.jsx';
 import { Skeleton } from '../../components/Screen.jsx';
 import { Chip, Display, EmptyState, Input } from '../../components/ui.jsx';
+import { useAutoRefresh } from '../../hooks/useAutoRefresh.js';
 import { useToast } from '../../hooks/useToast.jsx';
 import { formatNumber, t } from '../../i18n.js';
-import { STATUS_TONE, formatDateTime, statusLabel } from './format.js';
+import { STATUS_TONE, formatDateTime, roleLabel, statusLabel } from './format.js';
+import { Select } from './quest-fields.jsx';
 
-const FILTERS = ['', 'active', 'blocked', 'archived', 'deleted', 'reported'];
+const FILTERS = ['', 'active', 'blocked', 'archived', 'reported'];
+const ROLE_FILTERS = ['', 'student', 'admin'];
 
 function NewUser({ onCreated }) {
-  const [form, setForm] = useState({ email: '', firstName: '', lastName: '', nickname: '' });
+  const [form, setForm] = useState({
+    email: '',
+    firstName: '',
+    lastName: '',
+    nickname: '',
+    role: 'student',
+  });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const set = (key) => (event) => setForm((f) => ({ ...f, [key]: event.target.value }));
@@ -24,7 +33,7 @@ function NewUser({ onCreated }) {
     setError('');
     try {
       await api.admin.createUser({ ...form, nickname: form.nickname || undefined });
-      setForm({ email: '', firstName: '', lastName: '', nickname: '' });
+      setForm({ email: '', firstName: '', lastName: '', nickname: '', role: 'student' });
       onCreated();
     } catch (failure) {
       setError(errorText(failure));
@@ -56,6 +65,15 @@ function NewUser({ onCreated }) {
         value={form.nickname}
         onChange={set('nickname')}
       />
+      <Select
+        label={t('Role')}
+        value={form.role}
+        onChange={set('role')}
+        hint={t('Admins get the whole admin area. They are in no team and no ranking.')}
+      >
+        <option value="student">{t('Student')}</option>
+        <option value="admin">{t('Admin')}</option>
+      </Select>
       {error && (
         <p className="field-note field-note--error" role="alert">
           <Icon name="warn" size={18} />
@@ -73,20 +91,30 @@ export default function AdminUsers() {
   const toast = useToast();
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('');
+  const [role, setRole] = useState('');
   const [users, setUsers] = useState(null);
   const [creating, setCreating] = useState(false);
 
   const load = useCallback(() => {
     api.admin
-      .users({ q: q.trim(), status })
+      .users({ q: q.trim(), status, role })
       .then((result) => setUsers(result.users))
       .catch((error) => toast.error(errorText(error)));
-  }, [q, status, toast]);
+  }, [q, status, role, toast]);
 
   useEffect(() => {
     const id = setTimeout(load, 200);
     return () => clearTimeout(id);
   }, [load]);
+
+  // Accounts that another admin creates, changes or deletes show up here without a reload.
+  const quietReload = useCallback(() => {
+    api.admin
+      .users({ q: q.trim(), status, role })
+      .then((result) => setUsers(result.users))
+      .catch(() => {});
+  }, [q, status, role]);
+  useAutoRefresh(quietReload);
 
   return (
     <section className="stack" aria-labelledby="users-title">
@@ -135,6 +163,13 @@ export default function AdminUsers() {
             ))}
           </select>
         </div>
+        <Select label={t('Role')} value={role} onChange={(event) => setRole(event.target.value)}>
+          {ROLE_FILTERS.map((value) => (
+            <option key={value} value={value}>
+              {value === '' ? t('All') : roleLabel(value)}
+            </option>
+          ))}
+        </Select>
       </div>
       {users && (
         <p className="small muted" aria-live="polite">
@@ -160,7 +195,7 @@ export default function AdminUsers() {
                 <span className="admin-user__chips">
                   <Chip tone={STATUS_TONE[user.status]}>{statusLabel(user.status)}</Chip>
                   {user.reported && <Chip tone="warn">{t('Reported')}</Chip>}
-                  {user.role === 'admin' && <Chip tone="sub">{t('Admin')}</Chip>}
+                  {user.role === 'admin' && <Chip tone="sub">{roleLabel('admin')}</Chip>}
                 </span>
               </div>
               <p className="small muted">
