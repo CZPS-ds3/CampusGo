@@ -20,5 +20,9 @@ export default defineConfig({
     url: 'http://localhost:5173',
     reuseExistingServer: true,
     timeout: 240_000,
+    // The admin test signs in with the same address on every run, so the resend cooldown and the hourly code
+    // limit of that address are relaxed for the server that Playwright starts (a server that is already running
+    // keeps its own limits).
+    env: { OTP_RESEND_COOLDOWN_SECONDS: '1', OTP_RESEND_MAX_PER_HOUR: '1000' },
   },
 });

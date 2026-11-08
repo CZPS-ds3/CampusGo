@@ -1,6 +1,7 @@
 import { createApp } from './src/app.js';
 import { systemClock } from './src/clock.js';
 import { loadConfig, productionProblems } from './src/config.js';
+import { describeListenError } from './src/listen-error.js';
 import { createPool } from './src/db/pool.js';
 import { createMailer } from './src/services/mailer.js';
 
@@ -11,6 +12,9 @@ if (problems.length > 0) {
   process.exit(1);
 }
 
+if (config.isDev && !config.smtp.host) {
+  console.log('[mail] Development: login codes are printed in this terminal (no e-mail is sent).');
+}
 const pool = createPool(config.databaseUrl);
 const mailer = createMailer(config);
 const { app, services } = createApp({ pool, config, mailer, clock: systemClock });
@@ -18,12 +22,37 @@ const { app, services } = createApp({ pool, config, mailer, clock: systemClock }
 // Tells the operator straight away whether login codes can be delivered (wrong password, blocked port ...).
 mailer.verify().then(({ ok, detail }) => (ok ? console.log : console.error)(`[mail] ${detail}`));
 
+// A stopped database (Docker Desktop closed) is the usual development problem: say so once, in plain words,
+// instead of repeating the raw connection error every few seconds, and say when it is back.
+let databaseDown = false;
+function reportDatabase(error) {
+  if (!error) {
+    if (databaseDown) console.log('[db] MySQL is reachable again.');
+    databaseDown = false;
+    return;
+  }
+  if (error.code !== 'ECONNREFUSED' && error.code !== 'ETIMEDOUT') {
+    console.error(`[db] ${error.message}`);
+    return;
+  }
+  if (!databaseDown) {
+    console.error(
+      '[db] MySQL is not reachable. Start Docker Desktop, then run "npm run db:up" (also works in the backend folder) ' +
+        '(or start everything with "npm run dev" from the project root folder). Login needs the database.',
+    );
+  }
+  databaseDown = true;
+}
+
 const EXPIRY_SWEEP_MS = 10_000;
 const HOUSEKEEPING_MS = 10 * 60 * 1000;
 
 // Closes overdue attempts even if nobody asks for them (BR16, BR22).
 const sweep = setInterval(() => {
-  services.quiz.finalizeAllExpired().catch((error) => console.error(`[sweep] ${error.message}`));
+  services.quiz
+    .finalizeAllExpired()
+    .then(() => reportDatabase(null))
+    .catch(reportDatabase);
 }, EXPIRY_SWEEP_MS);
 
 const housekeeping = setInterval(() => {
@@ -37,6 +66,16 @@ const housekeeping = setInterval(() => {
 
 const server = app.listen(config.port, () => {
   console.log(`Campus & City Quest API listening on http://localhost:${config.port}`);
+});
+
+// A port that is taken (another API still running) gets one clear line instead of a stack trace.
+server.on('error', (error) => {
+  const text = describeListenError(error, config.port);
+  if (!text) throw error;
+  console.error(`[server] ${text}`);
+  clearInterval(sweep);
+  clearInterval(housekeeping);
+  pool.end().finally(() => process.exit(1));
 });
 
 function shutdown() {

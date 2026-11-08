@@ -39,3 +39,21 @@ See [api-documentation.md](api-documentation.md) (sections Account deletion and 
 - `tests/helpers.js`: `loadConfig({ ...process.env, ... })` so CI can set `TEST_DATABASE_URL`.
 - `backend/vitest.config.js`: `pool: 'threads'` (the forked worker crashed now and then on Windows).
 - `.gitlab-ci.yml`: new pipeline.
+
+## Round 5 additions (2026-10-29)
+
+- New: `services/team-ranking.js` (`rankedTeams`, `rankOfTeam`, `unrankedReason`, `teamStandingAround`), migration `007_recompute_team_scores.sql`, `tests/team-rules.test.js`, `tests/listen-error.test.js`, `src/listen-error.js`, `tests/geofence-lenient.test.js`.
+- `services/teams.js`: `refreshTeamScore` counts only active students; `getMyTeam` adds `ranked` and `hasAdmin`.
+- `services/leaderboards.js`, `players.js`, `stats.js`: use the shared ranked-team rule.
+- `services/quiz.js`: `getResult` adds `team` (rank and score before and after) and null ranks for admins; solo rank excludes admins and inactive students.
+- `services/account.js`: `resetTestPoints`; `app.js`: `POST /me/reset-points`, `GET /me` rank null for admins; `services/admin.js`: a status change recalculates the team score.
+- The Python and Playwright suites in `tests/` need the API contract above; run them with `npm run test:all`.
+
+## Round 6 additions (2026-10-29)
+
+- Migrations `008_team_leader_and_account_states.sql`, `009_map_style.sql`, `010_quests_and_question_types.sql` (old local databases need `npm run db:reset`; migration 010 changes `attempts`, `checkpoints`, `questions`, `options`).
+- New: `services/checkpoint-admin.js` (quest CRUD, photos, facts, questions, readiness), `services/map-link.js` (Google Maps link reader), `map-area.js` (the shared map bounds), `services/map-style.js`, `pictures.js` `storeQuestPhoto`.
+- `services/quiz.js`: question types (`DRAWABLE_QUESTIONS` per type, `drawQuestions` with the mixed guarantee, `answer(..., optionIds)` judged by exact match, `attempt_answers`), the hard question moves to the last slot of N questions, per-quest time limit, attempts keep `question_count` and `pass_threshold`, archived quests are hidden.
+- `services/teams.js`: `ensureLeader`, `removeMember`, `cancelInvitation`. `services/account.js`: soft delete, restore, purge, `account_deleted_by_student` event. `services/admin.js`: `restoreUser`, `purgeUser`, `addTeamMember`, `listUsers({ noTeam })`.
+- `config.js`: in development without SMTP the resend cooldown and hourly limit default to 0 and 1000 (BR52); the mailer prints a clear "LOGIN CODE" line.
+- Tests: `map-link`, `checkpoint-admin`, `multi-select`, `team-management`, `deleted-accounts`, `map-style` in `backend/tests/`; `helpers.js` removes quests named `TQ ...` and resets the seeded ones.

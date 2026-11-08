@@ -148,8 +148,9 @@ export async function seedDemo(conn, now = Date.now()) {
         const finish = start + (total - remaining) * 1000;
         await conn.query(
           `INSERT INTO attempts (student_id, checkpoint_id, attempt_number, start_time, expires_at, finished_at, status,
-             end_reason, correct_count, base_points, time_bonus, full_clear_bonus, multiplier_percent, points_exact, points_earned)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 'completed', ?, ?, ?, ?, ?, ?, ?)`,
+             end_reason, correct_count, base_points, time_bonus, full_clear_bonus, multiplier_percent, points_exact, points_earned,
+             question_count, pass_threshold)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'completed', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             studentId,
             checkpoint.checkpoint_id,
@@ -165,6 +166,8 @@ export async function seedDemo(conn, now = Date.now()) {
             score.multiplierPercent,
             score.pointsExact,
             score.pointsEarned,
+            checkpoint.question_count,
+            checkpoint.pass_threshold,
           ],
         );
         exact += score.pointsExact;

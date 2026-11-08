@@ -72,16 +72,16 @@ describe('BR12 geofence verification (Main Project Document, section 9)', () => 
     expect(check.inside_radius).toBe(0);
   });
 
-  it('test 4: accuracy worse than 100 m is ACCURACY_TOO_LOW, with no attempt and no location row', async () => {
+  it('test 4: accuracy worse than 200 m is ACCURACY_TOO_LOW, with no attempt and no location row', async () => {
     const { agent } = await ctx.login('poor');
     await consent(agent);
     const cp = await ctx.checkpointByName(agent, 'Library');
-    const res = await ctx.verify(agent, cp, { accuracy: 101 });
+    const res = await ctx.verify(agent, cp, { accuracy: 201 });
     expect(res.status).toBe(422);
     expect(res.body.error.code).toBe('ACCURACY_TOO_LOW');
     expect(await count('attempts')).toBe(0);
     expect(await count('location_checks')).toBe(0);
-    await ctx.verify(agent, cp, { accuracy: 50 }).expect(200);
+    await ctx.verify(agent, cp, { accuracy: 200 }).expect(200);
   });
 
   it('test 5: a reading older than 30 s, or from the future, is STALE_POSITION and starts nothing', async () => {

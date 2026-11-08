@@ -26,6 +26,9 @@ function trustProxy(value) {
 
 export function loadConfig(env = process.env) {
   const nodeEnv = env.NODE_ENV ?? 'development';
+  // Development without an SMTP server prints every login code in the backend terminal. Nothing may hold a
+  // code back there (no cooldown, no hourly cap), otherwise a restart or a retry leaves the developer without one.
+  const terminalMail = nodeEnv === 'development' && !env.SMTP_HOST;
   const smtpPort = int(env.SMTP_PORT, 587);
   return {
     nodeEnv,
@@ -45,13 +48,14 @@ export function loadConfig(env = process.env) {
     allowedEmailDomain: (env.ALLOWED_EMAIL_DOMAIN ?? 'heilbronn.dhbw.de').toLowerCase(),
     otpTtlMinutes: int(env.OTP_TTL_MINUTES, 10),
     otpMaxFailedAttempts: int(env.OTP_MAX_FAILED_ATTEMPTS, 5),
-    otpResendCooldownSeconds: int(env.OTP_RESEND_COOLDOWN_SECONDS, 30),
-    otpResendMaxPerHour: int(env.OTP_RESEND_MAX_PER_HOUR, 5),
+    otpResendCooldownSeconds: int(env.OTP_RESEND_COOLDOWN_SECONDS, terminalMail ? 0 : 30),
+    otpResendMaxPerHour: int(env.OTP_RESEND_MAX_PER_HOUR, terminalMail ? 1000 : 5),
     sessionInactivityMinutes: int(env.SESSION_INACTIVITY_MINUTES, 30),
     invitationTtlHours: int(env.INVITATION_TTL_HOURS, 24),
     // Geofencing settings (Main Project Document, section 5 "Settings kept in one config file").
-    maxAccuracyM: int(env.MAX_ACCURACY_M, 100),
-    geofenceSlackM: int(env.GEOFENCE_SLACK_M, 25), // grace zone added to every radius
+    maxAccuracyM: int(env.MAX_ACCURACY_M, 200), // laptops and indoor phones are often 50-200 m off
+    geofenceSlackM: int(env.GEOFENCE_SLACK_M, 30), // grace zone added to every radius
+    accuracyCreditM: int(env.ACCURACY_CREDIT_M, 50), // at most this much of a reading's error margin counts for the student
     nearerMarginM: int(env.NEARER_MARGIN_M, 20), // another checkpoint must be this much nearer to win
     maxPositionAgeMs: int(env.MAX_POSITION_AGE_MS, 30_000),
     secondsPerQuestion: int(env.SECONDS_PER_QUESTION, 60), // BR13

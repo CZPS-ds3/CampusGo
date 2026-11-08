@@ -22,6 +22,7 @@
   --logo-bg: #ffffff;
   --map-bg: #eef0f2;
   --map-filter: none;
+  --map-filter-dark: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9) saturate(0.45);
   color-scheme: light;
 }
 

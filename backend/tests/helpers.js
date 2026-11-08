@@ -8,6 +8,7 @@ import { createTestMailer } from '../src/services/mailer.js';
 
 const TABLES = [
   'location_checks',
+  'attempt_answers',
   'attempt_questions',
   'attempts',
   'team_invitations',
@@ -35,6 +36,18 @@ export async function createTestContext(envOverrides = {}) {
       await conn.query('SET FOREIGN_KEY_CHECKS = 0');
       for (const table of TABLES) await conn.query(`DELETE FROM ${table}`);
       await conn.query('SET FOREIGN_KEY_CHECKS = 1');
+      // Quests made by quest tests (their titles start with "TQ ") are removed, the seeded ones are put back as seeded.
+      await conn.query(
+        `DELETE o FROM options o JOIN questions q ON q.question_id = o.question_id
+         JOIN checkpoints c ON c.checkpoint_id = q.checkpoint_id WHERE c.checkpoint_name LIKE 'TQ %'`,
+      );
+      await conn.query(
+        "DELETE q FROM questions q JOIN checkpoints c ON c.checkpoint_id = q.checkpoint_id WHERE c.checkpoint_name LIKE 'TQ %'",
+      );
+      await conn.query("DELETE FROM checkpoints WHERE checkpoint_name LIKE 'TQ %'");
+      await conn.query(
+        "UPDATE checkpoints SET time_limit_seconds = NULL, type_mode = 'MCQ_ONLY', archived_at = NULL",
+      );
       await seedReference(conn);
       await seedPlaceholderFacts(conn);
       await seedPlaceholderQuestions(conn); // inserts once, later runs only reset the flags below

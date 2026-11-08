@@ -1,6 +1,11 @@
 import { useCallback, useState } from 'react';
 
-const GEO_OPTIONS = { enableHighAccuracy: true, timeout: 10_000, maximumAge: 0 };
+// A phone often needs a few seconds to settle on a good fix, and a laptop or a phone indoors may only manage a coarse
+// one. So the position is watched for a short while and the most precise reading wins; if the GPS finds nothing,
+// the network position (Wi-Fi, mobile) is tried before giving up.
+const GOOD_ENOUGH_M = 30;
+const GPS_WINDOW_MS = 8000;
+const NETWORK_WINDOW_MS = 6000;
 
 /** Maps the browser's error codes to the names the UI works with. */
 function failureFrom(error) {
@@ -13,21 +18,63 @@ function failureFrom(error) {
  * One position sample from the Geolocation API. Rejects with 'denied' | 'timeout' | 'unavailable'.
  * `ageMs` is phone clock minus phone clock, so a phone whose clock is off is not blocked by the server.
  */
-export function getPosition(fake) {
-  if (fake) return Promise.resolve({ ageMs: 0, ...fake });
-  if (!('geolocation' in navigator)) return Promise.reject('unavailable');
+export async function getPosition(fake) {
+  if (fake) return { ageMs: 0, ...fake };
+  if (!('geolocation' in navigator)) throw 'unavailable';
+  try {
+    return await watchBest(true, GPS_WINDOW_MS);
+  } catch (reason) {
+    if (reason === 'denied') throw reason;
+    return watchBest(false, NETWORK_WINDOW_MS);
+  }
+}
+
+/**
+ * Watches the position for up to `windowMs` and resolves with the most precise reading (at once when one is good
+ * enough). Rejects with 'denied' | 'timeout' | 'unavailable' when there was no reading at all.
+ */
+function watchBest(enableHighAccuracy, windowMs) {
   return new Promise((resolve, reject) => {
-    navigator.geolocation.getCurrentPosition(
-      ({ coords, timestamp }) =>
-        resolve({
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-          accuracy: coords.accuracy,
-          ageMs: Math.max(0, Date.now() - timestamp),
-        }),
-      (error) => reject(failureFrom(error)),
-      GEO_OPTIONS,
+    let best = null;
+    let failure = 'timeout';
+    let finished = false;
+    let watchId = null;
+    let timer = null;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+      if (!best) return reject(failure);
+      // The age is worked out now, so a reading kept for a few seconds is not sent as if it were brand new.
+      return resolve({
+        latitude: best.latitude,
+        longitude: best.longitude,
+        accuracy: best.accuracy,
+        ageMs: Math.max(0, Date.now() - best.takenAt),
+      });
+    };
+    timer = setTimeout(finish, windowMs);
+    watchId = navigator.geolocation.watchPosition(
+      ({ coords, timestamp }) => {
+        if (!best || coords.accuracy < best.accuracy) {
+          best = {
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+            accuracy: coords.accuracy,
+            takenAt: timestamp,
+          };
+        }
+        if (coords.accuracy <= GOOD_ENOUGH_M) finish();
+      },
+      (error) => {
+        failure = failureFrom(error);
+        if (failure === 'denied') finish();
+      },
+      { enableHighAccuracy, timeout: windowMs, maximumAge: 0 },
     );
+    // A watch that answered synchronously (some test doubles) may already be done.
+    if (finished) navigator.geolocation.clearWatch(watchId);
   });
 }
 

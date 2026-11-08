@@ -48,7 +48,7 @@ describe('mock API keeps the same rules as the server (BR12, BR13, BR14, BR18)',
 
   it('BR12 poor accuracy or an old reading starts nothing', async () => {
     await signIn();
-    await expect(api.verifyLocation(2, { ...LIBRARY, accuracy: 101 })).rejects.toMatchObject({
+    await expect(api.verifyLocation(2, { ...LIBRARY, accuracy: 201 })).rejects.toMatchObject({
       code: 'ACCURACY_TOO_LOW',
     });
     await expect(

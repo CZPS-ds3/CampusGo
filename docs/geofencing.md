@@ -27,8 +27,8 @@ Implementation notes for the "Geofencing Architecture" section of the Main Proje
 | 5b | Attempt running at **another** checkpoint | `409 ACTIVE_ATTEMPT_EXISTS` (`attemptId` in the body) | no | no |
 | 6 | Location notice accepted | `403 CONSENT_REQUIRED` | no | no |
 | 7 | Reading fresh: `0 ≤ ageMs ≤ 30 000` | `422 STALE_POSITION` | no | no |
-| 8 | Accuracy ≤ 50 m | `422 ACCURACY_TOO_LOW` | no | no |
-| 9 | Haversine distance ≤ radius | `200 { status: 'OUTSIDE', distanceM, elsewhere: null, message }` (distance rounded to 10 m) | no | no |
+| 8 | Accuracy ≤ 200 m (`MAX_ACCURACY_M`) | `422 ACCURACY_TOO_LOW` | no | no |
+| 9 | Haversine distance ≤ radius + 30 m grace zone + the reading's accuracy (credit capped at 50 m) | `200 { status: 'OUTSIDE', distanceM, elsewhere: null, message }` (distance rounded to 10 m) | no | no |
 | 9b | **Nearest centre wins.** No other active checkpoint whose circle also contains the reading has a closer centre | `200 { status: 'OUTSIDE', distanceM, elsewhere: '<name>', message }` ("You are at Building C, not at Sensoricum") | no | no |
 | 10 | All good: **unlock** | `200 { status: 'OK', resumed: false, attempt }` | yes | starts |
 
@@ -38,13 +38,16 @@ Rate limit: 10 verify calls per minute **per student** → `429 TOO_MANY`. Two s
 
 | Name | Default | Meaning |
 |---|---|---|
-| `MAX_ACCURACY_M` | 50 | Reject readings less precise than this. Raise to 500 only for desktop tests with a faked location. |
+| `MAX_ACCURACY_M` | 200 | Reject readings less precise than this. Laptops and phones indoors are often 50-200 m off. Raise to 500 only for desktop tests with a faked location. |
+| `GEOFENCE_SLACK_M` | 30 | Grace zone added to every radius. |
+| `ACCURACY_CREDIT_M` | 50 | At most this much of a reading's own error margin counts in the student's favour (a phone that says it is within 30 m may really be 30 m closer). A vaguer reading cannot reach a checkpoint from far away. |
+| `NEARER_MARGIN_M` | 20 | Another checkpoint must have a centre this much nearer to win the spot. |
 | `MAX_POSITION_AGE_MS` | 30000 | Reject readings older than 30 s. |
 | `SECONDS_PER_QUESTION` | 60 | Timer length per question (BR13). |
 | `VERIFY_LIMIT_PER_MIN` | 10 | Verify calls per student per minute. |
 | `LOCATION_RETENTION_DAYS` | 7 | How long "inside yes/no" rows are kept. |
 
-Centre, radius, `is_active` and `question_count` live in the `checkpoints` table (BR08, BR11) and are changed with plain SQL, for example `UPDATE checkpoints SET radius = 70 WHERE checkpoint_name = 'Library';`.
+Centre, radius, `is_active` and `question_count` live in the `checkpoints` table (BR08, BR11). Admins change the radius on the quest page (`/admin/quests/:id`): a number field, a slider and quick sizes, with a **map that draws the circle to scale** while they change it (solid circle = radius, dashed ring = the extra tolerance, grey circles = the other checkpoints), so nobody has to guess how big 80 m is. Plain SQL still works: `UPDATE checkpoints SET radius = 90 WHERE checkpoint_name = 'Library';`.
 
 ## Checkpoints (Bildungscampus Heilbronn)
 
@@ -52,16 +55,16 @@ Centres are taken from OpenStreetMap features with these names (checked 2026-10-
 
 | Checkpoint | Latitude | Longitude | Radius | Questions | Source (OpenStreetMap) |
 |---|---|---|---|---|---|
-| Mensa | 49.148464 | 9.215808 | 60 m | 5 | "Mensa Bildungscampus", Bildungscampus 8 (way 517420284) |
-| Library | 49.149493 | 9.216467 | 60 m | 5 | "Bib Bildungscampus", R-Bau, Bildungscampus 15 (node 6766820453) |
-| CAS Cafe | 49.148951 | 9.216205 | 40 m | 3 | "M-Bau (DHBW CAS)", Bildungscampus 13 (way 443802899) |
-| Campus Garden | 49.147082 | 9.217206 | 50 m | 3 | "Campus Garden", next to A-Bau (Forum) (node 10973428037) |
-| Care.box and Shop.box | 49.149088 | 9.217270 | 40 m | 3 | midpoint of "care.box" and "shop.box" (ways 1420183535, 1420183536) |
-| Building B | 49.147126 | 9.218486 | 60 m | 5 | "B-Bau (DHBW)", Bildungscampus 4 (way 130362357) |
-| Building C | 49.147316 | 9.217900 | 60 m | 5 | "C-Bau (DHBW)", Bildungscampus 5 (way 130362412) |
-| Sensoricum | 49.147620 | 9.217807 | 40 m | 3 | taken on site: the grey DHBW Sensoricum building beside the Bildungscampus car park (not labelled in OpenStreetMap). |
+| Mensa | 49.148464 | 9.215808 | 80 m | 5 | "Mensa Bildungscampus", Bildungscampus 8 (way 517420284) |
+| Library | 49.149493 | 9.216467 | 80 m | 5 | "Bib Bildungscampus", R-Bau, Bildungscampus 15 (node 6766820453) |
+| CAS Cafe | 49.148951 | 9.216205 | 60 m | 3 | "M-Bau (DHBW CAS)", Bildungscampus 13 (way 443802899) |
+| Campus Garden | 49.147082 | 9.217206 | 70 m | 3 | "Campus Garden", next to A-Bau (Forum) (node 10973428037) |
+| Care.box and Shop.box | 49.149088 | 9.217270 | 60 m | 3 | midpoint of "care.box" and "shop.box" (ways 1420183535, 1420183536) |
+| Building B | 49.147126 | 9.218486 | 80 m | 5 | "B-Bau (DHBW)", Bildungscampus 4 (way 130362357) |
+| Building C | 49.147316 | 9.217900 | 80 m | 5 | "C-Bau (DHBW)", Bildungscampus 5 (way 130362412) |
+| Sensoricum | 49.147620 | 9.217807 | 60 m | 3 | taken on site: the grey DHBW Sensoricum building beside the Bildungscampus car park (not labelled in OpenStreetMap). |
 
-**Overlapping circles.** Building C and the Sensoricum are only 34 m apart, so their circles (60 m and 40 m) overlap, as do several others (for example Mensa and CAS Cafe). One spot must never unlock two checkpoints, so a reading inside several circles belongs to the checkpoint with the **nearest centre** only (a tie goes to the lower id). Only active checkpoints take part. For Building C and the Sensoricum the dividing line is 17 m from each centre. This rule is an addition to the Main Project Document, which only compares the distance with the radius; it needs the team's approval. Tested for the whole campus by `backend/tests/geofence.test.js` (a grid sweep finds no spot that verifies two checkpoints).
+**Overlapping circles.** Building C and the Sensoricum are only 34 m apart, so their circles (80 m and 60 m) overlap, as do several others (for example Mensa and CAS Cafe). One spot must never unlock two checkpoints, so a reading inside several circles belongs to the checkpoint with the **nearest centre** only (a tie goes to the lower id). Only active checkpoints take part. For Building C and the Sensoricum the dividing line is 17 m from each centre. This rule is an addition to the Main Project Document, which only compares the distance with the radius; it needs the team's approval. Tested for the whole campus by `backend/tests/geofence.test.js` (a grid sweep finds no spot that verifies two checkpoints).
 
 Open points for WP9/WP13:
 - **Sensoricum**: the dividing line to Building C is 17 m from each centre. Someone on the Sensoricum side of Building C (for example in its east wing) is treated as being at the Sensoricum. If that is too coarse, move the centres or shrink the radii after WP13.

@@ -5,6 +5,7 @@ import { errorText } from '../api/errorText.js';
 import { Avatar, PRESET_COUNT } from '../components/Avatar.jsx';
 import { Button } from '../components/Button.jsx';
 import { Icon } from '../components/icons.jsx';
+import { MapStyleSettings } from '../components/MapStyleSettings.jsx';
 import { Page } from '../components/Screen.jsx';
 import { Modal } from '../components/Sheet.jsx';
 import { Display, Logo } from '../components/ui.jsx';
@@ -165,8 +166,10 @@ export default function Profile() {
     try {
       await api.deleteAccount();
       setConfirmDelete(false);
-      await logout();
+      // Leave the protected pages first: clearing the session while still on one would send the person to the
+      // login screen instead of the start page.
       navigate('/', { replace: true });
+      await logout();
     } catch (failure) {
       setConfirmDelete(false);
       setError(errorText(failure));
@@ -260,6 +263,7 @@ export default function Profile() {
         </div>
         <div className="stack">
           <Preferences />
+          <MapStyleSettings />
           <Button onClick={() => setConfirm(true)}>
             <Icon name="logout" /> {t('Sign out')}
           </Button>

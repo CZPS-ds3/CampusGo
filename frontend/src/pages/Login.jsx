@@ -10,9 +10,11 @@ import { Sheet } from '../components/Sheet.jsx';
 import { Chip, Display, Input, LangSwitch, Logo } from '../components/ui.jsx';
 import { useSession } from '../hooks/useSession.jsx';
 import { formatClock } from '../hooks/useServerTimer.js';
+import { useToast } from '../hooks/useToast.jsx';
 import { t } from '../i18n.js';
 
-const RESEND_SECONDS = 30;
+const DEV_SERVER = import.meta.env.DEV; // the Vite dev server: codes are printed in the backend terminal
+const RESEND_SECONDS = DEV_SERVER ? 0 : 30;
 const CODE_LIFETIME_SECONDS = 600;
 const SCHOOL_DOMAIN = 'heilbronn.dhbw.de';
 // Development helper: shows the e-mail the server "sent", so nobody needs a mail account to try the app.
@@ -30,6 +32,7 @@ const looksLikeSchoolEmail = (value) => {
 
 export default function Login() {
   const { student, ready, setStudent } = useSession();
+  const toast = useToast();
   const navigate = useNavigate();
   const { state } = useLocation();
   const [step, setStep] = useState('email');
@@ -45,6 +48,7 @@ export default function Login() {
   const [expires, setExpires] = useState(CODE_LIFETIME_SECONDS);
   const [inbox, setInbox] = useState(null);
   const [welcome, setWelcome] = useState(false);
+  const autoResent = useRef(false);
   const heading = useRef(null);
   const fileInput = useRef(null);
 
@@ -89,6 +93,7 @@ export default function Login() {
     }
     return run(async () => {
       await api.requestOtp(email.trim());
+      autoResent.current = false;
       setCode('');
       setCooldown(RESEND_SECONDS);
       setExpires(CODE_LIFETIME_SECONDS);
@@ -131,6 +136,16 @@ export default function Login() {
         if (failure.code === 'INVALID_CODE') {
           setCode('');
           setShake((n) => n + 1);
+          // In development a refused code (old code after a backend restart, typo) gets one new code at once,
+          // so nobody has to find the resend button.
+          if (DEV_SERVER && !autoResent.current) {
+            autoResent.current = true;
+            await api.requestOtp(email.trim());
+            setExpires(CODE_LIFETIME_SECONDS);
+            toast.info(
+              t('A new code was sent. In development it is printed in the backend terminal.'),
+            );
+          }
           throw Object.assign(failure, { message: t('That code is wrong or has expired.') });
         }
         throw failure;

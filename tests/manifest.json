@@ -1,0 +1,122 @@
+{
+  "_note": "Categories run in this order, cheapest and least stateful first. needs: freshdb = reset the test database first; api = the test API on port 3100; web = Vite on port 5175; browsers = Playwright browsers; build = needs the built web app (an earlier category builds it).",
+  "categories": [
+    {
+      "id": "lint",
+      "kind": "formatting",
+      "title": "ESLint (zero warnings)",
+      "cmd": "npx eslint . --max-warnings 0"
+    },
+    {
+      "id": "format",
+      "kind": "formatting",
+      "title": "Prettier check",
+      "cmd": "npx prettier --check ."
+    },
+    {
+      "id": "black",
+      "kind": "formatting",
+      "title": "black formatting check (Python tests)",
+      "cmd": "python -m black --check --config tests/pyproject.toml tests/conftest.py tests/python tests/regression"
+    },
+    {
+      "id": "pylint",
+      "kind": "formatting",
+      "title": "pylint 10/10 (Python tests)",
+      "cmd": "python -m pylint --rcfile tests/.pylintrc tests/conftest.py tests/python tests/regression"
+    },
+    {
+      "id": "python-unit",
+      "kind": "unit",
+      "title": "pytest unit: data files, source lists, reference rules",
+      "cmd": "python -m pytest -c tests/pyproject.toml tests/python/unit"
+    },
+    {
+      "id": "node-config",
+      "kind": "unit",
+      "title": "node:test: production config, start-up errors, dev route hidden",
+      "cmd": "node --test tests/node/config.test.mjs"
+    },
+    {
+      "id": "unit-backend",
+      "kind": "backend",
+      "title": "Vitest backend: unit and integration (MySQL test DB)",
+      "cmd": "npm test --prefix backend"
+    },
+    {
+      "id": "unit-frontend",
+      "kind": "frontend",
+      "title": "Vitest frontend: components, hooks, mock API",
+      "cmd": "npm test --prefix frontend"
+    },
+    {
+      "id": "build",
+      "kind": "build",
+      "title": "Production build of the web app",
+      "cmd": "npm run build"
+    },
+    {
+      "id": "python-db",
+      "kind": "database",
+      "title": "pytest database: schema, constraints, reference data",
+      "cmd": "python -m pytest -c tests/pyproject.toml tests/python/db",
+      "needs": ["freshdb"]
+    },
+    {
+      "id": "python-api",
+      "kind": "integration",
+      "title": "pytest integration over HTTP: login, teams, quiz, boards",
+      "cmd": "python -m pytest -c tests/pyproject.toml tests/python/api",
+      "needs": ["freshdb", "api"]
+    },
+    {
+      "id": "python-security",
+      "kind": "security",
+      "title": "pytest security and privacy",
+      "cmd": "python -m pytest -c tests/pyproject.toml tests/python/security",
+      "needs": ["freshdb", "api"]
+    },
+    {
+      "id": "regression",
+      "kind": "regression",
+      "title": "pytest regression: one test per fixed bug",
+      "cmd": "python -m pytest -c tests/pyproject.toml tests/regression",
+      "needs": ["freshdb", "api"]
+    },
+    {
+      "id": "e2e-mock",
+      "kind": "e2e",
+      "title": "Playwright end-to-end, 6 screen sizes, mock API",
+      "cmd": "npm run e2e --prefix frontend",
+      "needs": ["browsers"]
+    },
+    {
+      "id": "ux",
+      "kind": "ui-ux",
+      "title": "Playwright UI/UX: accessibility (axe), keyboard, touch targets, layout",
+      "cmd": "npx playwright test -c tests/ux/playwright.config.js",
+      "needs": ["browsers"]
+    },
+    {
+      "id": "browser",
+      "kind": "browser",
+      "title": "Playwright browser smoke (Chromium; Firefox and WebKit with --all-browsers)",
+      "cmd": "npx playwright test -c tests/browser/playwright.config.js",
+      "needs": ["browsers"]
+    },
+    {
+      "id": "e2e-fullstack",
+      "kind": "e2e",
+      "title": "Playwright end-to-end through the real stack",
+      "cmd": "npx playwright test -c tests/e2e/fullstack.config.js",
+      "needs": ["freshdb", "api", "web", "browsers"]
+    },
+    {
+      "id": "perf",
+      "kind": "performance",
+      "title": "pytest performance: latency, 50 parallel sessions, bundle size",
+      "cmd": "python -m pytest -c tests/pyproject.toml tests/python/perf",
+      "needs": ["freshdb", "api", "build"]
+    }
+  ]
+}

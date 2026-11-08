@@ -1,0 +1,14 @@
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.pytest.ini_options]
+# Run through `node tests/run-all.mjs`, which starts the API and resets the test database first.
+testpaths = ["python", "regression"]
+addopts = "-ra -q --strict-markers"
+markers = [
+  "api: needs the running test API (CQ_API_URL)",
+  "db: needs the test database (CQ_TEST_DB_URL)",
+  "slow: takes more than a few seconds",
+]
+filterwarnings = ["ignore::DeprecationWarning"]

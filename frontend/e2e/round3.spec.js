@@ -89,7 +89,7 @@ test.describe('admin area', () => {
     await expect(page.getByRole('heading', { name: 'Name rules' })).toBeVisible();
     await page.getByLabel('Name', { exact: true }).fill('Cass');
     await page.getByRole('button', { name: 'Check' }).click();
-    await expect(page.getByText('Allowed.')).toBeVisible();
+    await expect(page.getByText('Allowed.', { exact: true })).toBeVisible();
     await page.getByLabel('Name', { exact: true }).fill('Big Ass');
     await page.getByRole('button', { name: 'Check' }).click();
     await expect(page.getByText(/Not allowed/)).toBeVisible();
