@@ -19,7 +19,7 @@ export function Page({ title, aside, wide, className = '', children }) {
           <h1 ref={heading} tabIndex={-1} className="display h1 page__title">
             {title}
           </h1>
-          {aside}
+          {aside && <div className="page__aside">{aside}</div>}
         </header>
       )}
       {children}

@@ -148,6 +148,22 @@ ol.stack {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+  padding-right: calc(var(--close-size) + 8px); /* keeps long titles clear of the X */
+}
+/* The X (and the action that sits left of it) is placed from the top right corner of the window, so it is in the
+   same spot on every page. Its centre is the horizontal midline of a page title: top padding of .page plus half of
+   the .h1 line (1.12 x 2rem / 2). */
+.page-close,
+.page__aside {
+  position: absolute;
+  top: calc(24px + var(--safe-t) + 1.12rem - var(--close-size) / 2);
+  z-index: var(--z-map-ui);
+}
+.page-close {
+  right: var(--close-gutter);
+}
+.page__aside {
+  right: calc(var(--close-gutter) + var(--close-size) + 8px);
 }
 .page__title {
   min-width: 0;
@@ -161,6 +177,9 @@ ol.stack {
   outline: none; /* headings take focus only to announce a new page */
 }
 @media (min-width: 768px) {
+  :root {
+    --close-gutter: 32px;
+  }
   .page {
     padding-inline: 32px;
   }

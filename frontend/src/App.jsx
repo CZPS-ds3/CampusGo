@@ -1,5 +1,6 @@
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { OfflineBanner } from './components/OfflineBanner.jsx';
+import { PageClose } from './components/PageClose.jsx';
 import { QuestMenu } from './components/QuestMenu.jsx';
 import { RouteWipe } from './components/RouteWipe.jsx';
 import { Skeleton } from './components/Screen.jsx';
@@ -46,6 +47,7 @@ function Protected() {
   return (
     <>
       <OfflineBanner />
+      <PageClose />
       <Outlet />
       {!inQuiz && <QuestMenu />}
     </>
