@@ -18,3 +18,13 @@
 - Added a `[mail] sent (accepted/rejected counts)` log line without address or code, to diagnose delivery.
 - Repo-wide rename rejected for now (docs, database and package names stay as they are); only the e-mail and the tab title changed.
 - Not done: the Python, Playwright full-stack and `tests/lib` suites still use `/api/dev/last-otp` and need another way to read codes.
+
+## Follow-up: tests without the removed route
+### AI Prompts Used
+6. Remove everything that depended on `/api/dev/last-otp`; tests must fit the real Gmail sending; fix all issues, run the tests, commit.
+
+### Decisions Made
+- Tests never read a mailbox and never send real mail (test API keeps SMTP blank). They plant a known login code in the test database (`plant_code` in `tests/conftest.py`, `plantCode` in `frontend/e2e-fullstack/known-code.js`, same HMAC as the API with a fixed test-only `OTP_SECRET`) and log in through the normal `/auth/verify`.
+- `npm run test:e2e:full` now runs the runner's `e2e-fullstack` category on the test stack; the old config that started the dev stack (real Gmail) was deleted.
+- Removed the start-up probe for the route, `devLastOtp` from the real API client, and the Playwright test of the removed auto-resend (replaced by a test that a wrong code is refused and sends nothing by itself).
+- `test:all` result: everything passed except `ux` (needs `@axe-core/playwright`, not installed locally; not related to this change). `e2e-mock` had one flaky BR47 case on one phone size that passed on re-run.

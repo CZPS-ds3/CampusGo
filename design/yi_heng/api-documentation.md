@@ -16,7 +16,6 @@ Status codes: 400 invalid input · 401 no valid session · 403 not allowed · 40
 | `POST /me/picture` | multipart `file` (png/jpg/webp, ≤ 2 MB) | `200 { pictureUrl }`; `400 INVALID_IMAGE` / `413` |
 | `POST /me/avatar-preset` | `{ preset }` (0 to 5) | `204`; removes the uploaded picture |
 | `POST /me/location-consent` | – | `204` (stores the consent time, R-63) |
-| `GET /dev/last-otp?email=` | – | **Development only** (`NODE_ENV=development`), `404` otherwise |
 
 ## Checkpoints, location and attempts (BR07–BR25)
 

@@ -22,14 +22,17 @@ async function fillQuestion(page, { text, type, options, right }) {
   await expect(dialog).toHaveCount(0);
 }
 
-test.describe('login in development', () => {
-  test('a wrong code gets a new code at once, so nobody has to press resend', async ({ page }) => {
+test.describe('login code', () => {
+  test('BR01 a wrong code is refused with a message and sends no new code by itself', async ({
+    page,
+  }) => {
     await page.goto('/login');
     await page.getByLabel('School email').fill('ada@heilbronn.dhbw.de');
     await page.getByRole('button', { name: 'Send code' }).click();
     await page.getByLabel('Digit 1 of 6').click();
     await page.keyboard.insertText('000000');
-    await expect(page.getByText(/A new code was sent/)).toBeVisible();
+    await expect(page.getByText('That code is wrong or has expired.')).toBeVisible();
+    await expect(page.getByText(/A new code was sent/)).toHaveCount(0);
     await page.getByLabel('Digit 1 of 6').click();
     await page.keyboard.insertText(OTP);
     await page.getByLabel('First name *').fill('Ada');

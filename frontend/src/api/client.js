@@ -61,7 +61,6 @@ const realApi = {
   requestOtp: (email) => post('/auth/request-otp', { email }),
   verify: (payload) => post('/auth/verify', payload),
   logout: () => post('/auth/logout'),
-  devLastOtp: (email) => request('GET', `/dev/last-otp?email=${encodeURIComponent(email)}`),
   me: () => request('GET', '/me'),
   deleteAccount: () => request('DELETE', '/me'),
   resetPoints: () => post('/me/reset-points'),

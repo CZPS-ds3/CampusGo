@@ -5,7 +5,16 @@ import re
 import pytest
 import requests
 
-from conftest import API_URL, REPORTS, Player, connect_db, query, unique_email, unique_ip
+from conftest import (
+    API_URL,
+    REPORTS,
+    Player,
+    connect_db,
+    known_code,
+    query,
+    unique_email,
+    unique_ip,
+)
 
 pytestmark = pytest.mark.api
 CANARY_LAT, CANARY_LNG = 49.123457, 9.654321
@@ -26,7 +35,7 @@ def test_responses_carry_the_basic_security_headers():
 def test_the_session_cookie_cannot_be_read_by_scripts():
     visitor = anonymous()
     visitor.post("/auth/request-otp", {"email": visitor.email})
-    code = visitor.get(f"/dev/last-otp?email={visitor.email}").json()["otp"]
+    code = known_code(visitor.email)
     reply = visitor.post(
         "/auth/verify",
         {"email": visitor.email, "otp": code, "firstName": "Co", "lastName": "Okie"},
@@ -68,7 +77,7 @@ def test_a_cross_site_request_is_blocked_but_a_plain_client_is_not():
 def test_five_wrong_codes_lock_the_login_even_for_the_right_code():
     visitor = anonymous()
     visitor.post("/auth/request-otp", {"email": visitor.email})
-    right = visitor.get(f"/dev/last-otp?email={visitor.email}").json()["otp"]
+    right = known_code(visitor.email)
     wrong = "000000" if right != "000000" else "111111"
     body = {"email": visitor.email, "firstName": "L", "lastName": "Ock"}
     for _ in range(5):

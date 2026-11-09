@@ -20,7 +20,7 @@ tests/
   lib/report.mjs       reports/summary.json + console table
   requirements.txt     pinned pytest, requests, pymysql, pylint, black
   pyproject.toml, .pylintrc   black/pytest/pylint config (line length 100)
-  python/conftest.py   fixtures: base_url, unique_email(), unique_ip(), login() via /api/dev/last-otp, db()
+  python/conftest.py   fixtures: base_url, unique_email(), unique_ip(), login() with a planted code (plant_code), db()
   python/{api,db,perf,security}/   pytest suites
   node/                `node --test` config-level checks (no port, no DB), e.g. production mode
   regression/          one test per fixed bug: bug-<id>-<slug>, names the BR
@@ -39,7 +39,7 @@ Order, cheapest and least stateful first: (1) `lint`, `format`, `black`, `pylint
 - Reset per attempt: drop every table (including `schema_migrations`, so migrations really re-run) in `campusquest_test`, then `migrate()`, then `seed.js`, each with the explicit child env `DATABASE_URL=<test url>`, `NODE_ENV=development` (config and seed read DATABASE_URL then; a value already in the environment is never overridden by a .env file). Canary check: admin id 1 exists, 8 checkpoints, BR11 rows present; otherwise abort.
 - Never runs `db:reset`, `ensure-db.mjs --reset`, or the plain dev seed. Docker is started with `docker compose up -d --wait` only; `SKIP_DOCKER=1` and CI skip it.
 
-**API safety.** The API is started as `node backend/index.js` (no `--env-file`) with a full explicit env: `PORT=3100`, `NODE_ENV=development`, test DB URL, `TRUST_PROXY=1`, `FRONTEND_ORIGIN=http://localhost:5175`, all `SMTP_*` blank (the OTP route exists only when development and no SMTP host), `OTP_RESEND_COOLDOWN_SECONDS=0`, `OTP_RESEND_MAX_PER_HOUR=1000`. Before any suite the runner polls `/api/health` and asserts `/api/dev/last-otp?email=x` is not 404. Occupied port: fail with a message, never kill a foreign process. The API stops in `finally`, on SIGINT and via a PID file.
+**API safety.** The API is started as `node backend/index.js` (no `--env-file`) with a full explicit env: `PORT=3100`, `NODE_ENV=development`, test DB URL, `TRUST_PROXY=1`, `FRONTEND_ORIGIN=http://localhost:5175`, all `SMTP_*` blank (tests never send real mail; codes are planted in the test DB with a fixed test `OTP_SECRET`), `OTP_RESEND_COOLDOWN_SECONDS=0`, `OTP_RESEND_MAX_PER_HOUR=1000`. Before any suite the runner polls `/api/health`. Occupied port: fail with a message, never kill a foreign process. The API stops in `finally`, on SIGINT and via a PID file.
 
 **Full-stack browser run.** `frontend/playwright.fullstack.config.js` hard-codes 5173, `npm run dev` and `reuseExistingServer: true`, which could reach the dev stack. So `tests/e2e/fullstack.config.js` reuses `testDir ../frontend/e2e-fullstack` (its specs use relative URLs), `baseURL` 5175, no `webServer`, no reuse. The runner starts Vite itself: `vite --port 5175 --strictPort` with `BACKEND_URL=http://localhost:3100`.
 
@@ -54,7 +54,7 @@ Order, cheapest and least stateful first: (1) `lint`, `format`, `black`, `pylint
 ## 3. Test ideas
 - **unit**: BR19 attempt 2 gives 85 % after bonuses, fractions round up; team score = ceil(average) in integers; `x@heilbronn.dhbw.de.evil.com` rejected.
 - **integration** (`python/api`): 6th invite to a team of 5 returns 409; `A@..` and `a+tag@..` do not create a second account; an invitation accepted after 24 h is rejected (age set by direct DB timestamp).
-- **backend / frontend**: existing suites; plus a `node/` test: with a `NODE_ENV=production` config, `createApp` on port 0 answers 404 for `/api/dev/last-otp`.
+- **backend / frontend**: existing suites; plus a `node/` test: with a `NODE_ENV=production` config, `createApp` on port 0 answers 404 for `/api/dev/last-otp` (no route hands out codes).
 - **e2e / browser**: mock suite on 6 viewports; full-stack login, start quiz, refresh, same question set (BR25); geolocation denied shows "check again", no attempt consumed (BR12).
 - **ui/ux**: axe zero serious/critical on login, quiz, leaderboard; Tab reaches every control with visible focus; no horizontal scroll at 320 px.
 - **database**: duplicate `users.email` insert fails; points and multipliers come from tables (BR11): change the row, the score changes; deleting the admin is refused.
@@ -71,7 +71,7 @@ Order, cheapest and least stateful first: (1) `lint`, `format`, `black`, `pylint
 |---|---|
 | Wrong DB wiped | Name and host check in three places; dev DB never named in a command; no `db:reset` |
 | Dev stack hit by browser tests | Own ports 3100/5175, no reuse, own config |
-| /dev/last-otp missing | Blank SMTP, no .env for the API, startup assertion |
+| Real mail sent by a test | Blank SMTP, no .env for the API, fixed test OTP secret |
 | Rate limits | Unique e-mail and IP per test, API restarted per attempt, limit tests isolated |
 | Orphan processes (Windows) | `taskkill /T /F`, PID file, `finally` |
 | Flaky browser tests | web-first assertions, no sleeps, runner-level retry only |

@@ -34,8 +34,8 @@ test('start-up errors are explained in plain words', () => {
   assert.equal(describeListenError(new Error('boom'), 3000), null);
 });
 
-test('in production the development-only OTP route does not exist', async () => {
-  const config = loadConfig({ NODE_ENV: 'production' });
+test('no environment has a route that hands out a login code', async () => {
+  const config = loadConfig({ NODE_ENV: 'development' });
   const { app } = createApp({ pool: {}, config, mailer: quietMailer, clock: systemClock });
   const server = app.listen(0);
   try {
@@ -45,16 +45,16 @@ test('in production the development-only OTP route does not exist', async () => 
     );
     const text = await response.text();
     assert.notEqual(response.status, 200);
-    assert.ok(!/"otp"/.test(text), 'no code may ever be handed out in production');
+    assert.ok(!/"otp"/.test(text), 'no code may ever be handed out');
   } finally {
     server.close();
   }
 });
 
-test('development without SMTP never holds a login code back; production and real SMTP keep the limits', () => {
+test('every environment keeps the login code limits (30 s apart, 5 per hour)', () => {
   const dev = loadConfig({ NODE_ENV: 'development' });
-  assert.equal(dev.otpResendCooldownSeconds, 0);
-  assert.equal(dev.otpResendMaxPerHour, 1000);
+  assert.equal(dev.otpResendCooldownSeconds, 30);
+  assert.equal(dev.otpResendMaxPerHour, 5);
   const withSmtp = loadConfig({ NODE_ENV: 'development', SMTP_HOST: 'smtp.example.org' });
   assert.equal(withSmtp.otpResendCooldownSeconds, 30);
   assert.equal(withSmtp.otpResendMaxPerHour, 5);

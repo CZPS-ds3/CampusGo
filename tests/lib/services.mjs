@@ -43,7 +43,7 @@ function launch(name, command, args, { cwd, env }) {
   return child;
 }
 
-/** Starts the API on the test database and checks that the development-only OTP route exists. */
+/** Starts the API on the test database (SMTP blank: no test can send a real e-mail). */
 export async function startApi(dbUrl) {
   if (started.has('api')) return;
   if (await portInUse(API_PORT)) {
@@ -53,15 +53,6 @@ export async function startApi(dbUrl) {
   }
   launch('api', process.execPath, ['index.js'], { cwd: join(ROOT, 'backend'), env: apiEnv(dbUrl) });
   await waitFor(`http://127.0.0.1:${API_PORT}/api/health`, 'the API');
-  const probe = await fetch(
-    `http://127.0.0.1:${API_PORT}/api/dev/last-otp?email=probe@heilbronn.dhbw.de`,
-  );
-  const body = await probe.json();
-  if (body?.error?.message !== 'No code sent yet.') {
-    throw new Error(
-      'the test API has no /api/dev/last-otp route: is SMTP_HOST empty and NODE_ENV=development?',
-    );
-  }
 }
 
 /** Starts Vite on the web port, proxying /api to the test API. */

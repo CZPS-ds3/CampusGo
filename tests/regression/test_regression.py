@@ -6,7 +6,7 @@ bug is back.
 
 import pytest
 
-from conftest import Player, connect_db, query, unique_email
+from conftest import Player, connect_db, known_code, query, unique_email
 
 pytestmark = pytest.mark.api
 
@@ -101,7 +101,7 @@ def test_bug_a_resent_code_must_work_br01():
     visitor = Player(unique_email("resend"))
     visitor.post("/auth/request-otp", {"email": visitor.email})
     visitor.post("/auth/request-otp", {"email": visitor.email})
-    latest = visitor.get(f"/dev/last-otp?email={visitor.email}").json()["otp"]
+    latest = known_code(visitor.email)  # replaces the newest code, the one a resend must keep valid
     reply = visitor.post(
         "/auth/verify",
         {"email": visitor.email, "otp": latest, "firstName": "Re", "lastName": "Send"},

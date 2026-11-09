@@ -34,7 +34,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check": "npm run lint && npm run format:check && npm test && npm run build",
-    "test:e2e:full": "npm run e2e:fullstack --prefix frontend",
+    "test:e2e:full": "node tests/run-all.mjs --only e2e-fullstack",
     "screenshots": "cross-env SCREENSHOTS=1 npm run e2e --prefix frontend",
     "test:all": "node tests/run-all.mjs",
     "test:all:ci": "node tests/run-all.mjs --ci",

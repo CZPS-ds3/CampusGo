@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { plantCode } from './known-code.js';
 
 test('real stack: sign up with an e-mail code, check in, pass a quiz, appear in the ranking', async ({
   page,
@@ -10,19 +11,7 @@ test('real stack: sign up with an e-mail code, check in, pass a quiz, appear in 
   await page.getByRole('button', { name: 'Send code' }).click();
   await expect(page.getByRole('heading', { name: /6-digit code/ })).toBeVisible();
 
-  // The backend prints the mail in development; the dev-only route hands the code to the test.
-  let otp;
-  await expect
-    .poll(
-      async () => {
-        const res = await page.request.get(`/api/dev/last-otp?email=${encodeURIComponent(email)}`);
-        if (!res.ok()) return null;
-        otp = (await res.json()).otp;
-        return otp;
-      },
-      { timeout: 15_000 },
-    )
-    .toBeTruthy();
+  const otp = await plantCode(email); // the request above stored a code; the test swaps in a known one
 
   await page.getByLabel('Digit 1 of 6').click();
   await page.keyboard.insertText(otp);
@@ -62,18 +51,7 @@ test('real stack: the pre-seeded admin signs in without a sign-up form and tests
   await page.getByLabel('School email').fill(email);
   await page.getByRole('button', { name: 'Send code' }).click();
   await expect(page.getByRole('heading', { name: /6-digit code/ })).toBeVisible();
-  let otp;
-  await expect
-    .poll(
-      async () => {
-        const res = await page.request.get(`/api/dev/last-otp?email=${encodeURIComponent(email)}`);
-        if (!res.ok()) return null;
-        otp = (await res.json()).otp;
-        return otp;
-      },
-      { timeout: 15_000 },
-    )
-    .toBeTruthy();
+  const otp = await plantCode(email);
   await page.getByLabel('Digit 1 of 6').click();
   await page.keyboard.insertText(otp);
   await expect(page.getByRole('link', { name: 'Open profile' })).toBeVisible();

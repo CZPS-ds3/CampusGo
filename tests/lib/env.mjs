@@ -6,6 +6,9 @@ export const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 export const REPORTS = join(ROOT, 'tests', 'reports');
 export const API_PORT = 3100;
 export const WEB_PORT = 5175;
+// Secret of the test API only. The tests use it to plant a known login code in the test database, because
+// real codes are only ever e-mailed and no test may read a mailbox or send real mail.
+export const TEST_OTP_SECRET = 'test-only-otp-secret-not-used-anywhere-else';
 
 const TEST_DB_NAME = 'campusquest_test';
 const DEFAULT_URL = `mysql://cq:cq_dev_password@127.0.0.1:3307/${TEST_DB_NAME}`;
@@ -28,9 +31,9 @@ export function testDatabaseUrl(env = process.env) {
 }
 
 /**
- * Complete environment of the test API. No .env file is read, SMTP is blank (so the development-only
- * /api/dev/last-otp route exists), per-address limits are relaxed and every client may send its own
- * address in X-Forwarded-For (one proxy hop is trusted).
+ * Complete environment of the test API. No .env file is read and SMTP is blank, so the tests can never send a
+ * real e-mail (a request for a code only logs "no SMTP_HOST"). Per-address limits are relaxed and every client
+ * may send its own address in X-Forwarded-For (one proxy hop is trusted).
  */
 export function apiEnv(dbUrl) {
   const env = { ...process.env };
@@ -45,6 +48,7 @@ export function apiEnv(dbUrl) {
     TRUST_PROXY: '1',
     FRONTEND_ORIGIN: `http://localhost:${WEB_PORT}`,
     SMTP_HOST: '',
+    OTP_SECRET: TEST_OTP_SECRET,
     OTP_RESEND_COOLDOWN_SECONDS: '0',
     OTP_RESEND_MAX_PER_HOUR: '1000',
     UPLOAD_DIR: join(REPORTS, 'uploads'),
@@ -59,6 +63,7 @@ export function categoryEnv(dbUrl, { apiRunning }) {
     TEST_DATABASE_URL: dbUrl,
     CQ_TEST_DB_URL: dbUrl,
     CQ_REPORTS_DIR: REPORTS,
+    CQ_OTP_SECRET: TEST_OTP_SECRET,
     PYTHONUTF8: '1',
     ...(apiRunning ? { CQ_API_URL: `http://127.0.0.1:${API_PORT}` } : {}),
   };
