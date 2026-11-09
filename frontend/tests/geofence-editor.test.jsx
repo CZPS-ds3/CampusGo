@@ -27,8 +27,8 @@ vi.mock('leaflet', () => {
       map.setView = () => map;
       return map;
     },
-    tileLayer: chain,
-    control: { scale: chain },
+    tileLayer: Object.assign(chain, { wms: chain }),
+    control: { scale: chain, layers: chain },
     layerGroup: chain,
     circleMarker: chain,
     latLng: () => ({ toBounds: () => ({}) }),

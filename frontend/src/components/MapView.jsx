@@ -1,12 +1,10 @@
 import L from 'leaflet';
 import { useEffect, useRef } from 'react';
+import { addBaseLayers } from '../map-layers.js';
 import { useMapStyle } from '../mapStyle.js';
 import { t } from '../i18n.js';
 
-const TILE_URL =
-  import.meta.env.VITE_MAP_TILE_URL || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-const ATTRIBUTION = import.meta.env.VITE_MAP_ATTRIBUTION || '&copy; OpenStreetMap contributors';
-// The default tiles are light; in the dark theme a CSS filter darkens them (VITE_MAP_DARKEN=false for tiles that are dark already).
+// The street tiles are light; in the dark theme a CSS filter darkens them (VITE_MAP_DARKEN=false for tiles that are dark already).
 const DARKEN = import.meta.env.VITE_MAP_DARKEN !== 'false';
 // The map may not leave the Heilbronn area (a few kilometres around the Bildungscampus).
 const CAMPUS_CENTER = [49.1485, 9.2165];
@@ -64,13 +62,7 @@ export function MapView({ checkpoints, selectedId, onSelect, route = null, from 
       maxBounds: MAX_BOUNDS,
       maxBoundsViscosity: 1,
     }).setView(CAMPUS_CENTER, 17);
-    L.tileLayer(TILE_URL, {
-      attribution: ATTRIBUTION,
-      minZoom: MIN_ZOOM,
-      maxZoom: 19,
-      subdomains: 'abcd',
-      crossOrigin: true,
-    }).addTo(map.current);
+    addBaseLayers(map.current, { minZoom: MIN_ZOOM });
     L.control.zoom({ position: 'topright' }).addTo(map.current);
     const markerStore = markers.current;
     return () => {

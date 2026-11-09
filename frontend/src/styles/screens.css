@@ -348,7 +348,7 @@ ol.stack {
   z-index: 0;
   background: var(--map-tint-ground, var(--map-bg));
 }
-.map--darken .leaflet-tile-pane {
+.map--darken .map-tiles--street {
   filter: var(--map-filter);
 }
 .leaflet-container {
@@ -366,10 +366,10 @@ ol.stack {
 :root[data-map-base='dark'] .map {
   --map-bg: #181d22;
 }
-:root[data-map-base='light'] .map--darken .leaflet-tile-pane {
+:root[data-map-base='light'] .map--darken .map-tiles--street {
   filter: none;
 }
-:root[data-map-base='dark'] .map--darken .leaflet-tile-pane {
+:root[data-map-base='dark'] .map--darken .map-tiles--street {
   filter: var(--map-filter-dark);
 }
 .leaflet-top {
