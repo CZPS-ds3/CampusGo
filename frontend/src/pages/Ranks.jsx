@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { errorText } from '../api/errorText.js';
@@ -11,6 +11,7 @@ import { useSession } from '../hooks/useSession.jsx';
 import { useToast } from '../hooks/useToast.jsx';
 import { formatNumber, t } from '../i18n.js';
 
+const FIRST_RANKS = 10; // ranks shown at first; every further batch loads when the list is scrolled to its end
 const PODIUM_ORDER = [1, 0, 2]; // silver, gold, bronze as displayed left to right
 const PODIUM_TONE = ['accent', 'sub', 'ok'];
 
@@ -75,6 +76,43 @@ function Rows({ entries, mine, nameOf, detailOf, linkOf }) {
   );
 }
 
+/**
+ * The ranks after the podium in a scrollable box. The next batch is added as soon as the end of the box comes
+ * into view (button as a fallback where IntersectionObserver is missing).
+ */
+function ScrollRows({ hasMore, onMore, ...rows }) {
+  const box = useRef(null);
+  const end = useRef(null);
+  const canObserve = typeof IntersectionObserver !== 'undefined';
+
+  useEffect(() => {
+    if (!hasMore || !canObserve || !end.current) return undefined;
+    const watcher = new IntersectionObserver(
+      (hits) => {
+        if (hits.some((hit) => hit.isIntersecting)) onMore();
+      },
+      { root: box.current, rootMargin: '0px 0px 80px 0px' },
+    );
+    watcher.observe(end.current);
+    return () => watcher.disconnect();
+  }, [hasMore, canObserve, onMore, rows.entries.length]);
+
+  return (
+    <div className="board-scroll" ref={box} tabIndex={0} role="region" aria-label={t('More ranks')}>
+      <Rows {...rows} />
+      {hasMore && (
+        <div ref={end} className="board-scroll__end">
+          {!canObserve && (
+            <Button small variant="ghost" onClick={onMore}>
+              {t('Show more')}
+            </Button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Ranks() {
   const { student } = useSession();
   const toast = useToast();
@@ -84,6 +122,8 @@ export default function Ranks() {
   const [team, setTeam] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [shown, setShown] = useState(FIRST_RANKS);
+  const showMore = useCallback(() => setShown((n) => n + FIRST_RANKS), []);
 
   const load = useCallback(async (which) => {
     setLoading(true);
@@ -126,7 +166,10 @@ export default function Ranks() {
             role="tab"
             className="tab"
             aria-selected={tab === k}
-            onClick={() => setTab(k)}
+            onClick={() => {
+              setTab(k);
+              setShown(FIRST_RANKS);
+            }}
           >
             {k === 'team' && !inTeam && <Icon name="lock" size={18} />} {t(k)}
           </button>
@@ -171,15 +214,19 @@ export default function Ranks() {
               nameOf={(e) => (tab === 'solo' ? e.displayName : e.name)}
               linkOf={tab === 'solo' ? (e) => `/player/${e.id}` : undefined}
             />
-            <Rows
-              entries={data.entries.slice(3)}
+            <ScrollRows
+              entries={data.entries.slice(3, shown)}
+              hasMore={data.entries.length > shown}
+              onMore={showMore}
               mine={(e) => (tab === 'solo' ? e.isYou : e.isYourTeam)}
               nameOf={(e) => (tab === 'solo' ? e.displayName : e.name)}
               detailOf={tab === 'team' ? (e) => t('{n} members', { n: e.members }) : undefined}
               linkOf={tab === 'solo' ? (e) => `/player/${e.id}` : undefined}
             />
             {standing &&
-              !data.entries.slice(3).some((e) => (tab === 'solo' ? e.isYou : e.isYourTeam)) && (
+              !data.entries
+                .slice(3, shown)
+                .some((e) => (tab === 'solo' ? e.isYou : e.isYourTeam)) && (
                 <div className="card ranks__you">
                   <span className="mono h2 accent">{standing.rank}</span>
                   <span className="grow strong truncate">

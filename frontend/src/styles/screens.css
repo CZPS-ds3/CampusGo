@@ -150,12 +150,12 @@ ol.stack {
   gap: 12px;
   padding-right: calc(var(--close-size) + 8px); /* keeps long titles clear of the X */
 }
-/* The X (and the action that sits left of it) is placed from the top right corner of the window, so it is in the
+/* The X (and the action that sits left of it) is fixed to the top right corner of the window, so it is in the
    same spot on every page. Its centre is the horizontal midline of a page title: top padding of .page plus half of
    the .h1 line (1.12 x 2rem / 2). */
 .page-close,
 .page__aside {
-  position: absolute;
+  position: fixed; /* stays on screen while the page scrolls */
   top: calc(24px + var(--safe-t) + 1.12rem - var(--close-size) / 2);
   z-index: var(--z-map-ui);
 }
@@ -967,6 +967,18 @@ ol.stack {
   min-width: 0;
   font-weight: 500;
   overflow-wrap: anywhere;
+}
+.board-scroll {
+  max-height: min(28rem, 55vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 2px; /* room for the focus ring and the row borders */
+}
+.board-scroll__end {
+  min-height: 1px;
+  display: grid;
+  justify-items: center;
+  padding-top: 8px;
 }
 .ranks__you {
   display: flex;

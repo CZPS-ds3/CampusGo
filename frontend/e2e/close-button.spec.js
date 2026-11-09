@@ -51,6 +51,27 @@ test.describe('X button on every page except the map', () => {
     await expectNoHorizontalScroll(page);
   });
 
+  test('the buttons stay on screen while the page scrolls', async ({ page }) => {
+    await login(page);
+    await page.goto('/profile');
+    const before = await page.getByRole('button', CLOSE).boundingBox();
+    await page.evaluate(() => {
+      document.body.style.minHeight = '3000px'; // some pages are shorter than the window
+      window.scrollTo(0, 600);
+    });
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(50);
+    expect(await page.getByRole('button', CLOSE).boundingBox()).toEqual(before);
+    await page.goto('/ranks');
+    const refresh = await page.getByRole('button', { name: 'Refresh ranks' }).boundingBox();
+    await page.evaluate(() => {
+      document.body.style.minHeight = '3000px';
+      window.scrollTo(0, 400);
+    });
+    expect(await page.getByRole('button', { name: 'Refresh ranks' }).boundingBox()).toEqual(
+      refresh,
+    );
+  });
+
   test('the admin pages have it in the same place', async ({ page, browser }) => {
     await login(page);
     await page.goto('/quests');

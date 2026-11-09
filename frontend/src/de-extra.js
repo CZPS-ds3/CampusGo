@@ -7,6 +7,8 @@ export const DE_EXTRA = new Map([
     'Ein Team erscheint ab zwei Mitgliedern in der Rangliste.',
   ],
   ['Campus map', 'Campus-Karte'],
+  ['More ranks', 'Weitere Plätze'],
+  ['Show more', 'Mehr anzeigen'],
   ['Close and go to the map', 'Schließen und zur Karte'],
   ['Change picture', 'Bild ändern'],
   ['Continue the quiz', 'Quiz fortsetzen'],

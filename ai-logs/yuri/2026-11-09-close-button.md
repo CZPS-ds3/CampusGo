@@ -15,3 +15,12 @@
 - The refresh button's `aside` slot now sits to the left of the X, 8 px apart. Page headers got right padding so long titles stay clear of the buttons.
 - New Playwright test `frontend/e2e/close-button.spec.js` (all six screen sizes): same position on every page, not on the map, closes to the map, level with the title, refresh left of the X, admin pages too.
 - Checked by screenshots (phone 360 and laptop 1280) that nothing is covered on Ranks, Profile, Team, Info and Location check. All 252 browser tests and `npm run check` pass.
+
+## Follow-up: sticky buttons and lazy leaderboard
+### AI Prompts Used
+2. Make the buttons sticky on screen; leaderboard shows only 10 ranks, the rest lazy loaded and scrollable.
+
+### Decisions Made
+- The X and the refresh button are now `position: fixed` (same spot, same alignment), so they stay on screen while the page scrolls.
+- Ranks: the first 10 ranks show (podium plus 7 rows); the other rows sit in a scrollable box and are added 10 at a time when its end comes into view (IntersectionObserver, "Show more" button where it is missing). The reveal is client-side: the API already returns up to 100 entries, so the backend is unchanged. The "your rank" card now looks only at the rows that are shown, so it still appears when the player is further down.
+- Tests: `frontend/tests/ranks-lazy.test.jsx` (10 shown, +10 per scroll, no box for 10 or fewer) and a sticky test in `close-button.spec.js`.
