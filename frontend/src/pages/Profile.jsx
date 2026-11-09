@@ -6,6 +6,7 @@ import { Avatar, PRESET_COUNT } from '../components/Avatar.jsx';
 import { Button } from '../components/Button.jsx';
 import { Icon } from '../components/icons.jsx';
 import { MapStyleSettings } from '../components/MapStyleSettings.jsx';
+import { MapTypePicker } from '../components/MapTypePicker.jsx';
 import { Page } from '../components/Screen.jsx';
 import { Modal } from '../components/Sheet.jsx';
 import { Display, Logo } from '../components/ui.jsx';
@@ -65,6 +66,7 @@ function Preferences() {
           ))}
         </div>
       </div>
+      <MapTypePicker />
       <div>
         <p className="strong">{t('Language')}</p>
         <div className="seg seg--2 mt-s" role="radiogroup" aria-label={t('Language')}>
