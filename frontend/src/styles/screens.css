@@ -356,8 +356,8 @@ ol.stack {
   background: var(--map-tint-ground, var(--map-bg));
 }
 /* The map style of the student (BR48): the base follows the app theme, or is always light or dark, and a tint colour
-   shows through the map tiles. */
-.map .leaflet-tile-pane {
+   shows through the street-map tiles (the aerial photo is never tinted). */
+.map .map-tiles--street {
   opacity: var(--map-tint-opacity, 1);
 }
 :root[data-map-base='light'] .map {

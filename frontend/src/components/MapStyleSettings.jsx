@@ -220,6 +220,11 @@ export function MapStyleSettings() {
         <p className="small muted">
           {t('One map style is saved on your account and follows you to other devices.')}
         </p>
+        <p className="small muted">
+          {t(
+            'Light, dark and the tint change the street map only; the aerial photo stays as it is.',
+          )}
+        </p>
         <Preview style={draft} />
 
         <div className="seg seg--3" role="radiogroup" aria-label={t('Map base')}>

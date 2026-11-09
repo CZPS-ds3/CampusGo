@@ -9,6 +9,15 @@ export const DE_EXTRA = new Map([
   ['Campus map', 'Campus-Karte'],
   ['Aerial photo', 'Luftbild'],
   ['Street map', 'Straßenkarte'],
+  ['Default map', 'Standardkarte'],
+  [
+    'The map you see first. You can still switch on the map.',
+    'Die Karte, die du zuerst siehst. Auf der Karte kannst du weiterhin wechseln.',
+  ],
+  [
+    'Light, dark and the tint change the street map only; the aerial photo stays as it is.',
+    'Hell, Dunkel und die Tönung ändern nur die Straßenkarte; das Luftbild bleibt unverändert.',
+  ],
   ['More ranks', 'Weitere Plätze'],
   ['Show more', 'Mehr anzeigen'],
   ['Close and go to the map', 'Schließen und zur Karte'],
