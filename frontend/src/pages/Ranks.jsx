@@ -239,10 +239,10 @@ export default function Ranks() {
         )
       ) : null}
       {tab === 'solo' && data && !inTeam && (
-        <p className="small muted">
+        <p className="small muted ranks__locked">
           <Chip tone="mute" icon="lock">
             {t('Team ranks locked')}
-          </Chip>{' '}
+          </Chip>
           <Link to="/team" className="link">
             {t('Go to team')}
           </Link>

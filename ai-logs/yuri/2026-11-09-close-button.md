@@ -24,3 +24,12 @@
 - The X and the refresh button are now `position: fixed` (same spot, same alignment), so they stay on screen while the page scrolls.
 - Ranks: the first 10 ranks show (podium plus 7 rows); the other rows sit in a scrollable box and are added 10 at a time when its end comes into view (IntersectionObserver, "Show more" button where it is missing). The reveal is client-side: the API already returns up to 100 entries, so the backend is unchanged. The "your rank" card now looks only at the rows that are shown, so it still appears when the player is further down.
 - Tests: `frontend/tests/ranks-lazy.test.jsx` (10 shown, +10 per scroll, no box for 10 or fewer) and a sticky test in `close-button.spec.js`.
+
+## Follow-up: "Go to team" below "Team ranks locked"
+### AI Prompts Used
+3. Move "Go to team" to the bottom, right below "Team ranks locked", aligned to the left, same edge.
+
+### Decisions Made
+- On the solo ranking (player without a team) the chip and the link were side by side; they are now stacked, link below the chip, both on the left edge (`.ranks__locked`). Text and link target unchanged.
+- The "Team" tab's empty state (with its own button) was not touched.
+- New Playwright test `frontend/e2e/ranks-locked.spec.js` checks the stacking and the shared left edge on all six screen sizes.

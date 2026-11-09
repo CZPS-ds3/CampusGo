@@ -980,6 +980,12 @@ ol.stack {
   justify-items: center;
   padding-top: 8px;
 }
+.ranks__locked {
+  display: grid;
+  justify-items: start; /* the link sits right below the chip, both on the left edge */
+  gap: 8px;
+  margin: 0;
+}
 .ranks__you {
   display: flex;
   align-items: center;
