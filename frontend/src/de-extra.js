@@ -352,10 +352,6 @@ export const DE_EXTRA = new Map([
     'Not ranked while an administrator is a member.',
     'Nicht gerankt, solange ein Admin Mitglied ist.',
   ],
-  [
-    'A new code was sent. In development it is printed in the backend terminal.',
-    'Ein neuer Code wurde gesendet. In der Entwicklung steht er im Backend-Terminal.',
-  ],
   ['{name}: pick a colour', '{name}: Farbe wählen'],
   ['Colour code', 'Farbcode'],
   [

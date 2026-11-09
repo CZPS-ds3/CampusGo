@@ -12,9 +12,6 @@ if (problems.length > 0) {
   process.exit(1);
 }
 
-if (config.isDev && !config.smtp.host) {
-  console.log('[mail] Development: login codes are printed in this terminal (no e-mail is sent).');
-}
 const pool = createPool(config.databaseUrl);
 const mailer = createMailer(config);
 const { app, services } = createApp({ pool, config, mailer, clock: systemClock });

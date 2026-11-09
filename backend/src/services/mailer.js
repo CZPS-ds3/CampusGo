@@ -33,39 +33,32 @@ export function createSmtpTransport(smtp) {
   });
 }
 
-/** Real SMTP whenever SMTP_HOST is set; otherwise (development only) the OTP is printed to the console. */
+/** Sends through SMTP. Without SMTP_HOST nothing is delivered: codes are never printed or kept anywhere. */
 export function createMailer(config, { transport } = {}) {
-  if (config.smtp.host) {
-    const smtp = transport ?? createSmtpTransport(config.smtp);
+  if (!config.smtp.host) {
     return {
-      ...withQueue((message) => smtp.sendMail({ from: config.smtp.from, ...message })),
-      verify: () =>
-        smtp.verify().then(
-          () => ({ ok: true, detail: `SMTP ready (${config.smtp.host}:${config.smtp.port})` }),
-          (error) => ({ ok: false, detail: `SMTP check failed: ${error.message}` }),
-        ),
+      ...withQueue(() => {
+        throw new Error('no SMTP_HOST configured, the e-mail was not sent');
+      }),
+      verify: async () => ({
+        ok: false,
+        detail: 'No SMTP_HOST: OTP e-mails cannot be sent. Fill SMTP_* in backend/.env.',
+      }),
     };
   }
-  // Development only: keep the latest mail per address so the dev-only /api/dev/last-otp route can show it.
-  const latest = new Map();
-  const queue = withQueue((message) => {
-    if (!config.isDev) {
-      throw new Error('no SMTP_HOST configured, the e-mail was not sent');
-    }
-    latest.set(message.to, message);
-    const code = message.text.match(/\b(\d{6})\b/)?.[1];
-    const line = code ? `LOGIN CODE for ${message.to}: ${code}` : `mail to ${message.to}`;
-    console.log(`\n[mail:dev] ======== ${line} ========\n${message.text}\n`);
-  });
+  const smtp = transport ?? createSmtpTransport(config.smtp);
   return {
-    ...queue,
-    lastTo: (to) => latest.get(to),
-    verify: async () => ({
-      ok: config.isDev,
-      detail: config.isDev
-        ? 'No SMTP_HOST: OTP codes are printed to this console (development only).'
-        : 'No SMTP_HOST: OTP e-mails cannot be sent.',
+    ...withQueue(async (message) => {
+      const info = await smtp.sendMail({ from: config.smtp.from, ...message });
+      // Counts only: the recipient is personal data. A rejected recipient means the server refused the mail.
+      const rejected = info?.rejected?.length ?? 0;
+      console.log(`[mail] sent (accepted: ${info?.accepted?.length ?? 0}, rejected: ${rejected})`);
     }),
+    verify: () =>
+      smtp.verify().then(
+        () => ({ ok: true, detail: `SMTP ready (${config.smtp.host}:${config.smtp.port})` }),
+        (error) => ({ ok: false, detail: `SMTP check failed: ${error.message}` }),
+      ),
   };
 }
 

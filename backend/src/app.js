@@ -170,20 +170,6 @@ export function createApp({ pool, config, mailer, clock, fetchImpl }) {
       res.status(204).end();
     }),
   );
-  // Development only, and only while no real SMTP server is configured (codes are then kept in memory).
-  if (config.isDev && !config.smtp.host) {
-    api.get('/dev/last-otp', (req, res) => {
-      const mail = mailer.lastTo?.(
-        String(req.query.email ?? '')
-          .trim()
-          .toLowerCase(),
-      );
-      const code = mail?.text.match(/\b(\d{6})\b/)?.[1];
-      if (!code) throw notFound('No code sent yet.');
-      res.json({ otp: code });
-    });
-  }
-
   // ----- everything below needs a session -----
   api.use(needLogin);
 

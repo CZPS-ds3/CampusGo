@@ -16,7 +16,7 @@ positions of students or team members here.
 
 Log in with an address ending in `heilbronn.dhbw.de`.
 - Mock: code `123456`.
-- Full stack: the code is printed in the terminal that runs `npm run dev` (or press *Open mock inbox*), unless `SMTP_*` is filled in `backend/.env`, then it arrives by e-mail.
+- Full stack: the code arrives by e-mail via the `SMTP_*` settings in `backend/.env` (with `npm run dev:mock`, press *Open mock inbox*).
 
 ## 2. Fake the location in Chrome (DevTools Sensors)
 

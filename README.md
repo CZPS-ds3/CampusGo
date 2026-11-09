@@ -56,7 +56,7 @@ The questions in the seed data are **placeholders** (marked "PLACEHOLDER"); the 
 | No Docker allowed on your machine | Install MySQL 8 yourself, set `DATABASE_URL` in `backend/.env`, run `SKIP_DOCKER=1 npm run dev` |
 | The map is grey | The map tiles need internet; the pins and the rest still work |
 | "Please check your location" never succeeds | Allow location for `localhost`, or use the fake location above |
-| Login code does not arrive | Development without SMTP prints it in the terminal. Otherwise check the `[mail]` line at server start: `SMTP check failed` means wrong host, port or password (Gmail and Microsoft 365 need an app password). Production refuses to start without `SMTP_HOST` |
+| Login code does not arrive | Codes are only sent by e-mail (nothing is printed in the terminal). Check the `[mail]` line at server start: `SMTP check failed` means wrong host, port or password (Gmail and Microsoft 365 need an app password). Production refuses to start without `SMTP_HOST` |
 | Something is odd after pulling | `npm install` again; `npm run db:reset` if the database structure changed |
 
 ---
@@ -130,7 +130,7 @@ The table shows the pilot seed. Admins can change every value and add quests (se
 ### Demo data, admin area, photos and route
 
 - `npm run dev` also loads **fictional demo data** (24 players, 6 teams, quests over several days, a pending invitation, a blocked, an archived and a reported account) so the ranks and the admin pages have something to show. It is never loaded in production (`npm run db:seed:demo` runs it alone; `npm run db:reset` starts from an empty database).
-- **Admin area** (`/admin`): sign in with `sekretariat.dski@heilbronn.dhbw.de` (the same e-mail code login; the address is set in `ADMIN_EMAIL`). Users (create, edit, block, archive, report, delete, sessions, quests and activity log), teams, and name rules. In development the code is printed in the terminal, or use *Open mock inbox* on the code screen.
+- **Admin area** (`/admin`): sign in with `sekretariat.dski@heilbronn.dhbw.de` (the same e-mail code login; the address is set in `ADMIN_EMAIL`). Users (create, edit, block, archive, report, delete, sessions, quests and activity log), teams, and name rules. The code arrives by e-mail (with `npm run dev:mock`, use *Open mock inbox* on the code screen).
 - **Quests (admin → Quests):** create, edit and delete quests: title, description, photos, information, number of questions, pass mark, time limit, hard question, question types (multiple choice, multi-select or both) and the questions with their four options. The location comes from a **Google Maps link** pasted into a box; an invalid link is explained and the place must lie inside the map students can see. A quest goes live only when it has enough questions.
 - **Teams:** the person who creates a team is its **leader** and can remove members; any member can cancel an invitation; an admin can add a student to any team (pop-up with search by e-mail). **Deleted accounts:** an admin delete (after a confirmation pop-up) and a student's own delete remove the account for good, with its data; it appears nowhere afterwards. **Roles:** an admin can make any account an admin or a student on the user page (BR53); it applies at once.
 - **Name rules:** German and English banned words, whole-word matching so "Cass" is fine. List: [docs/banned-terms.md](docs/banned-terms.md).
