@@ -1,6 +1,6 @@
 import { act, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import Ranks from '../src/pages/Ranks.jsx';
 
 const board = vi.hoisted(() => ({ entries: [] }));
@@ -13,6 +13,20 @@ vi.mock('../src/hooks/useSession.jsx', () => ({
 vi.mock('../src/hooks/useToast.jsx', () => ({ useToast: () => ({ info: vi.fn() }) }));
 
 const watchers = [];
+beforeAll(() => {
+  vi.stubGlobal(
+    'IntersectionObserver',
+    class {
+      constructor(callback) {
+        this.callback = callback;
+        watchers.push(this);
+      }
+      observe() {}
+      disconnect() {}
+    },
+  );
+});
+afterAll(() => vi.unstubAllGlobals());
 beforeEach(() => {
   board.entries = Array.from({ length: 25 }, (_, i) => ({
     rank: i + 1,
@@ -24,17 +38,6 @@ beforeEach(() => {
     isYou: false,
   }));
   watchers.length = 0;
-  globalThis.IntersectionObserver = class {
-    constructor(callback) {
-      this.callback = callback;
-      watchers.push(this);
-    }
-    observe() {}
-    disconnect() {}
-  };
-});
-afterEach(() => {
-  delete globalThis.IntersectionObserver;
 });
 
 const names = () => screen.getAllByText(/^Player \d+$/).map((node) => node.textContent);
