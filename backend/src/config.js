@@ -50,8 +50,9 @@ export function loadConfig(env = process.env) {
     sessionInactivityMinutes: int(env.SESSION_INACTIVITY_MINUTES, 30),
     invitationTtlHours: int(env.INVITATION_TTL_HOURS, 24),
     // Geofencing settings (Main Project Document, section 5 "Settings kept in one config file").
-    maxAccuracyM: int(env.MAX_ACCURACY_M, 100),
-    geofenceSlackM: int(env.GEOFENCE_SLACK_M, 25), // grace zone added to every radius
+    maxAccuracyM: int(env.MAX_ACCURACY_M, 200), // laptops and indoor phones are often 50-200 m off
+    geofenceSlackM: int(env.GEOFENCE_SLACK_M, 30), // grace zone added to every radius
+    accuracyCreditM: int(env.ACCURACY_CREDIT_M, 50), // at most this much of a reading's error margin counts for the student
     nearerMarginM: int(env.NEARER_MARGIN_M, 20), // another checkpoint must be this much nearer to win
     maxPositionAgeMs: int(env.MAX_POSITION_AGE_MS, 30_000),
     secondsPerQuestion: int(env.SECONDS_PER_QUESTION, 60), // BR13
@@ -65,7 +66,7 @@ export function loadConfig(env = process.env) {
       secure: env.SMTP_SECURE ? env.SMTP_SECURE === 'true' : smtpPort === 465,
       user: env.SMTP_USER ?? '',
       password: env.SMTP_PASSWORD ?? '',
-      from: env.SMTP_FROM ?? 'Campus & City Quest <no-reply@localhost>',
+      from: env.SMTP_FROM ?? 'DHBW campusGO <no-reply@localhost>',
     },
     uploadDir: env.UPLOAD_DIR ?? 'uploads',
   };

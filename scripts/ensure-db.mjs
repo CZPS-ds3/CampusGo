@@ -3,7 +3,7 @@
 //   node scripts/ensure-db.mjs --demo    same, plus fictional demo players, teams and activity (development only)
 //   node scripts/ensure-db.mjs --test    start MySQL, migrate the test database
 //   node scripts/ensure-db.mjs --reset   drop the volume and start from scratch
-// Set SKIP_DOCKER=1 to use your own MySQL (DATABASE_URL in backend/.env).
+// Docker Desktop is started for you when it is not running. Set SKIP_DOCKER=1 to use your own MySQL (DATABASE_URL in backend/.env).
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -17,9 +17,30 @@ const fail = (message) => {
   process.exit(1);
 };
 
+const dockerRunning = () =>
+  spawnSync('docker info', { shell: true, encoding: 'utf8' }).status === 0;
+
+/** On Windows and macOS, opens Docker Desktop and waits (up to two minutes) until the engine answers. */
+function startDockerDesktop() {
+  const launch = {
+    win32: String.raw`start "" "C:\Program Files\Docker\Docker\Docker Desktop.exe"`,
+    darwin: 'open -a Docker',
+  }[process.platform];
+  if (!launch) return false;
+  console.log('[db] Docker is not running: starting Docker Desktop (this can take a minute) ...');
+  spawnSync(launch, { shell: true, stdio: 'ignore' });
+  for (let waited = 0; waited < 120; waited += 3) {
+    if (dockerRunning()) return true;
+    spawnSync(process.platform === 'win32' ? 'ping -n 4 127.0.0.1 >nul' : 'sleep 3', {
+      shell: true,
+      stdio: 'ignore',
+    });
+  }
+  return false;
+}
+
 if (!process.env.SKIP_DOCKER) {
-  const info = spawnSync('docker info', { shell: true, encoding: 'utf8' });
-  if (info.status !== 0) {
+  if (!dockerRunning() && !startDockerDesktop()) {
     fail(
       'Docker is not running. Start Docker Desktop and try again.\n' +
         '     No Docker? Use your own MySQL 8 and set SKIP_DOCKER=1 (see README), or run the UI with: npm run dev:mock',

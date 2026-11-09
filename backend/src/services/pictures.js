@@ -7,6 +7,7 @@ import { AppError } from '../middleware/errors.js';
 const ALLOWED = new Set(['jpeg', 'png', 'webp']);
 const MAX_SIDE_IN = 4096;
 const OUT_SIDE = 512;
+const PHOTO_SIZE = { width: 1280, height: 720 };
 
 /**
  * Validates an uploaded image by its content (not its name or declared type), re-encodes it to a
@@ -14,6 +15,15 @@ const OUT_SIDE = 512;
  * Returns the public URL path.
  */
 export async function storeProfilePicture(buffer, uploadDir) {
+  return storeImage(buffer, uploadDir, { width: OUT_SIDE, height: OUT_SIDE });
+}
+
+/** The same checks for a quest photo, kept at 16:9 so the carousel looks even. */
+export async function storeQuestPhoto(buffer, uploadDir) {
+  return storeImage(buffer, uploadDir, PHOTO_SIZE);
+}
+
+async function storeImage(buffer, uploadDir, { width, height }) {
   let meta;
   try {
     meta = await sharp(buffer).metadata();
@@ -35,7 +45,7 @@ export async function storeProfilePicture(buffer, uploadDir) {
   }
   const output = await sharp(buffer)
     .rotate()
-    .resize(OUT_SIDE, OUT_SIDE, { fit: 'cover' })
+    .resize(width, height, { fit: 'cover' })
     .webp({ quality: 82 })
     .toBuffer();
   await mkdir(uploadDir, { recursive: true });

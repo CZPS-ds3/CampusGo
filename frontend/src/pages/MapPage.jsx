@@ -7,7 +7,8 @@ import { Button } from '../components/Button.jsx';
 import { Carousel } from '../components/Carousel.jsx';
 import { Icon } from '../components/icons.jsx';
 import { MapView } from '../components/MapView.jsx';
-import { Sheet } from '../components/Sheet.jsx';
+import { QuestTypes } from '../components/QuestTypes.jsx';
+import { Modal, Sheet } from '../components/Sheet.jsx';
 import { Chip, Display } from '../components/ui.jsx';
 import { useRoute } from '../hooks/useRoute.js';
 import { useSession } from '../hooks/useSession.jsx';
@@ -57,6 +58,10 @@ function CheckpointSheet({ checkpoint, active, onClose, onRoute }) {
           <p className="mono h2">{checkpoint.attemptsUsed}</p>
         </div>
       </div>
+      {checkpoint.description && <p className="small mt">{checkpoint.description}</p>}
+      <div className="mt">
+        <QuestTypes types={checkpoint.questionTypes} />
+      </div>
       <p className="small muted mt">
         {t('Timer starts at the first question.')}{' '}
         {t('Leaving the checkpoint later does not end your quiz.')}
@@ -87,12 +92,15 @@ function CheckpointSheet({ checkpoint, active, onClose, onRoute }) {
 export default function MapPage() {
   const navigate = useNavigate();
   const toast = useToast();
-  const { student } = useSession();
+  const { student, refresh } = useSession();
   const [params, setParams] = useSearchParams();
   const [zone, setZone] = useState('campus');
   const [checkpoints, setCheckpoints] = useState([]);
   const [active, setActive] = useState(null);
   const [sheetOpen, setSheetOpen] = useState(true);
+  const [reload, setReload] = useState(0);
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const route = useRoute();
 
   useEffect(() => {
@@ -107,7 +115,22 @@ export default function MapPage() {
     return () => {
       alive = false;
     };
-  }, [toast]);
+  }, [toast, reload]);
+
+  const resetPoints = async () => {
+    setResetting(true);
+    try {
+      await api.resetPoints();
+      await refresh();
+      setReload((n) => n + 1);
+      toast.info(t('Points reset'));
+    } catch (error) {
+      toast.error(errorText(error));
+    } finally {
+      setResetting(false);
+      setConfirmReset(false);
+    }
+  };
 
   const selectedId = Number(params.get('cp')) || null;
   const selected = checkpoints.find((c) => c.id === selectedId) ?? null;
@@ -163,9 +186,15 @@ export default function MapPage() {
               {formatNumber(student.totalPoints)} <span className="caption muted">{t('PTS')}</span>
             </p>
           </div>
-          <Chip tone="sub">
-            {t('Rank')} #{student.rank}
-          </Chip>
+          {student.role === 'admin' ? (
+            <Button small variant="sub" onClick={() => setConfirmReset(true)}>
+              <Icon name="refresh" size={18} /> {t('Reset points')}
+            </Button>
+          ) : (
+            <Chip tone="sub">
+              {t('Rank')} #{student.rank}
+            </Chip>
+          )}
         </div>
         {active && (
           <Link to={`/quiz/${active.id}`} className="card card--tight row mapscreen__resume">
@@ -226,6 +255,25 @@ export default function MapPage() {
           </button>
         </div>
       </header>
+
+      {confirmReset && (
+        <Modal title={t('Confirm reset')} onClose={() => setConfirmReset(false)}>
+          <Display as="h2" size="h2">
+            {t('Reset your test points?')}
+          </Display>
+          <p className="muted mt-s">
+            {t('Your points and test attempts are cleared so you can test every quiz again.')}
+          </p>
+          <div className="grid2 mt">
+            <Button small variant="ghost" onClick={() => setConfirmReset(false)} data-autofocus>
+              {t('Cancel')}
+            </Button>
+            <Button small busy={resetting} onClick={resetPoints}>
+              {t('Reset points')}
+            </Button>
+          </div>
+        </Modal>
+      )}
 
       {selected && sheetOpen && zone === 'campus' && (
         <CheckpointSheet

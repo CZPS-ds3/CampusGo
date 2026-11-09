@@ -78,14 +78,17 @@ npm run dev
 - Keep the page open and the screen on while testing; browsers can pause location in the background.
 - Never commit real location data of students or teammates; use fake coordinates in tests.
 
-## 8. About `pylint`
+## 8. Python (tests only): pytest, pylint, black
 
-`pylint` is a **Python** linter and is installed with pip, not npm, so it is not part of the npm toolchain. The web app is JavaScript, which is linted with ESLint (section 3). There is no Python code in the project today, so pylint is not needed. If Python scripts are ever added (e.g. for data preparation), install it for that folder only:
+The web app and the API are JavaScript. Python is used only for the black-box test suites in `tests/` (API, database, security, performance, regression). You need **Python 3.11 or newer** only if you run those:
 
 ```bash
-python -m pip install pylint
-pylint scripts/
+python -m pip install -r tests/requirements.txt   # pytest, requests, pymysql, black, pylint
+npm run lint:py                                   # black --check and pylint (must be 10/10)
+npm run test:all                                  # everything, restarts all tests on a failure
 ```
+
+`pymysql` is pure Python (no compiler needed). The Playwright browsers are installed by the runner on first use (`npx playwright install chromium`; `--all-browsers` adds Firefox and WebKit). Nothing in the Python folder runs in production.
 
 ## CI (GitLab)
 

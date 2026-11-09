@@ -15,6 +15,7 @@ export default [
       'design/prototype/',
       'playwright-report/',
       'test-results/',
+      'tests/reports/',
       '**/uploads/',
     ],
   },

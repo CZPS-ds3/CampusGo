@@ -4,7 +4,7 @@
   "checkpoints": [
     {
       "name": "Mensa",
-      "radiusM": 60,
+      "radiusM": 80,
       "questions": 5,
       "passNeeded": 4,
       "centre": {
@@ -13,18 +13,18 @@
       },
       "inside": {
         "lat": 49.148464,
-        "lng": 9.216303,
-        "metresFromCentre": 36
+        "lng": 9.216248,
+        "metresFromCentre": 32
       },
       "outside": {
-        "lat": 49.149363,
+        "lat": 49.149903,
         "lng": 9.215808,
-        "metresFromCentre": 100
+        "metresFromCentre": 160
       }
     },
     {
       "name": "Library",
-      "radiusM": 60,
+      "radiusM": 80,
       "questions": 5,
       "passNeeded": 4,
       "centre": {
@@ -32,19 +32,19 @@
         "lng": 9.216467
       },
       "inside": {
-        "lat": 49.149817,
+        "lat": 49.149781,
         "lng": 9.216467,
-        "metresFromCentre": 36
+        "metresFromCentre": 32
       },
       "outside": {
-        "lat": 49.150392,
+        "lat": 49.150932,
         "lng": 9.216467,
-        "metresFromCentre": 100
+        "metresFromCentre": 160
       }
     },
     {
       "name": "CAS Cafe",
-      "radiusM": 40,
+      "radiusM": 60,
       "questions": 3,
       "passNeeded": 2,
       "centre": {
@@ -57,14 +57,14 @@
         "metresFromCentre": 24
       },
       "outside": {
-        "lat": 49.14967,
+        "lat": 49.15021,
         "lng": 9.216205,
-        "metresFromCentre": 80
+        "metresFromCentre": 140
       }
     },
     {
       "name": "Campus Garden",
-      "radiusM": 50,
+      "radiusM": 70,
       "questions": 3,
       "passNeeded": 2,
       "centre": {
@@ -72,19 +72,19 @@
         "lng": 9.217206
       },
       "inside": {
-        "lat": 49.147352,
+        "lat": 49.147334,
         "lng": 9.217206,
-        "metresFromCentre": 30
+        "metresFromCentre": 28
       },
       "outside": {
-        "lat": 49.147891,
+        "lat": 49.148431,
         "lng": 9.217206,
-        "metresFromCentre": 90
+        "metresFromCentre": 150
       }
     },
     {
       "name": "Care.box and Shop.box",
-      "radiusM": 40,
+      "radiusM": 60,
       "questions": 3,
       "passNeeded": 2,
       "centre": {
@@ -97,14 +97,14 @@
         "metresFromCentre": 24
       },
       "outside": {
-        "lat": 49.149807,
+        "lat": 49.150347,
         "lng": 9.21727,
-        "metresFromCentre": 80
+        "metresFromCentre": 140
       }
     },
     {
       "name": "Building B",
-      "radiusM": 60,
+      "radiusM": 80,
       "questions": 5,
       "passNeeded": 4,
       "centre": {
@@ -112,19 +112,19 @@
         "lng": 9.218486
       },
       "inside": {
-        "lat": 49.14745,
+        "lat": 49.147414,
         "lng": 9.218486,
-        "metresFromCentre": 36
+        "metresFromCentre": 32
       },
       "outside": {
-        "lat": 49.148025,
+        "lat": 49.148565,
         "lng": 9.218486,
-        "metresFromCentre": 100
+        "metresFromCentre": 160
       }
     },
     {
       "name": "Building C",
-      "radiusM": 60,
+      "radiusM": 80,
       "questions": 5,
       "passNeeded": 4,
       "centre": {
@@ -132,19 +132,19 @@
         "lng": 9.2179
       },
       "inside": {
-        "lat": 49.146992,
+        "lat": 49.147028,
         "lng": 9.2179,
-        "metresFromCentre": 36
+        "metresFromCentre": 32
       },
       "outside": {
-        "lat": 49.148215,
+        "lat": 49.148755,
         "lng": 9.2179,
-        "metresFromCentre": 100
+        "metresFromCentre": 160
       }
     },
     {
       "name": "Sensoricum",
-      "radiusM": 40,
+      "radiusM": 60,
       "questions": 3,
       "passNeeded": 2,
       "centre": {
@@ -157,9 +157,9 @@
         "metresFromCentre": 24
       },
       "outside": {
-        "lat": 49.148339,
+        "lat": 49.148879,
         "lng": 9.217807,
-        "metresFromCentre": 80
+        "metresFromCentre": 140
       }
     }
   ],

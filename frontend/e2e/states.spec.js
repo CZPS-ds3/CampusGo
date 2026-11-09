@@ -46,7 +46,7 @@ test.describe('quiz states', () => {
   }) => {
     await startLibrary(page, context);
     await answerFourRight(page);
-    await page.getByRole('button', { name: 'Decline, normal Q5' }).click();
+    await page.getByRole('button', { name: 'Decline, normal question' }).click();
     await expect(page.getByLabel('Question 5 of 5')).toBeVisible();
     await expect(page.getByText('Bonus · worth 2,000')).toHaveCount(0);
   });

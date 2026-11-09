@@ -5,16 +5,31 @@ import { withTransaction } from '../db/pool.js';
 import { AppError, notFound } from '../middleware/errors.js';
 import { evaluateLocation } from './geo.js';
 import { ceilDiv, multiplierFor, remainingWholeSeconds, scoreAttempt } from './scoring.js';
+import { teamStandingAround } from './team-ranking.js';
 import { refreshTeamScore } from './teams.js';
 
 /**
- * Questions that may be drawn: active, from this checkpoint's bank, with exactly four options of which
- * exactly one is correct (BR10). A broken question in the bank is skipped instead of reaching a student.
+ * Questions that may be drawn: active, from this checkpoint's bank, of the allowed types, with exactly four options
+ * of which exactly one (MCQ) or two or three (multi-select) are correct (BR10, BR50). A broken question in the bank
+ * is skipped instead of reaching a student.
  */
-const DRAWABLE_QUESTIONS = `SELECT q.question_id FROM questions q JOIN options o ON o.question_id = q.question_id
-  WHERE q.checkpoint_id = ? AND q.difficulty = ? AND q.is_active = 1
-  GROUP BY q.question_id HAVING COUNT(*) = 4 AND SUM(o.is_correct) = 1
+export const DRAWABLE_QUESTIONS = `SELECT q.question_id, q.question_type FROM questions q JOIN options o ON o.question_id = q.question_id
+  WHERE q.checkpoint_id = ? AND q.difficulty = ? AND q.is_active = 1 AND q.question_type IN (?)
+  GROUP BY q.question_id HAVING COUNT(*) = 4 AND ((q.question_type = 'MCQ' AND SUM(o.is_correct) = 1)
+    OR (q.question_type = 'MULTI' AND SUM(o.is_correct) BETWEEN 2 AND 3))
   ORDER BY RAND() LIMIT ?`;
+
+const TYPES_OF_MODE = { MCQ_ONLY: ['MCQ'], MULTI_ONLY: ['MULTI'], MIXED: ['MCQ', 'MULTI'] };
+export const typesOfMode = (mode) => TYPES_OF_MODE[mode] ?? TYPES_OF_MODE.MCQ_ONLY;
+
+function shuffle(list) {
+  const out = [...list];
+  for (let i = out.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
 
 export function createQuizService({ pool, config, clock }) {
   // ---------- reference data ----------
@@ -42,9 +57,14 @@ export function createQuizService({ pool, config, clock }) {
     longitude: Number(c.longitude),
     radius: c.radius,
     isActive: Boolean(c.is_active),
+    description: c.description ?? '',
     questionCount: c.question_count,
     passThreshold: c.pass_threshold,
     hardQuestionEnabled: Boolean(c.hard_question_enabled),
+    typeMode: c.type_mode,
+    // What the student is told before starting: the types that can appear (BR50).
+    questionTypes: typesOfMode(c.type_mode),
+    timeLimitSeconds: c.time_limit_seconds ?? c.question_count * config.secondsPerQuestion,
     ...extra,
   });
 
@@ -52,7 +72,7 @@ export function createQuizService({ pool, config, clock }) {
     // Students see only active checkpoints on the map (BR08); administrators see all of them to test them.
     const [[who]] = await pool.query('SELECT role FROM students WHERE student_id = ?', [studentId]);
     const [rows] = await pool.query(
-      'SELECT * FROM checkpoints WHERE is_active = 1 OR ? ORDER BY checkpoint_id',
+      'SELECT * FROM checkpoints WHERE archived_at IS NULL AND (is_active = 1 OR ?) ORDER BY checkpoint_id',
       [who?.role === 'admin' ? 1 : 0],
     );
     const [stats] = await pool.query(
@@ -97,13 +117,13 @@ export function createQuizService({ pool, config, clock }) {
   // ---------- attempt view (what the client may see) ----------
   async function buildAttemptView(conn, attemptId) {
     const [[attempt]] = await conn.query(
-      `SELECT a.*, c.checkpoint_name, c.question_count, c.pass_threshold FROM attempts a
+      `SELECT a.*, c.checkpoint_name FROM attempts a
        JOIN checkpoints c ON c.checkpoint_id = a.checkpoint_id WHERE a.attempt_id = ?`,
       [attemptId],
     );
     const [slots] = await conn.query(
       `SELECT aq.question_number, aq.question_id, aq.replaced_question_id, aq.selected_option_id, aq.answered_at,
-              q.question_text, q.difficulty
+              aq.is_correct, q.question_text, q.difficulty, q.question_type
        FROM attempt_questions aq JOIN questions q ON q.question_id = aq.question_id
        WHERE aq.attempt_id = ? ORDER BY aq.question_number`,
       [attemptId],
@@ -115,6 +135,14 @@ export function createQuizService({ pool, config, clock }) {
           [questionIds],
         )
       : [[]];
+    const [answerRows] = await conn.query(
+      'SELECT question_number, option_id FROM attempt_answers WHERE attempt_id = ? ORDER BY question_number, option_id',
+      [attemptId],
+    );
+    const chosen = new Map();
+    for (const a of answerRows) {
+      chosen.set(a.question_number, [...(chosen.get(a.question_number) ?? []), a.option_id]);
+    }
     const byQuestion = new Map();
     for (const o of options) {
       if (!byQuestion.has(o.question_id)) byQuestion.set(o.question_id, []);
@@ -122,30 +150,35 @@ export function createQuizService({ pool, config, clock }) {
     }
     const questions = slots.map((s) => {
       const opts = byQuestion.get(s.question_id) ?? [];
-      const answered = s.selected_option_id !== null;
-      const selected = opts.find((o) => o.option_id === s.selected_option_id);
-      const wrong = answered && !selected?.is_correct;
+      const answered = s.answered_at !== null;
+      const wrong = answered && !s.is_correct;
       const view = {
         number: s.question_number,
         id: s.question_id,
         text: s.question_text,
         difficulty: s.difficulty,
+        type: s.question_type,
         options: opts.map((o) => ({
           id: o.option_id,
           position: o.option_position,
           text: o.option_text,
         })),
         selectedOptionId: s.selected_option_id,
+        selectedOptionIds: chosen.get(s.question_number) ?? [],
         answered,
       };
-      // BR14: the right answer is revealed only after a wrong pick. Never before the answer.
-      if (wrong) view.correctOptionId = opts.find((o) => o.is_correct)?.option_id ?? null;
+      // BR14: the right answer is revealed only after a wrong pick. Never before the answer, and never how
+      // many options are right.
+      if (wrong) {
+        view.correctOptionIds = opts.filter((o) => o.is_correct).map((o) => o.option_id);
+        view.correctOptionId = view.correctOptionIds[0] ?? null;
+      }
       if (answered) view.correct = !wrong;
       return view;
     });
-    const next = slots.find((s) => s.selected_option_id === null);
+    const next = slots.find((s) => s.answered_at === null);
     const rules = await loadRules(conn);
-    const slot5 = slots.find((s) => s.question_number === 5);
+    const lastSlot = slots.find((s) => s.question_number === attempt.question_count);
     return {
       id: attempt.attempt_id,
       checkpointId: attempt.checkpoint_id,
@@ -160,7 +193,10 @@ export function createQuizService({ pool, config, clock }) {
       questionCount: attempt.question_count,
       passThreshold: attempt.pass_threshold,
       hardUnlocked: Boolean(attempt.hard_unlocked),
-      hardAccepted: Boolean(slot5?.replaced_question_id),
+      hardAccepted: Boolean(lastSlot?.replaced_question_id),
+      timeLimitSeconds: Math.round(
+        (attempt.expires_at.getTime() - attempt.start_time.getTime()) / 1000,
+      ),
       currentQuestion: attempt.status === 'active' && next ? next.question_number : null,
       questions,
     };
@@ -171,27 +207,28 @@ export function createQuizService({ pool, config, clock }) {
   async function finalizeAttempt(conn, attempt, endReason, nowMs) {
     const rules = await loadRules(conn);
     const [slots] = await conn.query(
-      `SELECT q.difficulty, COALESCE(o.is_correct, 0) AS correct
+      `SELECT q.difficulty, COALESCE(aq.is_correct, 0) AS correct
        FROM attempt_questions aq
        JOIN questions q ON q.question_id = aq.question_id
-       LEFT JOIN options o ON o.option_id = aq.selected_option_id
        WHERE aq.attempt_id = ? ORDER BY aq.question_number`,
       [attempt.attempt_id],
     );
-    const [[checkpoint]] = await conn.query(
-      'SELECT question_count, pass_threshold FROM checkpoints WHERE checkpoint_id = ?',
-      [attempt.checkpoint_id],
-    );
+    // The attempt keeps the question count and pass mark it started with (an edit of the quest cannot change them).
+    const checkpoint = attempt;
     const finishedMs = endReason === 'expired' ? attempt.expires_at.getTime() : nowMs;
     const score = scoreAttempt({
       slots: slots.map((s) => ({ difficulty: s.difficulty, correct: Boolean(s.correct) })),
       questionCount: checkpoint.question_count,
       passThreshold: checkpoint.pass_threshold,
       attemptNumber: attempt.attempt_number,
+      // A long custom time limit cannot inflate the time bonus: it is capped at the default time of the quest.
       remainingSeconds:
         endReason === 'expired'
           ? 0
-          : remainingWholeSeconds(attempt.expires_at.getTime(), finishedMs),
+          : Math.min(
+              remainingWholeSeconds(attempt.expires_at.getTime(), finishedMs),
+              attempt.question_count * config.secondsPerQuestion,
+            ),
       rules,
     });
     await conn.query(
@@ -296,6 +333,11 @@ export function createQuizService({ pool, config, clock }) {
   async function clearTestHistory(studentId, checkpointId) {
     await withTransaction(pool, async (conn) => {
       await conn.query(
+        `DELETE aa FROM attempt_answers aa JOIN attempts a ON a.attempt_id = aa.attempt_id
+         WHERE a.student_id = ? AND a.checkpoint_id = ?`,
+        [studentId, checkpointId],
+      );
+      await conn.query(
         `DELETE aq FROM attempt_questions aq JOIN attempts a ON a.attempt_id = aq.attempt_id
          WHERE a.student_id = ? AND a.checkpoint_id = ?`,
         [studentId, checkpointId],
@@ -309,6 +351,39 @@ export function createQuizService({ pool, config, clock }) {
         checkpointId,
       ]);
     });
+  }
+
+  /**
+   * The questions of a new attempt. MCQ_ONLY and MULTI_ONLY draw only that type. MIXED always holds at least one of
+   * each type among the first questions (the last slot is the one a hard question may replace), so what the student
+   * was told before starting is true.
+   */
+  async function drawQuestions(conn, checkpoint) {
+    const count = checkpoint.question_count;
+    const tooFew = () =>
+      new AppError(503, 'DRAW_IMPOSSIBLE', 'This checkpoint has too few questions right now.');
+    const pick = async (types, n, exclude = []) => {
+      const [rows] = await conn.query(DRAWABLE_QUESTIONS, [
+        checkpoint.checkpoint_id,
+        'NORMAL',
+        types,
+        n + exclude.length,
+      ]);
+      return rows.filter((r) => !exclude.includes(r.question_id)).slice(0, n);
+    };
+    if (checkpoint.type_mode !== 'MIXED') {
+      const rows = await pick(typesOfMode(checkpoint.type_mode), count);
+      if (rows.length < count) throw tooFew();
+      return rows;
+    }
+    const [mcq] = await pick(['MCQ'], 1);
+    const [multi] = await pick(['MULTI'], 1);
+    if (!mcq || !multi) throw tooFew();
+    const taken = [mcq.question_id, multi.question_id];
+    const rest = await pick(['MCQ', 'MULTI'], count - 2, taken);
+    if (rest.length < count - 2) throw tooFew();
+    const [last, ...fillers] = rest.length > 0 ? [rest[rest.length - 1], ...rest.slice(0, -1)] : [];
+    return rest.length > 0 ? [...shuffle([mcq, multi, ...fillers]), last] : shuffle([mcq, multi]);
   }
 
   /** The unlock: creates the attempt, starts the timer and draws the questions in one transaction. */
@@ -329,22 +404,21 @@ export function createQuizService({ pool, config, clock }) {
         'SELECT COUNT(*) AS used FROM attempts WHERE student_id = ? AND checkpoint_id = ?',
         [studentId, checkpoint.checkpoint_id],
       );
-      const [drawn] = await conn.query(DRAWABLE_QUESTIONS, [
-        checkpoint.checkpoint_id,
-        'NORMAL',
-        checkpoint.question_count,
-      ]);
-      if (drawn.length < checkpoint.question_count) {
-        throw new AppError(
-          503,
-          'DRAW_IMPOSSIBLE',
-          'This checkpoint has too few questions right now.',
-        );
-      }
-      const expires = now + checkpoint.question_count * config.secondsPerQuestion * 1000;
+      const drawn = await drawQuestions(conn, checkpoint);
+      const seconds =
+        checkpoint.time_limit_seconds ?? checkpoint.question_count * config.secondsPerQuestion;
+      const expires = now + seconds * 1000;
       const [inserted] = await conn.query(
-        "INSERT INTO attempts (student_id, checkpoint_id, attempt_number, start_time, expires_at, status) VALUES (?, ?, ?, ?, ?, 'active')",
-        [studentId, checkpoint.checkpoint_id, Number(used) + 1, at(now), at(expires)],
+        "INSERT INTO attempts (student_id, checkpoint_id, attempt_number, start_time, expires_at, question_count, pass_threshold, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'active')",
+        [
+          studentId,
+          checkpoint.checkpoint_id,
+          Number(used) + 1,
+          at(now),
+          at(expires),
+          checkpoint.question_count,
+          checkpoint.pass_threshold,
+        ],
       );
       for (let i = 0; i < drawn.length; i += 1) {
         await conn.query(
@@ -370,7 +444,7 @@ export function createQuizService({ pool, config, clock }) {
     // Administrators test the quizzes from anywhere: any checkpoint, active or not, as often as they like.
     const testMode = who.role === 'admin';
     const [[checkpoint]] = await pool.query(
-      'SELECT * FROM checkpoints WHERE checkpoint_id = ? AND (is_active = 1 OR ?)',
+      'SELECT * FROM checkpoints WHERE checkpoint_id = ? AND archived_at IS NULL AND (is_active = 1 OR ?)',
       [checkpointId, testMode ? 1 : 0],
     );
     if (!checkpoint) throw new AppError(404, 'NOT_AVAILABLE', 'This checkpoint is not available.');
@@ -483,22 +557,32 @@ export function createQuizService({ pool, config, clock }) {
       throw new AppError(409, 'ATTEMPT_EXPIRED', 'Time is up.');
   };
 
-  async function answer(studentId, attemptId, optionId, questionNumber) {
+  /** Exact match only (BR50): the ticked options must be precisely the right ones of the question. */
+  const isExactMatch = (options, chosenIds) => {
+    const right = options.filter((o) => o.is_correct).map((o) => o.option_id);
+    return right.length === chosenIds.length && right.every((id) => chosenIds.includes(id));
+  };
+
+  /** The ticked option ids of an answer, from the new `optionIds` or the single `optionId` of the first API. */
+  const chosenOf = (optionIds, optionId) => [...new Set(optionIds ?? [optionId])];
+
+  async function answer(studentId, attemptId, optionId, questionNumber, optionIds) {
     // If the deadline passed, close the attempt first (its own transaction) so the points are not lost.
     await assertOwned(studentId, attemptId);
     await finalizeIfExpired(attemptId);
 
+    const chosen = chosenOf(optionIds, optionId);
     const now = clock.now();
     const outcome = await withTransaction(pool, async (conn) => {
       const attempt = await lockAttempt(conn, studentId, attemptId);
       assertActive(attempt, now);
       const [slots] = await conn.query(
-        `SELECT aq.question_number, aq.question_id, aq.selected_option_id, q.difficulty
+        `SELECT aq.question_number, aq.question_id, aq.answered_at, aq.is_correct, q.difficulty, q.question_type
          FROM attempt_questions aq JOIN questions q ON q.question_id = aq.question_id
          WHERE aq.attempt_id = ? ORDER BY aq.question_number FOR UPDATE`,
         [attemptId],
       );
-      const slot = slots.find((s) => s.selected_option_id === null);
+      const slot = slots.find((s) => s.answered_at === null);
       if (!slot) throw new AppError(409, 'ATTEMPT_NOT_ACTIVE', 'All questions are answered.');
       if (questionNumber !== undefined && questionNumber !== slot.question_number) {
         throw new AppError(
@@ -507,38 +591,46 @@ export function createQuizService({ pool, config, clock }) {
           'That is not the current question.',
         );
       }
-      const [[option]] = await conn.query(
-        'SELECT option_id, is_correct FROM options WHERE option_id = ? AND question_id = ?',
-        [optionId, slot.question_id],
+      const [options] = await conn.query(
+        'SELECT option_id, is_correct FROM options WHERE question_id = ?',
+        [slot.question_id],
       );
-      if (!option)
+      if (chosen.some((id) => !options.some((o) => o.option_id === id))) {
         throw new AppError(400, 'INVALID_OPTION', 'That option does not belong to this question.');
+      }
+      if (slot.question_type === 'MCQ' && chosen.length !== 1) {
+        throw new AppError(400, 'INVALID_OPTION', 'Choose exactly one option.');
+      }
+      if (slot.question_type === 'MULTI' && chosen.length < 1) {
+        throw new AppError(400, 'INVALID_OPTION', 'Choose at least one option.');
+      }
+      const correct = isExactMatch(options, chosen);
 
       await conn.query(
-        'UPDATE attempt_questions SET selected_option_id = ?, answered_at = ? WHERE attempt_id = ? AND question_number = ?',
-        [optionId, at(now), attemptId, slot.question_number],
+        'UPDATE attempt_questions SET selected_option_id = ?, is_correct = ?, answered_at = ? WHERE attempt_id = ? AND question_number = ?',
+        [chosen[0], correct ? 1 : 0, at(now), attemptId, slot.question_number],
       );
-      const correct = Boolean(option.is_correct);
+      await conn.query(
+        'INSERT INTO attempt_answers (attempt_id, question_number, question_id, option_id) VALUES ?',
+        [chosen.map((id) => [attemptId, slot.question_number, slot.question_id, id])],
+      );
 
-      // BR20: attempt 1 only, first four answers correct, checkpoint offers a hard question.
-      if (slot.question_number === 4 && attempt.attempt_number === 1) {
+      // BR20: attempt 1 only, every answer before the last slot correct, quest offers a hard question.
+      const beforeLast = attempt.question_count - 1;
+      if (slot.question_number === beforeLast && attempt.attempt_number === 1) {
         const [[checkpoint]] = await conn.query(
-          'SELECT question_count, hard_question_enabled FROM checkpoints WHERE checkpoint_id = ?',
+          'SELECT hard_question_enabled, type_mode FROM checkpoints WHERE checkpoint_id = ?',
           [attempt.checkpoint_id],
         );
-        const earlier = slots.filter((s) => s.question_number < 4);
-        const [rows] = earlier.length
-          ? await conn.query('SELECT is_correct FROM options WHERE option_id IN (?)', [
-              earlier.map((s) => s.selected_option_id),
-            ])
-          : [[]];
-        const firstFourCorrect = correct && rows.length === 3 && rows.every((r) => r.is_correct);
-        if (
-          checkpoint.hard_question_enabled &&
-          checkpoint.question_count === 5 &&
-          firstFourCorrect
-        ) {
-          const [hard] = await conn.query(DRAWABLE_QUESTIONS, [attempt.checkpoint_id, 'HARD', 1]);
+        const earlier = slots.filter((s) => s.question_number < beforeLast);
+        const allCorrect = correct && earlier.every((s) => Boolean(s.is_correct));
+        if (checkpoint.hard_question_enabled && allCorrect) {
+          const [hard] = await conn.query(DRAWABLE_QUESTIONS, [
+            attempt.checkpoint_id,
+            'HARD',
+            typesOfMode(checkpoint.type_mode),
+            1,
+          ]);
           if (hard.length > 0)
             await conn.query('UPDATE attempts SET hard_unlocked = 1 WHERE attempt_id = ?', [
               attemptId,
@@ -547,7 +639,7 @@ export function createQuizService({ pool, config, clock }) {
       }
 
       const last = slots.every(
-        (s) => s.question_number === slot.question_number || s.selected_option_id !== null,
+        (s) => s.question_number === slot.question_number || s.answered_at !== null,
       );
       let score = null;
       if (last) {
@@ -559,17 +651,20 @@ export function createQuizService({ pool, config, clock }) {
       return { correct, score, questionId: slot.question_id };
     });
 
-    let correctOptionId;
+    let correctOptionIds;
     if (!outcome.correct) {
-      const [[right]] = await pool.query(
-        'SELECT option_id FROM options WHERE question_id = ? AND is_correct = 1',
+      const [right] = await pool.query(
+        'SELECT option_id FROM options WHERE question_id = ? AND is_correct = 1 ORDER BY option_id',
         [outcome.questionId],
       );
-      correctOptionId = right?.option_id;
+      correctOptionIds = right.map((r) => r.option_id);
     }
     const view = await buildAttemptView(pool, attemptId);
     const response = { correct: outcome.correct, attempt: view };
-    if (correctOptionId !== undefined) response.correctOptionId = correctOptionId;
+    if (correctOptionIds !== undefined) {
+      response.correctOptionIds = correctOptionIds;
+      response.correctOptionId = correctOptionIds[0];
+    }
     if (outcome.score) response.result = await getResult(studentId, attemptId);
     return response;
   }
@@ -581,24 +676,33 @@ export function createQuizService({ pool, config, clock }) {
     await withTransaction(pool, async (conn) => {
       const attempt = await lockAttempt(conn, studentId, attemptId);
       assertActive(attempt, now);
-      const [[slot5]] = await conn.query(
-        'SELECT * FROM attempt_questions WHERE attempt_id = ? AND question_number = 5 FOR UPDATE',
-        [attemptId],
+      const [[lastSlot]] = await conn.query(
+        'SELECT * FROM attempt_questions WHERE attempt_id = ? AND question_number = ? FOR UPDATE',
+        [attemptId, attempt.question_count],
       );
       if (
         !attempt.hard_unlocked ||
-        !slot5 ||
-        slot5.selected_option_id !== null ||
-        slot5.replaced_question_id
+        !lastSlot ||
+        lastSlot.answered_at !== null ||
+        lastSlot.replaced_question_id
       ) {
         throw new AppError(409, 'HARD_NOT_AVAILABLE', 'The hard question is not available.');
       }
-      const [[hard]] = await conn.query(DRAWABLE_QUESTIONS, [attempt.checkpoint_id, 'HARD', 1]);
+      const [[mode]] = await conn.query(
+        'SELECT type_mode FROM checkpoints WHERE checkpoint_id = ?',
+        [attempt.checkpoint_id],
+      );
+      const [[hard]] = await conn.query(DRAWABLE_QUESTIONS, [
+        attempt.checkpoint_id,
+        'HARD',
+        typesOfMode(mode.type_mode),
+        1,
+      ]);
       if (!hard)
         throw new AppError(409, 'HARD_NOT_AVAILABLE', 'The hard question is not available.');
       await conn.query(
-        'UPDATE attempt_questions SET replaced_question_id = question_id, question_id = ? WHERE attempt_id = ? AND question_number = 5',
-        [hard.question_id, attemptId],
+        'UPDATE attempt_questions SET replaced_question_id = question_id, question_id = ? WHERE attempt_id = ? AND question_number = ?',
+        [hard.question_id, attemptId, attempt.question_count],
       );
     });
     return buildAttemptView(pool, attemptId);
@@ -622,7 +726,7 @@ export function createQuizService({ pool, config, clock }) {
   /** Solo rank a student with this total would hold (the student's own row is not counted against itself). */
   async function rankAmong(total, studentId) {
     const [[row]] = await pool.query(
-      'SELECT COUNT(*) AS higher FROM students WHERE total_points > ? AND student_id <> ?',
+      "SELECT COUNT(*) AS higher FROM students WHERE total_points > ? AND student_id <> ? AND status = 'active' AND role = 'student'",
       [total, studentId],
     );
     return Number(row.higher) + 1;
@@ -639,7 +743,7 @@ export function createQuizService({ pool, config, clock }) {
     if (attempt.status === 'active')
       throw new AppError(409, 'ATTEMPT_NOT_FINISHED', 'This attempt is still running.');
     const [[student]] = await pool.query(
-      'SELECT total_points, points_exact_x100 FROM students WHERE student_id = ?',
+      'SELECT total_points, points_exact_x100, role FROM students WHERE student_id = ?',
       [studentId],
     );
     const rules = await loadRules(pool);
@@ -648,14 +752,12 @@ export function createQuizService({ pool, config, clock }) {
       Math.max(0, Number(student.points_exact_x100) - Number(attempt.points_exact)),
       100,
     );
+    const isAdmin = student.role === 'admin';
     const [[{ passed }]] = await pool.query(
       "SELECT COUNT(*) AS passed FROM attempts WHERE student_id = ? AND checkpoint_id = ? AND status = 'passed'",
       [studentId, attempt.checkpoint_id],
     );
-    const [[checkpoint]] = await pool.query(
-      'SELECT question_count, pass_threshold FROM checkpoints WHERE checkpoint_id = ?',
-      [attempt.checkpoint_id],
-    );
+    const checkpoint = attempt;
     const [[{ used }]] = await pool.query(
       'SELECT COUNT(*) AS used FROM attempts WHERE student_id = ? AND checkpoint_id = ?',
       [studentId, attempt.checkpoint_id],
@@ -676,8 +778,10 @@ export function createQuizService({ pool, config, clock }) {
       multiplierPercent: attempt.multiplier_percent,
       pointsEarned: attempt.points_earned,
       totalPoints: student.total_points,
-      rankBefore: await rankAmong(totalBefore, studentId),
-      rankAfter: await rankAmong(student.total_points, studentId),
+      // Administrators are in no ranking (BR41, BR42).
+      rankBefore: isAdmin ? null : await rankAmong(totalBefore, studentId),
+      rankAfter: isAdmin ? null : await rankAmong(student.total_points, studentId),
+      ...(isAdmin ? {} : { team: await teamStandingAround(pool, studentId, totalBefore) }),
       nextMultiplierPercent: multiplierFor(rules.multipliers, used + 1),
       checkpointCompleted: passed > 0,
       nextAttemptNumber: used + 1,

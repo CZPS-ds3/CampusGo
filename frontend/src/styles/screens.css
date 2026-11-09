@@ -30,6 +30,7 @@ ol.stack {
 }
 .twocol {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 20px;
   align-items: start;
 }
@@ -97,6 +98,7 @@ ol.stack {
 }
 .presets {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 4px;
 }
@@ -146,6 +148,22 @@ ol.stack {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+  padding-right: calc(var(--close-size) + 8px); /* keeps long titles clear of the X */
+}
+/* The X (and the action that sits left of it) is fixed to the top right corner of the window, so it is in the
+   same spot on every page. Its centre is the horizontal midline of a page title: top padding of .page plus half of
+   the .h1 line (1.12 x 2rem / 2). */
+.page-close,
+.page__aside {
+  position: fixed; /* stays on screen while the page scrolls */
+  top: calc(24px + var(--safe-t) + 1.12rem - var(--close-size) / 2);
+  z-index: var(--z-map-ui);
+}
+.page-close {
+  right: var(--close-gutter);
+}
+.page__aside {
+  right: calc(var(--close-gutter) + var(--close-size) + 8px);
 }
 .page__title {
   min-width: 0;
@@ -159,6 +177,9 @@ ol.stack {
   outline: none; /* headings take focus only to announce a new page */
 }
 @media (min-width: 768px) {
+  :root {
+    --close-gutter: 32px;
+  }
   .page {
     padding-inline: 32px;
   }
@@ -325,14 +346,31 @@ ol.stack {
   position: absolute;
   inset: 0;
   z-index: 0;
-  background: var(--map-bg);
+  background: var(--map-tint-ground, var(--map-bg));
 }
 .map--darken .leaflet-tile-pane {
   filter: var(--map-filter);
 }
 .leaflet-container {
   font-family: var(--font);
-  background: var(--map-bg);
+  background: var(--map-tint-ground, var(--map-bg));
+}
+/* The map style of the student (BR48): the base follows the app theme, or is always light or dark, and a tint colour
+   shows through the map tiles. */
+.map .leaflet-tile-pane {
+  opacity: var(--map-tint-opacity, 1);
+}
+:root[data-map-base='light'] .map {
+  --map-bg: #eef0f2;
+}
+:root[data-map-base='dark'] .map {
+  --map-bg: #181d22;
+}
+:root[data-map-base='light'] .map--darken .leaflet-tile-pane {
+  filter: none;
+}
+:root[data-map-base='dark'] .map--darken .leaflet-tile-pane {
+  filter: var(--map-filter-dark);
 }
 .leaflet-top {
   top: calc(var(--safe-t) + 176px);
@@ -432,33 +470,34 @@ ol.stack {
   align-items: center;
   justify-content: center;
   transform: rotate(45deg);
-  background: var(--sub);
+  background: var(--pin-open, var(--sub));
   border: 2px solid var(--fg);
   box-shadow: var(--shadow);
-  color: var(--on);
+  color: var(--pin-open-fg, var(--on));
   transition: transform 160ms var(--ease-pop);
 }
 .pin__diamond svg {
   transform: rotate(-45deg);
 }
 .pin--done .pin__diamond {
-  background: var(--ok);
+  background: var(--pin-done, var(--ok));
+  color: var(--pin-done-fg, var(--on));
 }
 .pin--closed .pin__diamond {
-  background: var(--surface2);
+  background: var(--pin-locked, var(--surface2));
   border-color: var(--mute);
-  color: var(--mute);
+  color: var(--pin-locked-fg, var(--mute));
 }
 .pin.is-selected .pin__diamond {
   transform: rotate(45deg) scale(1.2);
-  background: var(--signal);
+  background: var(--highlight, var(--signal));
   border-color: var(--surface);
-  color: var(--on-signal);
+  color: var(--highlight-fg, var(--on-signal));
 }
 .pin__ring {
   position: absolute;
   inset: 0;
-  border: 3px solid var(--signal);
+  border: 3px solid var(--highlight, var(--signal));
   transform: rotate(45deg);
   animation: pulseRing 1.2s ease-out infinite;
 }
@@ -660,6 +699,13 @@ ol.stack {
 .opt__text {
   flex: 1;
   min-width: 0;
+}
+.opt--multi .opt__key {
+  border-radius: 4px;
+}
+.opt.is-ticked {
+  border-color: var(--signal);
+  box-shadow: 0 0 0 2px var(--signal);
 }
 .opt.is-pending {
   border-style: dashed;
@@ -921,6 +967,27 @@ ol.stack {
   min-width: 0;
   font-weight: 500;
   overflow-wrap: anywhere;
+}
+.board-scroll {
+  max-height: min(28rem, 55vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 2px; /* room for the focus ring and the row borders */
+}
+.board-scroll__end {
+  min-height: 1px;
+  display: grid;
+  justify-items: center;
+  padding-top: 8px;
+}
+.ranks__locked {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  margin: 0;
+}
+.ranks__locked .link {
+  margin-left: 11px; /* the chip's border and padding: the "G" of "Go to team" sits right below the lock icon */
 }
 .ranks__you {
   display: flex;
@@ -1273,7 +1340,7 @@ ol.stack {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
   .admin-filters {
-    grid-template-columns: 2fr 1fr;
+    grid-template-columns: 2fr 1fr 1fr;
   }
   .admin-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1500,4 +1567,102 @@ ol.stack {
 .admin-list > li > .card,
 .admin-list > li.card {
   height: 100%;
+}
+
+/* map credit: a link inside text must not rely on colour alone (WCAG 1.4.1) */
+.leaflet-control-attribution {
+  background: rgba(255, 255, 255, 0.92);
+  color: #1d2327;
+}
+.leaflet-control-attribution a {
+  color: #0b4f8a;
+  text-decoration: underline;
+}
+
+/* The checkpoint radius editor (BR12, BR49): number, slider and presets next to a map with the circle drawn to scale. */
+.geo {
+  border: 0;
+  margin: 0;
+  min-width: 0;
+}
+.geo > legend {
+  padding: 0;
+  margin-bottom: 8px;
+}
+.geo__controls {
+  display: grid;
+  gap: 12px;
+}
+.geo__slider {
+  display: grid;
+  gap: 6px;
+}
+.geo__slider input[type='range'] {
+  width: 100%;
+  min-height: 44px;
+  accent-color: var(--signal);
+}
+.geo-preview {
+  display: grid;
+  gap: 8px;
+}
+.geo-preview__map {
+  position: relative;
+  height: clamp(240px, 46vh, 380px);
+  border: 1px solid var(--line2);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--map-bg);
+}
+.geo-preview__map .leaflet-top {
+  top: 0;
+}
+.geo-tip.leaflet-tooltip {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  color: var(--mute);
+  font-size: 11px;
+  font-weight: 700;
+  text-shadow:
+    0 0 3px var(--surface),
+    0 0 3px var(--surface);
+}
+.geo-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.875rem;
+  color: var(--mute);
+}
+.geo-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.geo-legend__swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--signal);
+}
+.geo-legend__swatch--circle {
+  background: color-mix(in srgb, var(--signal) 25%, transparent);
+}
+.geo-legend__swatch--ring {
+  border-style: dashed;
+}
+.geo-legend__swatch--other {
+  border-color: var(--line2);
+  border-style: dashed;
+  background: color-mix(in srgb, var(--line2) 20%, transparent);
+}
+@media (min-width: 768px) {
+  .geo__controls {
+    grid-template-columns: minmax(140px, 200px) 1fr;
+    align-items: end;
+  }
 }

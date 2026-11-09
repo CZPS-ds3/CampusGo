@@ -17,7 +17,8 @@ export async function login(
   await page.getByLabel('First name *').fill(first);
   await page.getByLabel('Last name *').fill(last);
   await page.getByRole('button', { name: 'Enter campus' }).click();
-  await expect(page.getByText(/Rank #/)).toBeVisible();
+  // Students see a rank chip, administrators a reset button: the profile link is on the map for both.
+  await expect(page.getByRole('link', { name: 'Open profile' })).toBeVisible();
 }
 
 /** The page must never scroll sideways. */

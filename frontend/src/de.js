@@ -149,15 +149,15 @@ const pairs = [
   ['Bonus', 'Bonus-'],
   ['round', 'runde'],
   [
-    'Q1–4 all correct on your first try. Swap Q5 for one hard question worth',
-    'F1–4 beim ersten Versuch alle richtig. Tausche F5 gegen eine schwere Frage im Wert von',
+    'Q1–{n} all correct on your first try. Swap Q{last} for one hard question worth',
+    'F1–{n} beim ersten Versuch alle richtig. Tausche F{last} gegen eine schwere Frage im Wert von',
   ],
   [
     'Timer keeps running. One shot, no retry.',
     'Der Timer läuft weiter. Nur ein Versuch, keine Wiederholung.',
   ],
   ['Accept bonus', 'Bonus annehmen'],
-  ['Decline, normal Q5', 'Ablehnen, normale F5'],
+  ['Decline, normal question', 'Ablehnen, normale Frage'],
   ['Back (disabled during quiz)', 'Zurück (im Quiz deaktiviert)'],
   ['Q', 'F'],
   ['Time left {time}', 'Verbleibende Zeit {time}'],

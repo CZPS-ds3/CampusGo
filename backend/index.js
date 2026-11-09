@@ -34,7 +34,7 @@ function reportDatabase(error) {
   }
   if (!databaseDown) {
     console.error(
-      '[db] MySQL is not reachable. Start Docker Desktop, then run "npm run db:up" ' +
+      '[db] MySQL is not reachable. Start Docker Desktop, then run "npm run db:up" (also works in the backend folder) ' +
         '(or start everything with "npm run dev" from the project root folder). Login needs the database.',
     );
   }
