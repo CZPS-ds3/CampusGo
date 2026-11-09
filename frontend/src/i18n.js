@@ -12,10 +12,15 @@ const browserLang = () =>
     ? 'de'
     : 'en';
 
+export const MAP_BASES = ['aerial', 'street'];
+const DEFAULT_MAP_BASE = import.meta.env.VITE_MAP_BASE === 'street' ? 'street' : 'aerial';
+
 function load() {
-  const base = { lang: browserLang(), theme: 'light', size: 'm' };
+  const base = { lang: browserLang(), theme: 'light', size: 'm', mapBase: DEFAULT_MAP_BASE };
   try {
-    return { ...base, ...JSON.parse(localStorage.getItem(KEY) || '{}') };
+    const stored = { ...base, ...JSON.parse(localStorage.getItem(KEY) || '{}') };
+    if (!MAP_BASES.includes(stored.mapBase)) stored.mapBase = DEFAULT_MAP_BASE;
+    return stored;
   } catch {
     return base;
   }
@@ -61,4 +66,6 @@ export function t(key, vars) {
 }
 
 export const getLang = () => state.lang;
+/** The map type a map starts with on this device: 'aerial' or 'street'. */
+export const getMapBase = () => state.mapBase;
 export const formatNumber = (n) => n.toLocaleString(state.lang === 'de' ? 'de-DE' : 'en-US');
