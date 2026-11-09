@@ -80,17 +80,40 @@ function Passed({ result, name }) {
       {result.multiplierPercent === 0 && (
         <p className="small muted">{t('From attempt 6 on, a checkpoint earns 0 points.')}</p>
       )}
-      <div
-        className="card card--flat row row--between anim-pop"
-        style={{ animationDelay: '900ms' }}
-      >
-        <span className="caption muted">{t('Rank')}</span>
-        <span className="mono h2 row">
-          <span className="muted">#{result.rankBefore}</span>
-          <Icon name="arrow" size={20} />
-          <span>#{result.rankAfter}</span>
-        </span>
-      </div>
+      {result.rankBefore !== null && (
+        <div
+          className="card card--flat row row--between anim-pop"
+          style={{ animationDelay: '900ms' }}
+        >
+          <span className="caption muted">{t('Rank')}</span>
+          <span className="mono h2 row">
+            <span className="muted">#{result.rankBefore}</span>
+            <Icon name="arrow" size={20} />
+            <span>#{result.rankAfter}</span>
+          </span>
+        </div>
+      )}
+      {result.team && (
+        <div
+          className="card card--flat stack stack--tight anim-pop"
+          style={{ animationDelay: '1000ms' }}
+        >
+          <div className="row row--between">
+            <span className="caption muted">
+              {t('Team rank')} · {result.team.teamName}
+            </span>
+            <span className="mono h2 row">
+              <span className="muted">#{result.team.teamRankBefore}</span>
+              <Icon name="arrow" size={20} />
+              <span>#{result.team.teamRankAfter}</span>
+            </span>
+          </div>
+          <p className="small muted">
+            {t('Team score (average of the members, rounded up)')}:{' '}
+            {formatNumber(result.team.teamScoreBefore)} → {formatNumber(result.team.teamScoreAfter)}
+          </p>
+        </div>
+      )}
     </>
   );
 }

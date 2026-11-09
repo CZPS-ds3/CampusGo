@@ -56,11 +56,11 @@ export function publicStudent(row) {
 export function otpEmail(to, code, ttlMinutes) {
   return {
     to,
-    subject: 'Your Campus & City Quest login code',
+    subject: 'Your DHBW campusGO login code',
     text: `Your one-time code is ${code}. It is valid for ${ttlMinutes} minutes.\nIf you did not ask for it, ignore this message.`,
     html:
       '<div style="font-family:Arial,sans-serif;font-size:16px;color:#1a1a1a">' +
-      '<p>Your Campus &amp; City Quest login code:</p>' +
+      '<p>Your DHBW campusGO login code:</p>' +
       `<p style="font-size:28px;font-weight:bold;letter-spacing:6px">${code}</p>` +
       `<p>It is valid for ${ttlMinutes} minutes. Never share it with anyone.</p>` +
       '<p style="color:#666;font-size:13px">If you did not ask for it, ignore this message.</p></div>',

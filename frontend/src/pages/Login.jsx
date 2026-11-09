@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { api } from '../api/client.js';
+import { api, USE_MOCKS } from '../api/client.js';
 import { errorText } from '../api/errorText.js';
 import { Avatar, PRESET_COUNT } from '../components/Avatar.jsx';
 import { Button } from '../components/Button.jsx';
@@ -12,11 +12,11 @@ import { useSession } from '../hooks/useSession.jsx';
 import { formatClock } from '../hooks/useServerTimer.js';
 import { t } from '../i18n.js';
 
-const RESEND_SECONDS = 30;
+const RESEND_SECONDS = USE_MOCKS ? 0 : 30;
 const CODE_LIFETIME_SECONDS = 600;
 const SCHOOL_DOMAIN = 'heilbronn.dhbw.de';
-// Development helper: shows the e-mail the server "sent", so nobody needs a mail account to try the app.
-const SHOW_INBOX = import.meta.env.DEV;
+// Only the in-browser mock API (no backend) shows its fake inbox; the real API sends real e-mails.
+const SHOW_INBOX = USE_MOCKS;
 
 const looksLikeSchoolEmail = (value) => {
   const email = value.trim().toLowerCase();

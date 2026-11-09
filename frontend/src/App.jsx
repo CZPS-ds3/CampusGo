@@ -1,5 +1,6 @@
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { OfflineBanner } from './components/OfflineBanner.jsx';
+import { PageClose } from './components/PageClose.jsx';
 import { QuestMenu } from './components/QuestMenu.jsx';
 import { RouteWipe } from './components/RouteWipe.jsx';
 import { Skeleton } from './components/Screen.jsx';
@@ -21,6 +22,8 @@ import Team from './pages/Team.jsx';
 import AdminLayout from './pages/admin/AdminLayout.jsx';
 import AdminNames from './pages/admin/AdminNames.jsx';
 import AdminOverview from './pages/admin/AdminOverview.jsx';
+import AdminQuest from './pages/admin/AdminQuest.jsx';
+import AdminQuests from './pages/admin/AdminQuests.jsx';
 import AdminTeams from './pages/admin/AdminTeams.jsx';
 import AdminTestQuests from './pages/admin/AdminTestQuests.jsx';
 import AdminUser from './pages/admin/AdminUser.jsx';
@@ -44,6 +47,7 @@ function Protected() {
   return (
     <>
       <OfflineBanner />
+      <PageClose />
       <Outlet />
       {!inQuiz && <QuestMenu />}
     </>
@@ -80,6 +84,8 @@ export default function App() {
             <Route path="users/:id" element={<AdminUser />} />
             <Route path="teams" element={<AdminTeams />} />
             <Route path="names" element={<AdminNames />} />
+            <Route path="quests" element={<AdminQuests />} />
+            <Route path="quests/:id" element={<AdminQuest />} />
             <Route path="test-quests" element={<AdminTestQuests />} />
           </Route>
         </Route>

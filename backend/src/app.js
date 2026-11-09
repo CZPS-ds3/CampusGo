@@ -12,9 +12,11 @@ import { createLimiters } from './middleware/rate-limit.js';
 import { requireSameOrigin } from './middleware/same-origin.js';
 import { createAccountService } from './services/account.js';
 import { createAdminService } from './services/admin.js';
+import { createCheckpointAdminService, questSchemas } from './services/checkpoint-admin.js';
 import { GENERIC_OTP_MESSAGE, createAuthService, publicStudent } from './services/auth.js';
 import { createLeaderboardService } from './services/leaderboards.js';
 import { createNameRules } from './services/name-rules.js';
+import { createMapStyleService } from './services/map-style.js';
 import { createPlayerService } from './services/players.js';
 import { storeProfilePicture } from './services/pictures.js';
 import { createQuizService } from './services/quiz.js';
@@ -43,14 +45,25 @@ const schemas = {
       .finite()
       .max(24 * 3600 * 1000),
   }),
-  answer: z.object({ optionId: id, questionNumber: z.number().int().min(1).max(5).optional() }),
+  // One option (MCQ) as `optionId`, or the ticked options of a multi-select as `optionIds` (BR50).
+  answer: z
+    .object({
+      optionId: id.optional(),
+      optionIds: z.array(id).min(1).max(6).optional(),
+      questionNumber: z.number().int().min(1).max(10).optional(),
+    })
+    .refine((body) => body.optionId !== undefined || body.optionIds !== undefined, {
+      message: 'Choose at least one option.',
+    }),
   team: z.object({ name: z.string().trim().min(2).max(30) }),
   invite: z
     .object({ email: email.optional(), playerId: id.optional() })
     .refine((body) => Boolean(body.email) !== Boolean(body.playerId)),
   adminUsers: z.object({
     q: z.string().trim().max(80).optional(),
-    status: z.enum(['active', 'blocked', 'archived', 'deleted', 'reported']).optional(),
+    status: z.enum(['active', 'blocked', 'archived', 'reported']).optional(),
+    role: z.enum(['student', 'admin']).optional(),
+    noTeam: z.enum(['1']).optional(),
     limit: z.coerce.number().int().min(1).max(200).optional(),
     offset: z.coerce.number().int().min(0).optional(),
   }),
@@ -59,7 +72,9 @@ const schemas = {
     firstName: name,
     lastName: name,
     nickname: z.string().trim().max(20).optional(),
+    role: z.enum(['student', 'admin']).optional(),
   }),
+  adminRole: z.object({ role: z.enum(['student', 'admin']) }),
   adminPatch: z.object({
     email: email.optional(),
     firstName: name.optional(),
@@ -82,7 +97,7 @@ const schemas = {
  * Builds the Express app. Everything that touches the outside world (database pool, mailer, clock)
  * is passed in so that tests can replace it.
  */
-export function createApp({ pool, config, mailer, clock }) {
+export function createApp({ pool, config, mailer, clock, fetchImpl }) {
   const app = express();
   const nameRules = createNameRules({ pool });
   const auth = createAuthService({ pool, config, mailer, clock, nameRules });
@@ -91,7 +106,15 @@ export function createApp({ pool, config, mailer, clock }) {
   const accounts = createAccountService({ pool, clock });
   const admin = createAdminService({ pool, config, clock, nameRules });
   const boards = createLeaderboardService({ pool });
+  const quests = createCheckpointAdminService({
+    pool,
+    config,
+    clock,
+    uploadDir: resolve(config.uploadDir),
+    fetchImpl,
+  });
   const players = createPlayerService({ pool, clock, boards });
+  const mapStyles = createMapStyleService({ pool });
   const limits = createLimiters(config);
   const needLogin = requireAuth(auth);
   const upload = multer({
@@ -147,28 +170,22 @@ export function createApp({ pool, config, mailer, clock }) {
       res.status(204).end();
     }),
   );
-  // Development only, and only while no real SMTP server is configured (codes are then kept in memory).
-  if (config.isDev && !config.smtp.host) {
-    api.get('/dev/last-otp', (req, res) => {
-      const mail = mailer.lastTo?.(
-        String(req.query.email ?? '')
-          .trim()
-          .toLowerCase(),
-      );
-      const code = mail?.text.match(/\b(\d{6})\b/)?.[1];
-      if (!code) throw notFound('No code sent yet.');
-      res.json({ otp: code });
-    });
-  }
-
   // ----- everything below needs a session -----
   api.use(needLogin);
 
   api.get(
     '/me',
     handle(async (req, res) => {
-      const rank = await boards.rankOf(req.student.total_points);
+      const rank =
+        req.student.role === 'admin' ? null : await boards.rankOf(req.student.total_points);
       res.json({ student: { ...publicStudent(req.student), rank } });
+    }),
+  );
+  api.post(
+    '/me/reset-points',
+    handle(async (req, res) => {
+      await accounts.resetTestPoints(req.student.student_id);
+      res.json({ totalPoints: 0 });
     }),
   );
   api.delete(
@@ -177,7 +194,7 @@ export function createApp({ pool, config, mailer, clock }) {
       if (req.student.role === 'admin') {
         throw new AppError(403, 'FORBIDDEN', 'Administrator accounts cannot be deleted here.');
       }
-      await accounts.deleteAccount(req.student.student_id);
+      await accounts.deleteAccount(req.student.student_id, { bySelf: true });
       res.clearCookie(SESSION_COOKIE, { ...sessionCookieOptions(config), maxAge: undefined });
       res.status(204).end();
     }),
@@ -215,6 +232,22 @@ export function createApp({ pool, config, mailer, clock }) {
       );
       res.status(204).end();
     }),
+  );
+
+  // ----- map style: one per account (BR48) -----
+  api.get(
+    '/me/map-style',
+    handle(async (req, res) => res.json({ style: await mapStyles.get(req.student.student_id) })),
+  );
+  api.put(
+    '/me/map-style',
+    handle(async (req, res) =>
+      res.json({ style: await mapStyles.save(req.student.student_id, req.body) }),
+    ),
+  );
+  api.delete(
+    '/me/map-style',
+    handle(async (req, res) => res.json({ style: await mapStyles.reset(req.student.student_id) })),
   );
 
   // ----- checkpoints and attempts (BR07-BR25) -----
@@ -260,6 +293,7 @@ export function createApp({ pool, config, mailer, clock }) {
           id.parse(req.params.id),
           body.optionId,
           body.questionNumber,
+          body.optionIds,
         ),
       );
     }),
@@ -326,6 +360,23 @@ export function createApp({ pool, config, mailer, clock }) {
       await teams.reject(req.student.student_id, id.parse(req.params.id));
       res.status(204).end();
     }),
+  );
+
+  api.delete(
+    '/teams/me/members/:studentId',
+    handle(async (req, res) =>
+      res.json({
+        team: await teams.removeMember(req.student.student_id, id.parse(req.params.studentId)),
+      }),
+    ),
+  );
+  api.post(
+    '/teams/me/invitations/:id/cancel',
+    handle(async (req, res) =>
+      res.json({
+        team: await teams.cancelInvitation(req.student.student_id, id.parse(req.params.id)),
+      }),
+    ),
   );
 
   // ----- player profiles -----
@@ -420,12 +471,161 @@ export function createApp({ pool, config, mailer, clock }) {
       res.status(204).end();
     }),
   );
+  adminApi.post(
+    '/users/:id/role',
+    handle(async (req, res) => {
+      const body = schemas.adminRole.parse(req.body);
+      res.json({ user: await admin.setRole(actor(req), id.parse(req.params.id), body.role) });
+    }),
+  );
+  adminApi.post(
+    '/teams/:id/members',
+    handle(async (req, res) => {
+      const body = z.object({ studentId: id }).parse(req.body);
+      await admin.addTeamMember(actor(req), id.parse(req.params.id), body.studentId);
+      res.status(204).end();
+    }),
+  );
   adminApi.delete(
     '/users/:id',
     handle(async (req, res) => {
       await admin.deleteUser(actor(req), id.parse(req.params.id));
       res.status(204).end();
     }),
+  );
+  // ----- quests: checkpoints, photos, information and questions (BR49-BR51) -----
+  adminApi.get(
+    '/checkpoints',
+    handle(async (_req, res) => res.json({ quests: await quests.list() })),
+  );
+  adminApi.post(
+    '/checkpoints/check-link',
+    handle(async (req, res) =>
+      res.json(await quests.checkLink(questSchemas.link.parse(req.body).mapLink)),
+    ),
+  );
+  adminApi.post(
+    '/checkpoints',
+    handle(async (req, res) =>
+      res.status(201).json(await quests.create(actor(req), questSchemas.create.parse(req.body))),
+    ),
+  );
+  adminApi.get(
+    '/checkpoints/:id',
+    handle(async (req, res) => res.json(await quests.get(id.parse(req.params.id)))),
+  );
+  adminApi.patch(
+    '/checkpoints/:id',
+    handle(async (req, res) =>
+      res.json(
+        await quests.update(
+          actor(req),
+          id.parse(req.params.id),
+          questSchemas.update.parse(req.body),
+        ),
+      ),
+    ),
+  );
+  adminApi.delete(
+    '/checkpoints/:id',
+    handle(async (req, res) => res.json(await quests.remove(actor(req), id.parse(req.params.id)))),
+  );
+  adminApi.post(
+    '/checkpoints/:id/restore',
+    handle(async (req, res) => res.json(await quests.restore(actor(req), id.parse(req.params.id)))),
+  );
+  adminApi.put(
+    '/checkpoints/:id/facts',
+    handle(async (req, res) =>
+      res.json(
+        await quests.setFacts(
+          actor(req),
+          id.parse(req.params.id),
+          questSchemas.facts.parse(req.body).facts,
+        ),
+      ),
+    ),
+  );
+  adminApi.post(
+    '/checkpoints/:id/photos',
+    upload.single('file'),
+    handle(async (req, res) => {
+      if (!req.file) throw new AppError(400, 'INVALID_IMAGE', 'Choose an image to upload.');
+      res
+        .status(201)
+        .json(
+          await quests.addPhoto(
+            actor(req),
+            id.parse(req.params.id),
+            req.file.buffer,
+            questSchemas.photo.parse(req.body),
+          ),
+        );
+    }),
+  );
+  adminApi.patch(
+    '/checkpoints/:id/photos/:position',
+    handle(async (req, res) =>
+      res.json(
+        await quests.updatePhoto(
+          actor(req),
+          id.parse(req.params.id),
+          id.parse(req.params.position),
+          questSchemas.photoText.parse(req.body),
+        ),
+      ),
+    ),
+  );
+  adminApi.delete(
+    '/checkpoints/:id/photos/:position',
+    handle(async (req, res) =>
+      res.json(
+        await quests.removePhoto(
+          actor(req),
+          id.parse(req.params.id),
+          id.parse(req.params.position),
+        ),
+      ),
+    ),
+  );
+  adminApi.post(
+    '/checkpoints/:id/questions',
+    handle(async (req, res) =>
+      res
+        .status(201)
+        .json(
+          await quests.createQuestion(
+            actor(req),
+            id.parse(req.params.id),
+            questSchemas.question.parse(req.body),
+          ),
+        ),
+    ),
+  );
+  adminApi.put(
+    '/checkpoints/:id/questions/:questionId',
+    handle(async (req, res) =>
+      res.json(
+        await quests.updateQuestion(
+          actor(req),
+          id.parse(req.params.id),
+          id.parse(req.params.questionId),
+          questSchemas.question.parse(req.body),
+        ),
+      ),
+    ),
+  );
+  adminApi.delete(
+    '/checkpoints/:id/questions/:questionId',
+    handle(async (req, res) =>
+      res.json(
+        await quests.deleteQuestion(
+          actor(req),
+          id.parse(req.params.id),
+          id.parse(req.params.questionId),
+        ),
+      ),
+    ),
   );
   adminApi.get(
     '/teams',

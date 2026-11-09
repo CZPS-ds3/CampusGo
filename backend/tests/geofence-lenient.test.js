@@ -15,19 +15,34 @@ const at = (metres, extra = {}) => ({
 });
 
 describe('BR12 lenient geofence', () => {
-  it('BR12 the defaults are lenient: 100 m accuracy, 25 m grace zone, 20 m margin', () => {
-    expect(config).toMatchObject({ maxAccuracyM: 100, geofenceSlackM: 25, nearerMarginM: 20 });
+  it('BR12 the defaults are lenient: 200 m accuracy, 30 m grace zone, 50 m accuracy credit, 20 m margin', () => {
+    expect(config).toMatchObject({
+      maxAccuracyM: 200,
+      geofenceSlackM: 30,
+      accuracyCreditM: 50,
+      nearerMarginM: 20,
+    });
   });
 
-  it('BR12 a student up to 25 m beyond the radius is still inside; 30 m beyond is outside', () => {
+  it('BR12 a precise reading gets the grace zone: 30 m beyond the radius is inside, 45 m is outside', () => {
+    // accuracy 10 gives 10 m of credit, so the edge is 60 + 30 + 10 = 100 m.
     expect(evaluateLocation(at(60 + 20), CENTRE, config).outcome).toBe('inside');
-    expect(evaluateLocation(at(60 + 24), CENTRE, config).outcome).toBe('inside');
-    expect(evaluateLocation(at(60 + 30), CENTRE, config).outcome).toBe('outside');
+    expect(evaluateLocation(at(60 + 39), CENTRE, config).outcome).toBe('inside');
+    expect(evaluateLocation(at(60 + 45), CENTRE, config).outcome).toBe('outside');
   });
 
-  it('BR12 an accuracy of 100 m is accepted, 101 m is not', () => {
-    expect(evaluateLocation(at(0, { accuracy: 100 }), CENTRE, config).outcome).toBe('inside');
-    expect(evaluateLocation(at(0, { accuracy: 101 }), CENTRE, config).outcome).toBe(
+  it('BR12 a vaguer reading earns a wider edge, but the credit stops at 50 m', () => {
+    // accuracy 40: edge 60 + 30 + 40 = 130 m.
+    expect(evaluateLocation(at(125, { accuracy: 40 }), CENTRE, config).outcome).toBe('inside');
+    expect(evaluateLocation(at(135, { accuracy: 40 }), CENTRE, config).outcome).toBe('outside');
+    // accuracy 200 only earns the capped 50 m: edge 60 + 30 + 50 = 140 m.
+    expect(evaluateLocation(at(135, { accuracy: 200 }), CENTRE, config).outcome).toBe('inside');
+    expect(evaluateLocation(at(145, { accuracy: 200 }), CENTRE, config).outcome).toBe('outside');
+  });
+
+  it('BR12 an accuracy of 200 m is accepted, 201 m is not', () => {
+    expect(evaluateLocation(at(0, { accuracy: 200 }), CENTRE, config).outcome).toBe('inside');
+    expect(evaluateLocation(at(0, { accuracy: 201 }), CENTRE, config).outcome).toBe(
       'poor_accuracy',
     );
   });

@@ -231,12 +231,10 @@ describe('BR30 delete my account', () => {
     expect(team.body.team.size).toBe(1);
     const board = await lead.agent.get('/api/leaderboards/solo').expect(200);
     expect(board.body.entries.map((e) => e.id)).not.toContain(leaver.student.id);
-    const [[row]] = await ctx.pool.query('SELECT * FROM students WHERE student_id = ?', [
+    const [rows] = await ctx.pool.query('SELECT * FROM students WHERE student_id = ?', [
       leaver.student.id,
     ]);
-    expect(row.status).toBe('deleted');
-    expect(row.email).toMatch(/@deleted\.invalid$/);
-    expect(row.first_name).toBe('Deleted');
+    expect(rows).toHaveLength(0); // BR47: gone for good, not even a "deleted" row
     const again = await ctx.login('leaver', { firstName: 'New', lastName: 'Start' });
     expect(again.student.id).not.toBe(leaver.student.id);
   });

@@ -34,10 +34,18 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check": "npm run lint && npm run format:check && npm test && npm run build",
-    "test:e2e:full": "npm run e2e:fullstack --prefix frontend",
-    "screenshots": "cross-env SCREENSHOTS=1 npm run e2e --prefix frontend"
+    "test:e2e:full": "node tests/run-all.mjs --only e2e-fullstack",
+    "screenshots": "cross-env SCREENSHOTS=1 npm run e2e --prefix frontend",
+    "test:all": "node tests/run-all.mjs",
+    "test:all:ci": "node tests/run-all.mjs --ci",
+    "test:cat": "node tests/run-all.mjs --only",
+    "test:py": "node tests/run-all.mjs --only python-unit,python-db,python-api,python-security,regression,perf",
+    "lint:py": "python -m black --check --config tests/pyproject.toml tests/conftest.py tests/python tests/regression && python -m pylint --rcfile tests/.pylintrc tests/conftest.py tests/python tests/regression",
+    "format:py": "python -m black --config tests/pyproject.toml tests/conftest.py tests/python tests/regression",
+    "check:all": "npm run check && npm run lint:py && npm run test:all"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
     "@eslint/js": "^9.17.0",
     "concurrently": "^9.1.0",
     "eslint": "^9.17.0",

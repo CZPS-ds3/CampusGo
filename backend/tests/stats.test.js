@@ -40,7 +40,7 @@ describe('BR29 admin dashboard numbers', () => {
     expect(today.logins).toBe(2); // the admin's own login is not counted
     expect(today.passed).toBe(1);
     expect(stats.tiles).toMatchObject({ loginsToday: 2, questsPassedToday: 1, activeStudents: 1 });
-    expect(stats.usersByStatus).toEqual({ active: 1, blocked: 1, archived: 0, deleted: 0 });
+    expect(stats.usersByStatus).toEqual({ active: 1, blocked: 1, archived: 0 });
     expect(stats.checkpoints).toHaveLength(8);
     const sensoricum = stats.checkpoints.find((c) => c.name === 'Sensoricum');
     expect(sensoricum).toMatchObject({ attempts: 1, passed: 1, passRate: 1 });

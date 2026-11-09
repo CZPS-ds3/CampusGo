@@ -22,6 +22,7 @@
   --logo-bg: #ffffff;
   --map-bg: #eef0f2;
   --map-filter: none;
+  --map-filter-dark: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9) saturate(0.45);
   color-scheme: light;
 }
 
@@ -56,6 +57,8 @@
 
   --ease-pop: cubic-bezier(0.2, 0.9, 0.3, 1.2);
 
+  --close-size: 2.75rem; /* the X button, the same size as every icon button */
+  --close-gutter: 20px; /* its distance from the right edge of the window (32px from 768px, see screens.css) */
   --z-banner: 45;
   --z-map-ui: 20;
   --z-scrim: 60;
