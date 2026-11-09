@@ -33,3 +33,10 @@
 - On the solo ranking (player without a team) the chip and the link were side by side; they are now stacked, link below the chip, both on the left edge (`.ranks__locked`). Text and link target unchanged.
 - The "Team" tab's empty state (with its own button) was not touched.
 - New Playwright test `frontend/e2e/ranks-locked.spec.js` checks the stacking and the shared left edge on all six screen sizes.
+
+## Follow-up: align "Go to team" with the lock icon
+### AI Prompts Used
+4. The link needs to move slightly right: use the "G" as the alignment point, below the lock icon.
+
+### Decisions Made
+- The link now starts 11 px in (chip border 1 px + padding 10 px), so the "G" of "Go to team" sits right below the lock icon. The browser test compares the link with the lock icon's position (within 2 px) on all six screen sizes.
