@@ -1,4 +1,5 @@
 import { t } from '../i18n.js';
+import { CHEVRON } from '../map-pins.js';
 
 const LAYERS_ICON = 'M12 3 2 8l10 5 10-5-10-5ZM2 13l10 5 10-5M2 17.5l10 5 10-5';
 
@@ -117,26 +118,24 @@ export function MapControls({ view, switchView = view, onToggleView, base, onBas
   );
 }
 
-const NAV_ARROW = 'M12 2.5 19.5 20 12 15.6 4.5 20Z';
-
 /**
- * Bottom-left button in the style of a navigation app: a round button while the map follows the visitor, a
- * "Re-centre" pill once they have moved the map away (or before the live location is on).
+ * Bottom-left button in the puck's colours with its red chevron: a small red square while the map follows
+ * the visitor, a white (dark map: light grey) "Re-center" button once they have moved the map away (or before the live location is on).
  */
 export function RecenterButton({ following, onClick }) {
   return (
     <button
       type="button"
       className={`recenter${following ? ' is-following' : ''}`}
-      aria-label={t('Re-centre')}
-      title={t('Re-centre')}
+      aria-label={t('Re-center')}
+      title={t('Re-center')}
       onClick={onClick}
       data-testid="recenter"
     >
       <svg className="recenter__icon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
-        <path d={NAV_ARROW} />
+        <path d={CHEVRON} />
       </svg>
-      <span className="recenter__text">{t('Re-centre')}</span>
+      <span className="recenter__text">{t('Re-center')}</span>
     </button>
   );
 }

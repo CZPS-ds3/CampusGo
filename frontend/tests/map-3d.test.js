@@ -46,7 +46,6 @@ describe('3D map style', () => {
       'road-label',
       'ccq-route',
       'ccq-lead',
-      'ccq-accuracy',
     ]);
     expect(BASE.layers).toHaveLength(4); // the downloaded style is not changed
   });
@@ -85,7 +84,6 @@ describe('3D map style', () => {
       'road-label',
       'ccq-route',
       'ccq-lead',
-      'ccq-accuracy',
     ]);
   });
 
@@ -105,7 +103,7 @@ describe('3D map style', () => {
     expect(layer(style, 'ccq-route').paint['line-color']).toBe(PRESETS.ocean.route);
   });
 
-  it('draws the walking route from [lat, lng] points, dotted when it is a straight line, and the live position', () => {
+  it('draws the walking route from [lat, lng] points, dotted when it is a straight line', () => {
     const route = {
       points: [
         [49.1, 9.2],
@@ -113,12 +111,11 @@ describe('3D map style', () => {
       ],
       straight: true,
     };
-    const style = buildStyle(BASE, options({ route, me: { lat: 49.1, lng: 9.2, accuracy: 15 } }));
+    const style = buildStyle(BASE, options({ route }));
     expect(style.sources['ccq-route'].data.features[0].geometry.coordinates).toEqual([
       [9.2, 49.1],
       [9.3, 49.2],
     ]);
-    expect(style.sources['ccq-me'].data.features[0].geometry.coordinates).toEqual([9.2, 49.1]);
     expect(layer(style, 'ccq-route').paint['line-dasharray']).toEqual([0.2, 2]);
     const walked = buildStyle(BASE, options({ route: { ...route, straight: false } }));
     expect(layer(walked, 'ccq-route').paint['line-dasharray']).toBeUndefined();
@@ -139,15 +136,10 @@ describe('3D map style', () => {
     expect(STYLE_URLS.light).not.toBe(STYLE_URLS.dark);
   });
 
-  it('draws the accuracy circle at a sixth of the GPS accuracy, in metres on the ground, growing with the zoom', () => {
-    const me = { lat: 49.15, lng: 9.22, accuracy: 120 };
-    const radius = layer(buildStyle(BASE, options({ me })), 'ccq-accuracy').paint['circle-radius'];
-    const [, , , zoom0, px0, zoom22, px22] = radius;
-    expect([zoom0, zoom22]).toEqual([0, 22]);
-    expect(px22 / px0).toBeCloseTo(2 ** 22, -3);
-    // A sixth of 120 m is 20 m; at MapLibre zoom 17 (Leaflet 18) one pixel is about 0.39 m here: about 51 pixels.
-    expect(px0 * 2 ** 17).toBeCloseTo(51.2, 0);
-    expect(buildStyle(BASE, options()).sources['ccq-me'].data.features).toEqual([]);
+  it('leaves the live position and its accuracy circle to markers, so they can glide', () => {
+    const style = buildStyle(BASE, options());
+    expect(style.sources['ccq-me']).toBeUndefined();
+    expect(layer(style, 'ccq-accuracy')).toBeUndefined();
   });
 
   it('draws the curve from the visitor to the start of the route dotted, as wide as the route', () => {

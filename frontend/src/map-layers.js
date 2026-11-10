@@ -17,8 +17,11 @@ export const AERIAL_ATTRIBUTION =
   '<a href="https://www.govdata.de/dl-de/by-2-0">dl-de/by-2-0</a>';
 
 // The previews in the preferences show the middle of the Bildungscampus.
-/** Closest zoom of the campus map (Leaflet's numbers); the tiles are enlarged above the servers' own levels. */
-export const MAX_ZOOM = 21;
+/**
+ * Closest zoom of the campus map (Leaflet's numbers, about 21.26: 1.2 times as close as 21), also the following view
+ * on a phone; the tiles are enlarged above the servers' own levels.
+ */
+export const MAX_ZOOM = 21 + Math.log2(1.2);
 const PREVIEW_CENTRE = { lat: 49.1476, lng: 9.2172 };
 const PREVIEW_ZOOM = 17;
 const EARTH_RADIUS_M = 6378137;
