@@ -397,11 +397,11 @@ ol.stack {
   font-size: 11px;
   text-align: right;
 }
-/* The credits button ("i") rests on the same line as the GO badge and Re-centre, mirrored on the right; opened,
-   the credits wrap upwards in the space right of the GO badge. */
+/* The credits button ("i", 24 px) sits level with Re-centre (48 px): their middles on one line, beside the GO
+   badge, mirrored on the right. Opened, the credits wrap upwards in the space right of the GO badge. */
 .map3d .maplibregl-ctrl-bottom-right {
   left: calc(50% + var(--ball) / 2 + 8px);
-  bottom: calc(24px + var(--safe-b));
+  bottom: calc(24px + 12px + var(--safe-b));
 }
 .map3d .maplibregl-ctrl-bottom-right .maplibregl-ctrl {
   margin: 0 16px 0 0;

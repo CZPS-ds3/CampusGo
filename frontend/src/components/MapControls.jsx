@@ -59,10 +59,11 @@ function Compass({ bearing, pitch, onNorth }) {
 /**
  * The one set of map buttons on the map page, the same for the flat and the 3D map: compass (3D only), zoom,
  * the aerial/street switch and the 2D/3D switch. The flat map keeps an empty slot where the compass goes, so the buttons below
- * it stay in place when the view switches. The switch shows the view that is on, so students can turn 3D off on a slow
+ * it stay in place when the view switches. The 2D/3D switch shows `switchView`, which changes at the tap, while
+ * the compass follows the map until its animation is over. The switch shows the view that is on, so students can turn 3D off on a slow
  * phone.
  */
-export function MapControls({ view, onToggleView, base, onBase, camera, map }) {
+export function MapControls({ view, switchView = view, onToggleView, base, onBase, camera, map }) {
   return (
     <div className="mapctl" data-testid="map-controls">
       {view === '3d' ? (
@@ -103,13 +104,13 @@ export function MapControls({ view, onToggleView, base, onBase, camera, map }) {
         <button
           type="button"
           role="switch"
-          aria-checked={view === '3d'}
+          aria-checked={switchView === '3d'}
           aria-label={t('3D map')}
           title={t('3D map')}
           className="mapctl__btn mapctl__view"
           onClick={onToggleView}
         >
-          {view === '3d' ? '3D' : '2D'}
+          {switchView === '3d' ? '3D' : '2D'}
         </button>
       </div>
     </div>

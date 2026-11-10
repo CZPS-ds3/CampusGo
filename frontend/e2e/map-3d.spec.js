@@ -142,8 +142,44 @@ test.describe('map buttons, 3D map and live location', () => {
     // The compass appears above "+" in a slot kept free on the flat map, so no button moves.
     await expect(page.getByRole('button', { name: 'Point the map north' })).toBeVisible();
     expect(await zoomIn.boundingBox()).toEqual(plusIn2d);
-    await page.waitForTimeout(1200); // the tilt on the spot
-    await viewSwitch(page).click();
+    // The 3D map tilts in on the spot; the compass needle tilts with it.
+    const needle = page.locator('.mapctl__needle');
+    await expect(needle).toHaveAttribute('style', /rotateX\(55deg\)/, { timeout: 25_000 });
+    // The way back is the tilt in reverse: the 3D map flattens step by step, then the flat map takes over.
+    // Measured in the page, because the test runner itself can be slower than the animation.
+    const back = await page.evaluate(
+      () =>
+        new Promise((resolve) => {
+          const started = performance.now();
+          const compass = document.querySelector('.mapctl__needle');
+          const tilts = [];
+          const toggle = document.querySelector('[role="switch"][aria-label="3D map"]');
+          let early = null;
+          // Shortly after the tap: the switch already shows 2D while the 3D map is still flattening.
+          setTimeout(() => {
+            early = {
+              checked: toggle.getAttribute('aria-checked'),
+              text: toggle.textContent,
+              still3d: Boolean(document.querySelector('[data-testid="map-3d"]')),
+            };
+          }, 60);
+          const sample = setInterval(() => {
+            const tilt = compass?.style.transform.match(/rotateX\(([\d.]+)deg\)/)?.[1];
+            if (tilt !== undefined) tilts.push(Number(tilt));
+          }, 50);
+          toggle.click();
+          const watcher = new MutationObserver(() => {
+            if (!document.querySelector('.leaflet-container')) return;
+            watcher.disconnect();
+            clearInterval(sample);
+            resolve({ ms: performance.now() - started, tilts, early });
+          });
+          watcher.observe(document.body, { childList: true, subtree: true });
+        }),
+    );
+    expect(back.early).toEqual({ checked: 'false', text: '2D', still3d: true });
+    expect(back.ms).toBeGreaterThan(400);
+    expect(back.tilts.some((tilt) => tilt > 5 && tilt < 50)).toBe(true);
     await expect(page.locator('.leaflet-container')).toBeVisible();
     await expect.poll(() => tileZooms(page)).toEqual(['17']);
     const after = await library.boundingBox();
@@ -156,6 +192,28 @@ test.describe('map buttons, 3D map and live location', () => {
     await expect.poll(() => tileZooms(page)).toEqual(['17']);
     const again = await library.boundingBox();
     expect(Math.abs(again.x - before.x)).toBeLessThan(3);
+
+    // Into 3D a second time without moving the map: it tilts in again, step by step (sampled in the page from the
+    // click on, because the test runner can be slower than the animation).
+    const tiltsIn = await page.evaluate(
+      () =>
+        new Promise((resolve) => {
+          const tilts = [];
+          document.querySelector('[role="switch"][aria-label="3D map"]').click();
+          const sample = setInterval(() => {
+            const tilt = document
+              .querySelector('.mapctl__needle')
+              ?.style.transform.match(/rotateX\(([\d.]+)deg\)/)?.[1];
+            if (tilt !== undefined) tilts.push(Number(tilt));
+            if (tilts.at(-1) >= 54.9 || tilts.length > 1000) {
+              clearInterval(sample);
+              resolve(tilts);
+            }
+          }, 30);
+        }),
+    );
+    expect(tiltsIn.at(-1)).toBeGreaterThanOrEqual(54.9);
+    expect(tiltsIn.some((tilt) => tilt > 5 && tilt < 50)).toBe(true);
   });
 
   test('moving the map stops following; Re-centre flies back to the live position', async ({
