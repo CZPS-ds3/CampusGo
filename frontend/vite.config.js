@@ -5,6 +5,9 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   return {
     plugins: [react()],
+    // MapLibre 6 starts its web worker from a file next to its own module; Vite's dependency pre-bundling would
+    // move the module away from that file, so the dev server serves MapLibre as it is.
+    optimizeDeps: { exclude: ['maplibre-gl'] },
     server: {
       port: 5173,
       proxy: {

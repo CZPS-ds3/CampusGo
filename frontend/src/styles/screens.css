@@ -385,6 +385,208 @@ ol.stack {
   font-size: 11px;
   margin-bottom: 0;
 }
+/* The 3D map (MapLibre): MapLibre's own CSS makes the map `position: relative`, which would collapse it to no
+   height; it fills the screen like the flat map. */
+.map.map3d {
+  position: absolute;
+}
+.map3d-pin {
+  cursor: pointer;
+}
+.map3d .maplibregl-ctrl-attrib {
+  font-size: 11px;
+  text-align: right;
+}
+/* The credits button ("i") rests on the same line as the GO badge and Re-centre, mirrored on the right; opened,
+   the credits wrap upwards in the space right of the GO badge. */
+.map3d .maplibregl-ctrl-bottom-right {
+  left: calc(50% + var(--ball) / 2 + 8px);
+  bottom: calc(24px + var(--safe-b));
+}
+.map3d .maplibregl-ctrl-bottom-right .maplibregl-ctrl {
+  margin: 0 16px 0 0;
+}
+
+/* One set of map buttons for the flat and the 3D map, below the player card. */
+.mapctl {
+  position: absolute;
+  z-index: 1;
+  top: calc(var(--map-header, calc(var(--safe-t) + 164px)) + 12px);
+  right: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+.mapctl__group {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: 0 0 0 2px rgb(0 0 0 / 0.1);
+}
+/* Room for the compass on the flat map, so the buttons below do not move on a 2D/3D switch. */
+.mapctl__slot {
+  width: 48px;
+  height: 48px;
+  visibility: hidden;
+}
+.mapctl__btn {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 0;
+  background: #fff;
+  color: #14181c;
+  font: 700 1.5rem/1 var(--font);
+  cursor: pointer;
+}
+.mapctl__btn + .mapctl__btn {
+  border-top: 1px solid #ddd;
+}
+.mapctl__btn:hover {
+  background: #f2f2f2;
+}
+.mapctl__view {
+  font-size: 0.95rem;
+}
+/* The 2D/3D switch shows the view that is on; 3D on is marked in the signal colour. */
+.mapctl__view[aria-checked='true'] {
+  background: var(--signal);
+  color: var(--on-signal, #fff);
+}
+.mapctl__needle {
+  transition: transform 80ms linear;
+}
+.mapctl__needle-north {
+  fill: #e2001a;
+}
+.mapctl__needle-south {
+  fill: #8a949c;
+}
+/* The aerial/street switch: on (aerial photo) is a darker grey, so it is not mistaken for the red 3D. */
+.mapctl__layers-icon {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+.mapctl__base[aria-checked='true'] {
+  background: #4d5861;
+  color: #fff;
+}
+.mapctl__base[aria-checked='true']:hover {
+  background: #3d464d;
+}
+
+/* Re-centre, bottom left, in the shape of a navigation app's button but in the app's own font. */
+.recenter {
+  position: absolute;
+  z-index: 1;
+  left: 16px;
+  bottom: calc(24px + var(--safe-b));
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 48px;
+  max-width: 200px;
+  padding: 0 18px 0 14px;
+  border: 0;
+  border-radius: 24px;
+  background: #fff;
+  color: #1a73e8;
+  font: 600 0.95rem/1 var(--font);
+  box-shadow:
+    0 1px 3px rgb(0 0 0 / 0.3),
+    0 4px 8px rgb(0 0 0 / 0.15);
+  cursor: pointer;
+  overflow: hidden;
+  white-space: nowrap;
+  transition:
+    max-width 260ms var(--ease-pop, ease),
+    padding 260ms ease;
+}
+.recenter__icon {
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+/* While following, it shrinks to a round button with a filled arrow. */
+.recenter.is-following {
+  max-width: 48px;
+  padding: 0 13px;
+}
+.recenter.is-following .recenter__icon {
+  fill: currentColor;
+}
+.recenter.is-following .recenter__text {
+  opacity: 0;
+}
+.recenter__text {
+  transition: opacity 160ms ease;
+}
+
+/* The live position: a blue disc with a white rim and arrow, and a soft pulse around it. */
+.puck-wrap {
+  background: none;
+  border: 0;
+}
+.puck {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+}
+.puck__pulse {
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  background: rgb(26 115 232 / 0.25);
+  animation: puck-pulse 2s ease-out infinite;
+}
+.puck__disc {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: #1a73e8;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.35);
+}
+.puck__arrow {
+  fill: #fff;
+  transition: transform 300ms ease;
+}
+.puck--still .puck__arrow {
+  opacity: 0.75;
+}
+@keyframes puck-pulse {
+  from {
+    transform: scale(0.6);
+    opacity: 1;
+  }
+  to {
+    transform: scale(1.4);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .puck__pulse {
+    animation: none;
+  }
+  .recenter,
+  .puck__arrow {
+    transition: none;
+  }
+}
 .mapscreen__top {
   position: absolute;
   z-index: var(--z-map-ui);

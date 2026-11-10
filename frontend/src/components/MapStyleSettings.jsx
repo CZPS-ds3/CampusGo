@@ -4,6 +4,7 @@ import { errorText } from '../api/errorText.js';
 import { contrastRatio, normalizeColor, parseColor, toHex } from '../colors.js';
 import { useToast } from '../hooks/useToast.jsx';
 import { t, useSettings } from '../i18n.js';
+import { buildingColour, isDark } from '../map-3d.js';
 import {
   DEFAULT_MAP_STYLE,
   PRESETS,
@@ -34,13 +35,16 @@ const MIN_CONTRAST = 3;
 const channelOf = (event) =>
   Math.max(0, Math.min(255, Math.round(Number(event.target.value) || 0)));
 
-/** Edits the one colour that is selected: picker, a text field for #rrggbb or rgb(r, g, b), and R, G, B. */
+/**
+ * Edits the one colour that is selected: picker, a text field for #rrggbb or rgb(r, g, b), and R, G, B. Without
+ * `ground` there is no contrast warning (buildings are meant to sit close to the ground colour).
+ */
 function ColourEditor({ label, value, onChange, ground }) {
   const id = useId();
   const [text, setText] = useState(value);
   const rgb = parseColor(value);
   const bad = normalizeColor(text) === null;
-  const low = contrastRatio(value, ground) < MIN_CONTRAST;
+  const low = ground !== undefined && contrastRatio(value, ground) < MIN_CONTRAST;
 
   useEffect(() => {
     setText((now) => (normalizeColor(now) === value ? now : value));
@@ -110,12 +114,14 @@ function ColourEditor({ label, value, onChange, ground }) {
   );
 }
 
-function Preview({ style }) {
+function Preview({ style, theme }) {
   const variables = Object.fromEntries(
     Object.entries(styleVariables(style, { keepDefaults: true })).filter(
       ([, v]) => v !== undefined,
     ),
   );
+  // The default building colour depends on light or dark, as on the 3D map.
+  variables['--buildings'] = buildingColour(style, isDark(style, theme));
   return (
     <div
       className="mapstyle__preview"
@@ -124,6 +130,11 @@ function Preview({ style }) {
       role="img"
       aria-label={t('Preview of your map style')}
     >
+      <span className="mapstyle__buildings" aria-hidden="true">
+        <span className="mapstyle__building" />
+        <span className="mapstyle__building mapstyle__building--tall" />
+        <span className="mapstyle__building" />
+      </span>
       <span className="mapstyle__route" />
       <span className="mapstyle__preview-pins" aria-hidden="true">
         <span className="mapstyle__pin mapstyle__pin--open" />
@@ -194,6 +205,12 @@ export function MapStyleSettings() {
       value: draft.route,
       set: (hex) => ({ route: hex }),
     },
+    {
+      id: 'buildings',
+      label: t('Buildings (3D map)'),
+      value: buildingColour(draft, isDark(draft, theme)),
+      set: (hex) => ({ buildings: hex }),
+    },
   ];
   const current = colours.find((c) => c.id === picked);
 
@@ -222,10 +239,10 @@ export function MapStyleSettings() {
         </p>
         <p className="small muted">
           {t(
-            'Light, dark and the tint change the street map only; the aerial photo stays as it is.',
+            'Light, dark and the tint change the street map only, flat and 3D; the aerial photo stays as it is.',
           )}
         </p>
-        <Preview style={draft} />
+        <Preview style={draft} theme={theme} />
 
         <div className="seg seg--3" role="radiogroup" aria-label={t('Map base')}>
           {BASES.map(([id, name]) => (
@@ -285,7 +302,7 @@ export function MapStyleSettings() {
           key={picked}
           label={current.label}
           value={current.value}
-          ground={ground}
+          ground={picked === 'buildings' ? undefined : ground}
           onChange={(hex) =>
             setDraft((now) => cleanStyle({ ...now, preset: 'custom', ...current.set(hex) }))
           }

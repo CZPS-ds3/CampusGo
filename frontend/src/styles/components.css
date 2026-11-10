@@ -498,6 +498,20 @@ a.card:active {
   border-radius: 999px;
   background: var(--line2);
 }
+/* A sheet's X: a bar of no height that sticks while the sheet scrolls, so the X always shows in the top right
+   corner without pushing the content down. */
+.sheet__closebar {
+  position: sticky;
+  z-index: 2;
+  top: calc(0.375rem + 12px); /* the grip and its gap, so the X stays exactly where it starts */
+  display: flex;
+  justify-content: flex-end;
+  height: 0;
+  overflow: visible;
+}
+.sheet__head {
+  padding-right: calc(var(--close-size) + 8px); /* keeps the status and long names clear of the X */
+}
 .modal-root {
   position: fixed;
   inset: 0;
@@ -928,6 +942,25 @@ a.card:active {
   align-items: center;
   justify-content: space-around;
   padding: 0 12px;
+}
+/* Three blocks in the preview stand for the buildings of the 3D map. */
+.mapstyle__buildings {
+  position: absolute;
+  right: 8px;
+  bottom: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+}
+.mapstyle__building {
+  width: 14px;
+  height: 18px;
+  border-radius: 2px 2px 0 0;
+  background: var(--buildings, #dcd9d4);
+  box-shadow: inset -4px 0 0 rgb(0 0 0 / 0.12);
+}
+.mapstyle__building--tall {
+  height: 30px;
 }
 .mapstyle__route {
   position: absolute;
