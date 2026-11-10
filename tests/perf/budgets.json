@@ -9,5 +9,7 @@
   "parallel_total_seconds": 15,
   "first_question_ms": 1500,
   "bundle_js_gzip_bytes": 220000,
-  "bundle_css_gzip_bytes": 25000
+  "bundle_css_gzip_bytes": 25000,
+  "map3d_js_gzip_bytes": 400000,
+  "map3d_css_gzip_bytes": 15000
 }

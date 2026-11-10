@@ -38,47 +38,77 @@ export async function fetchWalkingRoute(from, to, signal) {
   };
 }
 
+const IDLE = { status: 'idle', route: null, from: null, target: null };
+
 /**
  * Route helper for the map. `status` is idle, locating, routing, ready, denied or error. When the router is
- * not reachable a straight line is drawn instead, so the visitor still sees the direction.
+ * not reachable a straight line is drawn instead, so the visitor still sees the direction. `shown` counts the
+ * routes the visitor asked for (not the new ones after a wrong turn), so the map zooms out only for those.
  */
 export function useRoute() {
-  const [state, setState] = useState({ status: 'idle', route: null, from: null });
+  const [state, setState] = useState(IDLE);
+  const [shown, setShown] = useState(0);
   const controller = useRef(null);
+  const target = useRef(null);
 
   const clear = useCallback(() => {
     controller.current?.abort();
-    setState({ status: 'idle', route: null, from: null });
+    target.current = null;
+    setState(IDLE);
   }, []);
 
-  const show = useCallback(async (target) => {
+  /** Draws the route to `to`. `known` is the live position when the map already has one (no second request). */
+  const show = useCallback(async (to, known = null) => {
     controller.current?.abort();
     const abort = new AbortController();
     controller.current = abort;
-    setState({ status: 'locating', route: null, from: null });
-    let from;
-    try {
-      from = await currentPosition();
-    } catch (error) {
-      setState({ status: error?.code === 1 ? 'denied' : 'error', route: null, from: null });
-      return;
+    target.current = to;
+    setState({ ...IDLE, status: 'locating', target: to });
+    let from = known;
+    if (!from) {
+      try {
+        from = await currentPosition();
+      } catch (error) {
+        setState({ ...IDLE, status: error?.code === 1 ? 'denied' : 'error', target: to });
+        return;
+      }
     }
-    setState({ status: 'routing', route: null, from });
+    setState({ ...IDLE, status: 'routing', from, target: to });
     const timer = setTimeout(() => abort.abort(), TIMEOUT_MS);
     try {
-      const route = await fetchWalkingRoute(from, target, abort.signal);
-      setState({ status: 'ready', route, from });
+      const route = await fetchWalkingRoute(from, to, abort.signal);
+      setState({ status: 'ready', route, from, target: to });
     } catch {
       if (controller.current !== abort) return;
       setState({
         status: 'ready',
         from,
-        route: { points: [from, target], meters: null, seconds: null, straight: true },
+        target: to,
+        route: { points: [from, to], meters: null, seconds: null, straight: true },
       });
+    } finally {
+      clearTimeout(timer);
+      if (controller.current === abort) setShown((n) => n + 1);
+    }
+  }, []);
+
+  /** After a wrong turn: a new route from where the visitor is now. The old one stays if the router fails. */
+  const reroute = useCallback(async (from) => {
+    const to = target.current;
+    if (!to) return;
+    controller.current?.abort();
+    const abort = new AbortController();
+    controller.current = abort;
+    const timer = setTimeout(() => abort.abort(), TIMEOUT_MS);
+    try {
+      const route = await fetchWalkingRoute(from, to, abort.signal);
+      if (controller.current === abort) setState({ status: 'ready', route, from, target: to });
+    } catch {
+      // The router is busy or offline: the visitor keeps the route they had, which still leads there.
     } finally {
       clearTimeout(timer);
     }
   }, []);
 
-  return { ...state, show, clear };
+  return { ...state, shown, show, clear, reroute };
 }

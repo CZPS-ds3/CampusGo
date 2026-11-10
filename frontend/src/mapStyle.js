@@ -12,6 +12,7 @@ export const DEFAULT_MAP_STYLE = {
   pins: { open: '#4d5861', done: '#137a4e', locked: '#8a949c' },
   highlight: '#e2001a',
   route: '#e2001a',
+  buildings: '#dcd9d4',
 };
 
 export const PRESETS = {
@@ -23,6 +24,7 @@ export const PRESETS = {
     pins: { open: '#0b5cad', done: '#0a7d5a', locked: '#7a8aa0' },
     highlight: '#ff7a00',
     route: '#0b5cad',
+    buildings: '#c5dcef',
   },
   forest: {
     preset: 'forest',
@@ -31,6 +33,7 @@ export const PRESETS = {
     pins: { open: '#2f5d34', done: '#8a5a00', locked: '#7d8c7a' },
     highlight: '#c2185b',
     route: '#2f5d34',
+    buildings: '#cfe0c4',
   },
   sunset: {
     preset: 'sunset',
@@ -39,6 +42,7 @@ export const PRESETS = {
     pins: { open: '#8a3b12', done: '#2d6a4f', locked: '#a08c80' },
     highlight: '#d6246e',
     route: '#d6246e',
+    buildings: '#f0d2bd',
   },
   mono: {
     preset: 'mono',
@@ -47,6 +51,7 @@ export const PRESETS = {
     pins: { open: '#333333', done: '#666666', locked: '#999999' },
     highlight: '#000000',
     route: '#000000',
+    buildings: '#cccccc',
   },
 };
 
@@ -67,6 +72,7 @@ export function cleanStyle(input) {
   }
   base.highlight = colour(input.highlight, base.highlight);
   base.route = colour(input.route, base.route);
+  base.buildings = colour(input.buildings, base.buildings);
   return base;
 }
 
@@ -104,6 +110,7 @@ export function styleVariables(value, { keepDefaults = false } = {}) {
     ...pin('pin-locked', value.pins.locked, d.pins.locked),
     ...pin('highlight', value.highlight, d.highlight),
     '--route': custom(value.route, d.route),
+    '--buildings': custom(value.buildings, d.buildings),
   };
 }
 
