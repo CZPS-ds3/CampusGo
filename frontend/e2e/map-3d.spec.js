@@ -109,8 +109,9 @@ test.describe('map buttons, 3D map and live location', () => {
     await page.goto('/map');
     await following(page);
 
-    // Street map from the aerial/street switch; wait for the fly-in to the close following view (19), then zoom
-    // step by step (a click during an animation would be cut short by it).
+    // Street map from the aerial/street switch; wait for the fly-in to the close following view (about 20.4, on a
+    // phone the closest zoom, drawn with the street server's last tiles, 19), then zoom step by step (a click during
+    // an animation would be cut short by it).
     await page.getByRole('switch', { name: 'Aerial photo' }).click();
     await expect(page.getByRole('switch', { name: 'Aerial photo' })).toHaveAttribute(
       'aria-checked',
@@ -216,7 +217,7 @@ test.describe('map buttons, 3D map and live location', () => {
     expect(tiltsIn.some((tilt) => tilt > 5 && tilt < 50)).toBe(true);
   });
 
-  test('moving the map stops following; Re-centre flies back to the live position', async ({
+  test('moving the map stops following; Re-center flies back to the live position', async ({
     page,
   }, testInfo) => {
     await offlineMap(page);
@@ -231,10 +232,10 @@ test.describe('map buttons, 3D map and live location', () => {
     await page.mouse.move(box.x + box.width / 2 + 120, box.y + box.height / 2 + 80, { steps: 8 });
     await page.mouse.up();
     await expect(page.getByTestId('recenter')).not.toHaveClass(/is-following/);
-    await expect(page.getByTestId('recenter').getByText('Re-centre')).toBeVisible();
+    await expect(page.getByTestId('recenter').getByText('Re-center')).toBeVisible();
     await shot(page, testInfo, '41-map-recenter');
 
-    await page.getByRole('button', { name: 'Re-centre' }).click();
+    await page.getByRole('button', { name: 'Re-center' }).click();
     await following(page);
   });
 
@@ -304,6 +305,32 @@ test.describe('map buttons, 3D map and live location', () => {
     expect(await close.boundingBox()).toEqual(atTop);
     await close.click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
+  });
+
+  test('BR48 regression: the tint shows on the flat street map, the aerial photo stays untinted', async ({
+    page,
+  }) => {
+    await offlineMap(page);
+    await login(page);
+    await page.goto('/profile');
+    const settings = page.getByTestId('map-style');
+    await settings.locator('summary').click();
+    await settings.getByRole('button', { name: /Ocean/ }).click(); // tint 30 %
+    await settings.getByRole('button', { name: 'Save map style' }).click();
+    await expect(page.getByText('Map style saved')).toBeVisible();
+
+    await page.goto('/map');
+    const opacityOf = (selector) =>
+      page
+        .locator(selector)
+        .first()
+        .evaluate((layer) => getComputedStyle(layer).opacity);
+    // Leaflet writes an inline opacity of 1 on every tile layer; the tint must still win on the street map.
+    await page.getByRole('switch', { name: 'Aerial photo' }).click();
+    await expect.poll(() => opacityOf('.leaflet-container .map-tiles--street')).toBe('0.7');
+    await page.getByRole('switch', { name: 'Aerial photo' }).click();
+    await expect(page.locator('.leaflet-container .map-tiles--street')).toHaveCount(0);
+    await expect.poll(() => opacityOf('.leaflet-container .leaflet-layer')).toBe('1');
   });
 
   test('BR48 the map style offers a colour for the 3D buildings', async ({ page }) => {
