@@ -29,7 +29,7 @@ export const DE_EXTRA = new Map([
   ['Zoom in', 'Vergrößern'],
   ['Zoom out', 'Verkleinern'],
   ['Point the map north', 'Karte nach Norden ausrichten'],
-  ['Re-centre', 'Zentrieren'],
+  ['Re-center', 'Zentrieren'],
   [
     'Location is blocked in your browser, so the map cannot follow you.',
     'Der Standort ist in deinem Browser gesperrt, daher kann dir die Karte nicht folgen.',

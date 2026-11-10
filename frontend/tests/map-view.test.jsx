@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MapView } from '../src/components/MapView.jsx';
 import { ToastProvider } from '../src/hooks/useToast.jsx';
 import { setSettings } from '../src/i18n.js';
+import { CHEVRON, accuracyRingPx } from '../src/map-pins.js';
 
 // Leaflet draws circles and lines only when the browser says it can draw SVG; jsdom lacks this one method.
 vi.hoisted(() => {
@@ -89,37 +90,65 @@ describe('campus map: one set of buttons for the flat and the 3D map', () => {
 });
 
 describe('live location on the map', () => {
-  it('Re-centre asks for the location when it is not on yet', async () => {
+  it('Re-center asks for the location when it is not on yet', async () => {
     const onLocate = vi.fn();
     renderMap({ onLocate });
-    await userEvent.click(screen.getByRole('button', { name: 'Re-centre' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Re-center' }));
     expect(onLocate).toHaveBeenCalledTimes(1);
   });
 
-  it('Re-centre explains a blocked location instead of asking again', async () => {
+  it('Re-center explains a blocked location instead of asking again', async () => {
     const onLocate = vi.fn();
     renderMap({ onLocate, locationStatus: 'denied' });
-    await userEvent.click(screen.getByRole('button', { name: 'Re-centre' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Re-center' }));
     expect(onLocate).not.toHaveBeenCalled();
     expect(
       await screen.findByText('Location is blocked in your browser, so the map cannot follow you.'),
     ).toBeInTheDocument();
   });
 
-  it('shows the puck with its arrow turned to the walking direction', () => {
+  it('turns the direction wedge on the ground to the walking direction', () => {
     const { container } = renderMap({
       me: { lat: 49.148, lng: 9.216, accuracy: 12 },
       heading: 90,
     });
-    expect(container.querySelector('.puck__arrow').style.transform).toBe('rotate(90deg)');
-    // While following, Re-centre is the small round button.
+    expect(container.querySelector('.puck-ground__beam').style.transform).toBe('rotate(90deg)');
+    expect(container.querySelector('.puck-ground')).not.toHaveClass('puck-ground--still');
+    // While following, Re-center is the small round button.
     expect(screen.getByTestId('recenter')).toHaveClass('is-following');
+  });
+
+  it('draws Re-center with the red chevron and an accuracy circle of a fixed size on screen', () => {
+    const { container } = renderMap({ me: { lat: 49.148, lng: 9.216, accuracy: 12 } });
+    expect(screen.getByTestId('recenter').querySelector('path').getAttribute('d')).toBe(CHEVRON);
+    const ring = container.querySelector('.puck-ground__ring');
+    const size = `${accuracyRingPx(12, 49.148) * 2}px`;
+    expect(ring.style.width).toBe(size);
+    // A marker, not a circle in metres: it keeps this size at every zoom.
+    expect(container.querySelector('.leaflet-overlay-pane path')).toBeNull();
+  });
+
+  it('draws the live position as a still, white low-poly ball with lines between its facets, nothing round it', () => {
+    const { container } = renderMap({ me: { lat: 49.148, lng: 9.216, accuracy: 12 } });
+    expect(container.querySelector('.puck .puck__ball')).not.toBeNull();
+    for (const gone of ['glow', 'shadow', 'shine']) {
+      expect(container.querySelector(`.puck__${gone}`)).toBeNull();
+    }
+    expect(container.querySelector('.puck__edges').getAttribute('d')).toMatch(/^M/);
+    // Only the facets facing the viewer are drawn: about half of the 80.
+    const drawn = [...container.querySelectorAll('.puck__facet')].filter((f) =>
+      f.getAttribute('points'),
+    );
+    expect(drawn.length).toBeGreaterThan(30);
+    expect(drawn.length).toBeLessThan(50);
+    // No direction known yet: the wedge on the ground is hidden.
+    expect(container.querySelector('.puck-ground')).toHaveClass('puck-ground--still');
   });
 
   it('BR51 does not follow a position outside the map area', async () => {
     renderMap({ me: { lat: 52.52, lng: 13.4, accuracy: 12 } });
     expect(screen.getByTestId('recenter')).not.toHaveClass('is-following');
-    await userEvent.click(screen.getByRole('button', { name: 'Re-centre' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Re-center' }));
     expect(
       await screen.findByText('You are outside the map area, so the map shows the campus.'),
     ).toBeInTheDocument();
