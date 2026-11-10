@@ -24,6 +24,17 @@ function trustProxy(value) {
   return Number.isFinite(hops) ? hops : value;
 }
 
+// The pre-seeded administrators (BR26, BR37). They log in with the normal e-mail code, so only whoever reads one of
+// these mailboxes can use the account; that is why they may be outside the school domain.
+const DEFAULT_ADMIN_EMAILS = 'sekretariat.dski@heilbronn.dhbw.de,dhbw.campusgo@gmail.com';
+
+/** The admin addresses: ADMIN_EMAILS (comma-separated, default both above) plus an older single ADMIN_EMAIL. */
+function adminEmails(env) {
+  const listed = `${env.ADMIN_EMAILS ?? DEFAULT_ADMIN_EMAILS},${env.ADMIN_EMAIL ?? ''}`;
+  const clean = listed.split(',').map((email) => email.trim().toLowerCase());
+  return [...new Set(clean.filter(Boolean))];
+}
+
 export function loadConfig(env = process.env) {
   const nodeEnv = env.NODE_ENV ?? 'development';
   const smtpPort = int(env.SMTP_PORT, 587);
@@ -41,7 +52,7 @@ export function loadConfig(env = process.env) {
         : (env.DATABASE_URL ?? 'mysql://cq:cq_dev_password@127.0.0.1:3307/campusquest'),
     sessionSecret: env.SESSION_SECRET ?? 'dev-session-secret',
     otpSecret: env.OTP_SECRET ?? 'dev-otp-secret',
-    adminEmail: (env.ADMIN_EMAIL ?? 'sekretariat.dski@heilbronn.dhbw.de').trim().toLowerCase(),
+    adminEmails: adminEmails(env),
     allowedEmailDomain: (env.ALLOWED_EMAIL_DOMAIN ?? 'heilbronn.dhbw.de').toLowerCase(),
     otpTtlMinutes: int(env.OTP_TTL_MINUTES, 10),
     otpMaxFailedAttempts: int(env.OTP_MAX_FAILED_ATTEMPTS, 5),

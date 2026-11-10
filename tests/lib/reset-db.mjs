@@ -3,7 +3,7 @@
 import { migrate } from '../../backend/src/db/migrate.js';
 import { createPool } from '../../backend/src/db/pool.js';
 import {
-  seedAdmin,
+  seedAdmins,
   seedImages,
   seedPlaceholderFacts,
   seedPlaceholderQuestions,
@@ -38,7 +38,7 @@ export async function resetDatabase(dbUrl = testDatabaseUrl()) {
     await seedPlaceholderQuestions(seedPool);
     await seedPlaceholderFacts(seedPool);
     await seedImages(seedPool);
-    await seedAdmin(seedPool, loadConfig({ NODE_ENV: 'development' }).adminEmail);
+    await seedAdmins(seedPool, loadConfig({ NODE_ENV: 'development' }).adminEmails);
     // Canary: the state every Python test relies on.
     const [[admin]] = await seedPool.query("SELECT student_id FROM students WHERE role = 'admin'");
     const [[{ checkpoints }]] = await seedPool.query(

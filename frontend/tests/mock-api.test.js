@@ -41,6 +41,8 @@ beforeEach(() => {
 describe('mock API keeps the same rules as the server (BR12, BR13, BR14, BR18)', () => {
   it('BR02 a school address is required', async () => {
     await expect(api.requestOtp('ada@gmail.com')).rejects.toMatchObject({ code: 'INVALID_EMAIL' });
+    // BR26: the pre-seeded admin addresses may be outside the school domain.
+    await expect(api.requestOtp('dhbw.campusgo@gmail.com')).resolves.toBeDefined();
     await expect(api.requestOtp('ada@heilbronn.dhbw.de')).resolves.toMatchObject({
       message: 'If the account exists, an email containing the OTP has been sent.',
     });
