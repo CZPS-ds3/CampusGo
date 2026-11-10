@@ -31,12 +31,6 @@ test('BR26 the administrator addresses come from the configuration, in lower cas
     loadConfig({ ADMIN_EMAILS: ' Boss@Heilbronn.DHBW.de , b@gmail.com' }).adminEmails,
     ['boss@heilbronn.dhbw.de', 'b@gmail.com'],
   );
-  // An older single ADMIN_EMAIL is kept in the list.
-  assert.ok(
-    loadConfig({ ADMIN_EMAIL: 'Old@heilbronn.dhbw.de' }).adminEmails.includes(
-      'old@heilbronn.dhbw.de',
-    ),
-  );
 });
 
 test('start-up errors are explained in plain words', () => {

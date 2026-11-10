@@ -26,7 +26,9 @@ REPORTS = Path(os.environ.get("CQ_REPORTS_DIR", ROOT / "tests" / "reports"))
 OTP_SECRET = os.environ.get("CQ_OTP_SECRET", "")
 KNOWN_CODE = "123456"
 DOMAIN = "heilbronn.dhbw.de"
-ADMIN_EMAIL = f"sekretariat.dski@{DOMAIN}"
+# The pre-seeded admin accounts (ADMIN_EMAILS, BR26); the study office is the main one (id 1).
+MAIN_ADMIN_EMAIL = f"sekretariat.dski@{DOMAIN}"
+ADMIN_EMAILS = {MAIN_ADMIN_EMAIL, "dhbw.campusgo@gmail.com"}
 TIMEOUT = 15
 
 _ip_counter = itertools.count(random.randint(1, 60000))
@@ -218,4 +220,4 @@ def player():
 @pytest.fixture
 def admin():
     """The pre-seeded administrator, signed in (the account exists from the first seed on)."""
-    return Player(ADMIN_EMAIL).sign_in()
+    return Player(MAIN_ADMIN_EMAIL).sign_in()

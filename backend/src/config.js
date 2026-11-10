@@ -28,10 +28,11 @@ function trustProxy(value) {
 // these mailboxes can use the account; that is why they may be outside the school domain.
 const DEFAULT_ADMIN_EMAILS = 'sekretariat.dski@heilbronn.dhbw.de,dhbw.campusgo@gmail.com';
 
-/** The admin addresses: ADMIN_EMAILS (comma-separated, default both above) plus an older single ADMIN_EMAIL. */
+/** The admin addresses from ADMIN_EMAILS (comma-separated, in lower case; default both above). */
 function adminEmails(env) {
-  const listed = `${env.ADMIN_EMAILS ?? DEFAULT_ADMIN_EMAILS},${env.ADMIN_EMAIL ?? ''}`;
-  const clean = listed.split(',').map((email) => email.trim().toLowerCase());
+  const clean = (env.ADMIN_EMAILS ?? DEFAULT_ADMIN_EMAILS)
+    .split(',')
+    .map((email) => email.trim().toLowerCase());
   return [...new Set(clean.filter(Boolean))];
 }
 
