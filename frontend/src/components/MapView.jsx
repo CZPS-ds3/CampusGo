@@ -5,12 +5,23 @@ import { useToast } from '../hooks/useToast.jsx';
 import { getMapBase, getMapView, t } from '../i18n.js';
 import { MAX_ZOOM, createBaseLayers } from '../map-layers.js';
 import {
+  FOLLOW_LOW,
+  FOLLOW_ZOOM,
+  GLIDE_SECONDS,
+  GROUND_SIZE,
   PIN_ANCHOR,
   PIN_SIZE,
+  PUCK_ANCHOR,
   PUCK_SIZE,
-  accuracyCircleM,
+  accuracyRingPx,
+  glide,
+  groundHtml,
+  metresPerPixel,
   pinHtml,
   puckHtml,
+  rollBall,
+  scalePuck,
+  updateGround,
 } from '../map-pins.js';
 import { useMapStyle } from '../mapStyle.js';
 import { MapControls, RecenterButton } from './MapControls.jsx';
@@ -21,11 +32,11 @@ const DARKEN = import.meta.env.VITE_MAP_DARKEN !== 'false';
 const CAMPUS_CENTER = [49.1485, 9.2165];
 const MAX_BOUNDS = L.latLngBounds([49.12, 9.17], [49.18, 9.26]);
 const MIN_ZOOM = 14;
-/** Zoom (Leaflet's numbers) of the view that follows the live position. */
-export const FOLLOW_ZOOM = 19;
-const LOCATION_BLUE = '#1a73e8';
 
 const reducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+/** The zoom of the following view: on a phone as close as the map goes, on a larger screen FOLLOW_ZOOM. */
+const followZoom = () =>
+  window.matchMedia?.('(max-width: 767px)').matches ? MAX_ZOOM : FOLLOW_ZOOM;
 
 // MapLibre is large, so it is only downloaded when someone opens the 3D map. If the download fails, the stand-in
 // reports it and the page shows the flat map again.
@@ -79,7 +90,7 @@ function MapView2D({
   const puck = useRef(null);
   const style = useMapStyle();
   const latest = useRef({});
-  latest.current = { onSelect, onReady, onUserMove, mayFitPins, checkpoints };
+  latest.current = { onSelect, onReady, onUserMove, mayFitPins, checkpoints, heading, me };
 
   useEffect(() => {
     const saved = camera.current;
@@ -103,18 +114,34 @@ function MapView2D({
       camera.current = { center: [lat, lng], zoom: instance.getZoom(), bearing: 0, pitch: 0 };
     };
     instance.on('moveend', save);
+    // The live position shrinks and fades as the map zooms out.
+    const scale = () => scalePuck(container.current, instance.getZoom());
+    instance.on('zoom', scale);
+    scale();
     save();
     instance.on('dragstart', () => latest.current.onUserMove());
+    // While following, the map's middle is a little above the visitor, so the ball sits low in the middle.
+    const followCentre = (point, zoom = instance.getZoom()) =>
+      instance.unproject(
+        instance.project(point, zoom).subtract(L.point(0, instance.getSize().y * FOLLOW_LOW)),
+        zoom,
+      );
     const fly = (point, zoom) =>
       reducedMotion()
-        ? instance.setView(point, zoom)
-        : instance.flyTo(point, zoom, { duration: 1.2, easeLinearity: 0.2 });
+        ? instance.setView(followCentre(point, zoom), zoom)
+        : instance.flyTo(followCentre(point, zoom), zoom, { duration: 1.2, easeLinearity: 0.2 });
     latest.current.onReady({
       zoomIn: () => instance.zoomIn(),
       zoomOut: () => instance.zoomOut(),
       north: () => undefined,
       flyTo: fly,
-      panTo: (point) => instance.panTo(point, { animate: !reducedMotion(), duration: 0.6 }),
+      // At the pace of the ball's glide, so a walking visitor stays in the middle.
+      panTo: (point) =>
+        instance.panTo(followCentre(point), {
+          animate: !reducedMotion(),
+          duration: GLIDE_SECONDS,
+          easeLinearity: 1,
+        }),
       fitPoints: (points) => instance.flyToBounds(L.latLngBounds(points), fitOptions(200)),
       fitPins: () =>
         instance.flyToBounds(
@@ -130,6 +157,7 @@ function MapView2D({
       markerStore.clear();
       routeLine.current = null;
       leadLine.current = null;
+      puck.current?.stop();
       puck.current = null;
     };
   }, [camera]);
@@ -207,47 +235,59 @@ function MapView2D({
     else leadLine.current = L.polyline(route.lead, look).addTo(map.current);
   }, [route, style.route]);
 
-  // The live position: accuracy circle and the puck with its arrow turned to the walking direction.
+  // The live position as two markers: the ground (accuracy circle and direction wedge, below the pins) and the ball
+  // on top. Both glide from reading to reading, and the ball rolls the way it moved.
+  const lat = me?.lat;
+  const lng = me?.lng;
   useEffect(() => {
-    if (!me) {
-      puck.current?.circle.remove();
-      puck.current?.marker.remove();
+    if (lat === undefined) {
+      puck.current?.stop();
+      puck.current?.ground.remove();
+      puck.current?.ball.remove();
       puck.current = null;
       return;
     }
-    const point = [me.lat, me.lng];
+    const point = [lat, lng];
     if (!puck.current) {
-      puck.current = {
-        circle: L.circle(point, {
-          radius: accuracyCircleM(me.accuracy),
-          color: LOCATION_BLUE,
-          weight: 1,
-          opacity: 0.35,
-          fillColor: LOCATION_BLUE,
-          fillOpacity: 0.12,
-          interactive: false,
-        }).addTo(map.current),
-        marker: L.marker(point, {
-          icon: L.divIcon({
-            className: 'puck-wrap',
-            iconSize: [PUCK_SIZE, PUCK_SIZE],
-            html: puckHtml(heading),
-          }),
+      const marker = (html, size, anchor, zIndexOffset) =>
+        L.marker(point, {
+          icon: L.divIcon({ className: 'puck-wrap', iconSize: size, iconAnchor: anchor, html }),
           interactive: false,
           keyboard: false,
-          zIndexOffset: 1000,
-        }).addTo(map.current),
+          zIndexOffset,
+        }).addTo(map.current);
+      const { heading: turn, me: here } = latest.current;
+      puck.current = {
+        ground: marker(
+          groundHtml(turn, accuracyRingPx(here.accuracy, lat)),
+          [GROUND_SIZE, GROUND_SIZE],
+          [GROUND_SIZE / 2, GROUND_SIZE / 2],
+          -1000,
+        ),
+        ball: marker(puckHtml(), PUCK_SIZE, PUCK_ANCHOR, 1000),
+        at: point,
+        stop: () => undefined,
       };
       return;
     }
-    puck.current.circle.setLatLng(point).setRadius(accuracyCircleM(me.accuracy));
-    puck.current.marker.setLatLng(point);
-    // Turn the arrow in place, so the pulse keeps running instead of restarting with a new icon.
-    const element = puck.current.marker.getElement();
-    const arrow = element?.querySelector('.puck__arrow');
-    if (arrow) arrow.style.transform = `rotate(${Math.round(heading ?? 0)}deg)`;
-    element?.querySelector('.puck')?.classList.toggle('puck--still', heading === null);
-  }, [me, heading]);
+    const live = puck.current;
+    live.stop();
+    live.stop = glide(live.at, point, (at, east, north) => {
+      if (!map.current) return;
+      live.at = at;
+      live.ground.setLatLng(at);
+      live.ball.setLatLng(at);
+      const px = metresPerPixel(at[0], map.current.getZoom());
+      rollBall(live.ball.getElement(), east / px, north / px);
+    });
+  }, [lat, lng]);
+
+  // Direction and accuracy change in place, so a compass reading never interrupts the glide.
+  const accuracy = me?.accuracy;
+  useEffect(() => {
+    if (!puck.current || accuracy === undefined) return;
+    updateGround(puck.current.ground.getElement(), heading, accuracyRingPx(accuracy, lat));
+  }, [heading, accuracy, lat]);
 
   return (
     <div
@@ -262,7 +302,7 @@ function MapView2D({
 /**
  * The campus map. It starts flat (2D) or tilted with buildings (3D), and with the aerial photo or the street map,
  * as chosen in the preferences; the buttons switch both without moving the camera. With the live location on, the
- * map follows the visitor closely; moving the map stops that, and "Re-centre" flies back.
+ * map follows the visitor closely; moving the map stops that, and "Re-center" flies back.
  *
  * `route` is the part of the walking route still ahead, `fitRoute` counts the routes the visitor asked for (the map
  * zooms out to each new one), `me` is the live position { lat, lng, accuracy } and `onLocate` starts it.
@@ -314,12 +354,12 @@ export function MapView({
       if (followed.current !== key) api.current.panTo(point);
     } else {
       centred.current = true;
-      api.current.flyTo(point, FOLLOW_ZOOM);
+      api.current.flyTo(point, followZoom());
     }
     followed.current = key;
   }, [hereLat, hereLng, following, mapVersion]);
 
-  // A new route the visitor asked for: show all of it, and stop following until "Re-centre".
+  // A new route the visitor asked for: show all of it, and stop following until "Re-center".
   useEffect(() => {
     const shown = latest.current.route;
     if (!fitRoute || !shown) return;
@@ -333,9 +373,10 @@ export function MapView({
       return;
     }
     setFollowing(true);
+    // Every tap starts the location if needed and, on iOS, asks for the compass, which a tap alone may do.
+    onLocate();
     if (!me) {
       centred.current = false; // the first position will fly in
-      onLocate();
       return;
     }
     if (!here) {
@@ -345,7 +386,7 @@ export function MapView({
     }
     centred.current = true;
     followed.current = `${here.lat},${here.lng}`; // the fly-in is not cut short by a follow pan
-    api.current?.flyTo([here.lat, here.lng], FOLLOW_ZOOM);
+    api.current?.flyTo([here.lat, here.lng], followZoom());
   };
 
   // 3D to 2D: the 3D map first eases back to flat and north up, then the flat map takes over at that view.

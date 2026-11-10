@@ -1,6 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { act, cleanup, renderHook } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { bearingDeg, distanceM, insideMapArea, leadIn, routeProgress } from '../src/geo.js';
-import { compassFrom, headingFrom } from '../src/hooks/useLiveLocation.js';
+import {
+  compassFrom,
+  headingFrom,
+  keepReading,
+  useLiveLocation,
+} from '../src/hooks/useLiveLocation.js';
 
 // Test positions are made up near the Bildungscampus; no real student location is used.
 const A = [49.148, 9.216];
@@ -116,9 +122,87 @@ describe('direction of the arrow', () => {
     expect(walked.anchor).toEqual(NORTH_OF_A);
   });
 
-  it('reads the compass on Android (absolute alpha) and iOS (webkitCompassHeading)', () => {
-    expect(compassFrom({ absolute: true, alpha: 90 })).toBe(270);
-    expect(compassFrom({ webkitCompassHeading: 42 })).toBe(42);
-    expect(compassFrom({ absolute: false, alpha: 90 })).toBeNull();
+  it('reads the compass on Android and Windows (absolute alpha) and iOS (webkitCompassHeading)', () => {
+    expect(compassFrom({ absolute: true, alpha: 90 })).toEqual({ heading: 270, absolute: true });
+    expect(compassFrom({ webkitCompassHeading: 42 })).toEqual({ heading: 42, absolute: true });
+    expect(compassFrom({ alpha: null })).toBeNull();
+  });
+
+  it('reads a gyroscope without a compass (PCs, tablets) as a relative turn', () => {
+    expect(compassFrom({ absolute: false, alpha: 90 })).toEqual({ heading: 270, absolute: false });
+  });
+
+  it('turns the direction with the screen when the device is held sideways', () => {
+    expect(compassFrom({ webkitCompassHeading: 300 }, 90).heading).toBe(30);
+    expect(compassFrom({ absolute: true, alpha: 0 }, 270).heading).toBe(270);
+  });
+});
+
+describe('device orientation turns the live arrow', () => {
+  const orientation = (type, values) =>
+    act(() => {
+      window.dispatchEvent(Object.assign(new Event(type), values));
+    });
+
+  beforeEach(() => {
+    vi.stubGlobal('navigator', {
+      ...navigator,
+      permissions: undefined,
+      geolocation: { watchPosition: vi.fn(() => 1), clearWatch: vi.fn() },
+    });
+  });
+  afterEach(() => {
+    cleanup(); // unmount while the stubbed geolocation is still there
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('follows the gyroscope on a device without a compass', () => {
+    const { result } = renderHook(() => useLiveLocation());
+    act(() => result.current.start());
+    orientation('deviceorientation', { alpha: 300, absolute: false });
+    expect(result.current.heading).toBe(60);
+    orientation('deviceorientation', { alpha: 270, absolute: false });
+    expect(result.current.heading).toBe(90);
+  });
+
+  it('prefers the compass over the gyroscope once a compass reading has come', () => {
+    const { result } = renderHook(() => useLiveLocation());
+    act(() => result.current.start());
+    orientation('deviceorientationabsolute', { alpha: 180, absolute: true });
+    expect(result.current.heading).toBe(180);
+    orientation('deviceorientation', { alpha: 90, absolute: false });
+    expect(result.current.heading).toBe(180);
+  });
+
+  it('lines the gyroscope up with the walking direction', () => {
+    const { result } = renderHook(() => useLiveLocation());
+    act(() => result.current.start());
+    const onReading = navigator.geolocation.watchPosition.mock.calls[0][0];
+    orientation('deviceorientation', { alpha: 0, absolute: false }); // gyroscope says "north"
+    // Walking east at a steady pace: the GPS direction wins and teaches the gyroscope where north is.
+    act(() => onReading(reading(...A, { heading: 90, speed: 1.4 })));
+    expect(result.current.heading).toBe(90);
+    vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 10_000); // standing still later
+    orientation('deviceorientation', { alpha: 270, absolute: false }); // turned 90 degrees right
+    expect(result.current.heading).toBe(180);
+  });
+});
+
+describe('which reading the live position shows', () => {
+  const gps = { lat: A[0], lng: A[1], accuracy: 5, time: 0 };
+
+  it('keeps a precise GPS fix when a coarse Wi-Fi reading comes right after it', () => {
+    expect(keepReading(gps, { lat: 49.14805, lng: A[1], accuracy: 60, time: 2000 })).toBe(false);
+  });
+
+  it('takes a coarser reading after a while, or when the visitor clearly moved', () => {
+    expect(keepReading(gps, { lat: 49.14805, lng: A[1], accuracy: 60, time: 11000 })).toBe(true);
+    expect(keepReading(gps, { ...gps, lat: NORTH_OF_A[0], accuracy: 60, time: 2000 })).toBe(true);
+  });
+
+  it('always takes the first reading and any about as precise one', () => {
+    expect(keepReading(null, gps)).toBe(true);
+    expect(keepReading(gps, { ...gps, accuracy: 7, time: 1000 })).toBe(true);
   });
 });
