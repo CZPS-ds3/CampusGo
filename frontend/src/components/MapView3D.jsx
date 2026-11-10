@@ -29,6 +29,7 @@ import {
   pinHtml,
   puckHtml,
   rollBall,
+  scalePuck,
   updateGround,
 } from '../map-pins.js';
 import { useMapStyle } from '../mapStyle.js';
@@ -195,6 +196,10 @@ export default function MapView3D({
     const report = () =>
       latest.current.onCamera({ bearing: instance.getBearing(), pitch: instance.getPitch() });
     instance.on('rotate', report);
+    // The live position shrinks and fades as the map zooms out.
+    const scale = () => scalePuck(container.current, fromGlZoom(instance.getZoom()));
+    instance.on('zoom', scale);
+    scale();
     instance.on('pitch', report);
     instance.on('moveend', () => {
       const { lat, lng } = instance.getCenter();

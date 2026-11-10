@@ -37,6 +37,18 @@ export const CHEVRON = 'M6.5 15.5 12 8l5.5 7.5';
 export const FOLLOW_ZOOM = 19 + Math.log2(2.2 * 1.2);
 /** How far below the middle of the map the ball is shown while following, as a share of the map's height. */
 export const FOLLOW_LOW = 0.2;
+const SMALLEST = 0.3;
+
+/**
+ * How large the ball and its waves are drawn at a Leaflet zoom: full size in the following view and closer, smaller
+ * (down to 30 %) when zoomed out, so a visitor who zoomed away is nudged to tap Re-center.
+ */
+export const puckScale = (zoom) => Math.min(1, Math.max(SMALLEST, 2 ** (zoom - FOLLOW_ZOOM)));
+
+/** Hands the scale for `zoom` to the live-position markers inside a map's element (--puck-scale in screens.css). */
+export function scalePuck(element, zoom) {
+  element?.style.setProperty('--puck-scale', puckScale(zoom).toFixed(3));
+}
 // The accuracy circle keeps the size it had in the following view at zoom 19 x 2.2 (about 20.14).
 const RING_ZOOM = 19 + Math.log2(2.2);
 
@@ -61,31 +73,35 @@ export function accuracyRingPx(accuracy, lat) {
 /** Box of the ball marker in pixels (the ball is 28 or 42 px, see --puck-orb); its middle sits on the position. */
 export const PUCK_SIZE = [44, 44];
 export const PUCK_ANCHOR = [22, 22];
-/** Box of the ground marker (accuracy circle and direction wedge) in pixels; its middle sits on the position. */
+/** Box of the ground marker (sonar waves and direction wedge) in pixels; its middle sits on the position. */
 export const GROUND_SIZE = 96;
 
+// A few waves in a loop, one after another, like a submarine's sonar.
+const WAVES = '<span class="puck-ground__wave"></span>'.repeat(3);
+
 /**
- * What lies on the ground under the ball, below the checkpoint pins: the accuracy circle (`ringPx` radius) and the
- * soft red wedge that points to the walking or compass direction (`heading`, 0 = north; hidden while unknown).
+ * What lies on the ground under the ball, below the checkpoint pins: sonar waves rolling out to as far as the GPS
+ * accuracy reaches (`ringPx` radius) and the soft red wedge that points to the walking or compass direction
+ * (`heading`, 0 = north; hidden while unknown).
  */
 export function groundHtml(heading, ringPx) {
   const known = Number.isFinite(heading);
   return `<span class="puck-ground${known ? '' : ' puck-ground--still'}" aria-hidden="true">
-    <span class="puck-ground__ring" style="width: ${ringPx * 2}px; height: ${ringPx * 2}px"></span>
+    <span class="puck-ground__waves" style="width: ${ringPx * 2}px; height: ${ringPx * 2}px">${WAVES}</span>
     <span class="puck-ground__beam" style="transform: rotate(${Math.round(heading ?? 0)}deg)"></span>
   </span>`;
 }
 
-/** Updates the ground in place: the wedge turned to `heading` (hidden if null) and the circle's radius. */
+/** Updates the ground in place: the wedge turned to `heading` (hidden if null) and how far the waves go. */
 export function updateGround(element, heading, ringPx) {
   const ground = element?.querySelector('.puck-ground');
   if (!ground) return;
   ground.classList.toggle('puck-ground--still', !Number.isFinite(heading));
   ground.querySelector('.puck-ground__beam').style.transform =
     `rotate(${Math.round(heading ?? 0)}deg)`;
-  const ring = ground.querySelector('.puck-ground__ring').style;
-  ring.width = `${ringPx * 2}px`;
-  ring.height = `${ringPx * 2}px`;
+  const waves = ground.querySelector('.puck-ground__waves').style;
+  waves.width = `${ringPx * 2}px`;
+  waves.height = `${ringPx * 2}px`;
 }
 
 // The ball is low-poly, like a geodesic dome: an icosahedron with each triangle split in four and pushed out onto a

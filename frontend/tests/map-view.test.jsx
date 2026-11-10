@@ -121,7 +121,8 @@ describe('live location on the map', () => {
   it('draws Re-center with the red chevron and an accuracy circle of a fixed size on screen', () => {
     const { container } = renderMap({ me: { lat: 49.148, lng: 9.216, accuracy: 12 } });
     expect(screen.getByTestId('recenter').querySelector('path').getAttribute('d')).toBe(CHEVRON);
-    const ring = container.querySelector('.puck-ground__ring');
+    const ring = container.querySelector('.puck-ground__waves');
+    expect(ring.querySelectorAll('.puck-ground__wave')).toHaveLength(3);
     const size = `${accuracyRingPx(12, 49.148) * 2}px`;
     expect(ring.style.width).toBe(size);
     // A marker, not a circle in metres: it keeps this size at every zoom.

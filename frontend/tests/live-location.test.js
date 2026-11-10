@@ -1,7 +1,12 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { bearingDeg, distanceM, insideMapArea, leadIn, routeProgress } from '../src/geo.js';
-import { compassFrom, headingFrom, useLiveLocation } from '../src/hooks/useLiveLocation.js';
+import {
+  compassFrom,
+  headingFrom,
+  keepReading,
+  useLiveLocation,
+} from '../src/hooks/useLiveLocation.js';
 
 // Test positions are made up near the Bildungscampus; no real student location is used.
 const A = [49.148, 9.216];
@@ -181,5 +186,23 @@ describe('device orientation turns the live arrow', () => {
     vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 10_000); // standing still later
     orientation('deviceorientation', { alpha: 270, absolute: false }); // turned 90 degrees right
     expect(result.current.heading).toBe(180);
+  });
+});
+
+describe('which reading the live position shows', () => {
+  const gps = { lat: A[0], lng: A[1], accuracy: 5, time: 0 };
+
+  it('keeps a precise GPS fix when a coarse Wi-Fi reading comes right after it', () => {
+    expect(keepReading(gps, { lat: 49.14805, lng: A[1], accuracy: 60, time: 2000 })).toBe(false);
+  });
+
+  it('takes a coarser reading after a while, or when the visitor clearly moved', () => {
+    expect(keepReading(gps, { lat: 49.14805, lng: A[1], accuracy: 60, time: 11000 })).toBe(true);
+    expect(keepReading(gps, { ...gps, lat: NORTH_OF_A[0], accuracy: 60, time: 2000 })).toBe(true);
+  });
+
+  it('always takes the first reading and any about as precise one', () => {
+    expect(keepReading(null, gps)).toBe(true);
+    expect(keepReading(gps, { ...gps, accuracy: 7, time: 1000 })).toBe(true);
   });
 });

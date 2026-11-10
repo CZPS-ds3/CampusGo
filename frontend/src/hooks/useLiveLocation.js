@@ -30,6 +30,20 @@ export function headingFrom({ coords }, anchor) {
   return { heading: null, anchor: anchor ?? here, fromGps: false };
 }
 
+const BETTER_FIX_WINS_MS = 10000;
+
+/**
+ * Whether a new reading should replace the shown position. A much coarser reading (say a 60 m Wi-Fi fix right after
+ * a 5 m GPS fix) is ignored for a few seconds unless it shows a real move, so the ball does not jump off the
+ * visitor's actual spot; after that, or when the visitor clearly moved, the new reading always wins.
+ */
+export function keepReading(shown, next) {
+  if (!shown) return true;
+  if (next.accuracy <= shown.accuracy * 1.5) return true;
+  if (next.time - shown.time > BETTER_FIX_WINS_MS) return true;
+  return distanceM([shown.lat, shown.lng], [next.lat, next.lng]) > shown.accuracy + next.accuracy;
+}
+
 /** How far the screen is turned from the device's natural position (0, 90, 180 or 270), so sideways works too. */
 export function screenAngle() {
   const angle = window.screen?.orientation?.angle ?? window.orientation;
@@ -61,6 +75,7 @@ export function useLiveLocation() {
   const [state, setState] = useState({ status: 'off', position: null, heading: null });
   const watch = useRef(null);
   const anchor = useRef(null);
+  const shown = useRef(null);
   const gpsHeadingAt = useRef(0);
   const compassOn = useRef(false);
   // A compass (measured against north) wins over the gyroscope once it has been seen.
@@ -116,6 +131,14 @@ export function useLiveLocation() {
     setState((now) => ({ ...now, status: now.position ? 'on' : 'waiting' }));
     watch.current = navigator.geolocation.watchPosition(
       (reading) => {
+        const fix = {
+          lat: reading.coords.latitude,
+          lng: reading.coords.longitude,
+          accuracy: reading.coords.accuracy,
+          time: reading.timestamp ?? Date.now(),
+        };
+        if (!keepReading(shown.current, fix)) return;
+        shown.current = fix;
         const next = headingFrom(reading, anchor.current);
         anchor.current = next.anchor;
         if (next.fromGps) {
@@ -127,11 +150,7 @@ export function useLiveLocation() {
         setState((now) => ({
           ...now,
           status: 'on',
-          position: {
-            lat: reading.coords.latitude,
-            lng: reading.coords.longitude,
-            accuracy: reading.coords.accuracy,
-          },
+          position: { lat: fix.lat, lng: fix.lng, accuracy: fix.accuracy },
           heading: next.heading ?? now.heading,
         }));
       },
@@ -144,7 +163,8 @@ export function useLiveLocation() {
           setState((now) => (now.position ? now : { ...now, status: 'unavailable' }));
         }
       },
-      { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
+      // Always a fresh fix from the GPS (never a cached one), as precise as the device can give.
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 },
     );
   }, [listenToCompass]);
 

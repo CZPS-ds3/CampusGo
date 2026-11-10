@@ -595,6 +595,7 @@ ol.stack {
   width: 100%;
   height: 100%;
 }
+/* --puck-scale (1 to 0.3, set on the map by zoom in map-pins.js): smaller and fainter when zoomed out. */
 .puck__body {
   position: absolute;
   top: calc(50% - var(--orb) / 2);
@@ -602,6 +603,8 @@ ol.stack {
   width: var(--orb);
   height: var(--orb);
   margin-left: calc(var(--orb) / -2);
+  opacity: calc(0.4 + 0.6 * var(--puck-scale, 1));
+  transform: scale(var(--puck-scale, 1));
 }
 .puck__ball {
   position: relative;
@@ -619,7 +622,7 @@ ol.stack {
 .puck__edges {
   fill: none;
   stroke: var(--signal);
-  stroke-width: 1.25;
+  stroke-width: 0.3;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -627,54 +630,71 @@ ol.stack {
 .puck__outline {
   fill: none;
   stroke: var(--signal);
-  stroke-width: 1.6;
+  stroke-width: 0.4;
   stroke-linejoin: round;
 }
 
-/* The ground under the ball (GROUND_SIZE box): the accuracy circle, the same size on screen at every zoom, and the
-   soft red wedge to the walking or compass direction, turned round the position. */
+/* The ground under the ball (GROUND_SIZE box): sonar waves rolling out from the ball to as far as the GPS accuracy
+   reaches (the same size on screen at every zoom), and the soft red wedge to the walking or compass direction,
+   turned round the position. */
 .puck-ground {
   position: relative;
   display: block;
   width: 100%;
   height: 100%;
 }
-/* At least a little wider than the ball, so the bigger ball on a phone never hides it. */
-.puck-ground__ring {
+/* How far the waves go: at least a little past the ball, so they always show. */
+.puck-ground__waves {
   position: absolute;
   top: 50%;
   left: 50%;
   min-width: calc(var(--puck-orb) + 12px);
   min-height: calc(var(--puck-orb) + 12px);
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
+  opacity: calc(0.4 + 0.6 * var(--puck-scale, 1));
+  transform: translate(-50%, -50%) scale(var(--puck-scale, 1));
 }
-.puck-ground__ring::before,
-.puck-ground__ring::after {
-  content: '';
+/* Each wave grows from under the ball to the edge and fades out there, in the colour and brightness the accuracy
+   circle had; the three start a third of a loop apart. */
+.puck-ground__wave {
   position: absolute;
   inset: 0;
   border-radius: 50%;
-}
-.puck-ground__ring::before {
   background: var(--locate-radius);
-  opacity: var(--locate-radius-fill);
+  opacity: 0;
+  animation: puck-wave 4.8s ease-out infinite;
 }
-.puck-ground__ring::after {
-  border: 1px dashed var(--locate-radius);
-  opacity: var(--locate-radius-stroke);
+.puck-ground__wave:nth-child(2) {
+  animation-delay: -1.6s;
+}
+.puck-ground__wave:nth-child(3) {
+  animation-delay: -3.2s;
+}
+@keyframes puck-wave {
+  from {
+    transform: scale(0.35);
+    opacity: var(--locate-radius-fill);
+  }
+  70% {
+    opacity: var(--locate-radius-fill);
+  }
+  to {
+    transform: scale(1);
+    opacity: 0;
+  }
 }
 /* Longer on a phone, so it shows past the bigger ball. */
 .puck-ground__beam {
   position: absolute;
   inset: calc((28px - var(--puck-orb)) * 0.9);
+  scale: var(--puck-scale, 1);
   background: radial-gradient(
     closest-side,
     rgb(226 0 26 / 0.5),
     rgb(255 143 156 / 0.3) 65%,
     transparent 100%
   );
-  clip-path: polygon(50% 50%, 32% 0, 68% 0);
+  /* 128 degrees wide: from the middle out to the top corners and down the sides. */
+  clip-path: polygon(50% 50%, 0 25.6%, 0 0, 100% 0, 100% 25.6%);
   transition: transform 300ms ease;
 }
 .puck-ground--still .puck-ground__beam {
@@ -684,6 +704,13 @@ ol.stack {
   .recenter,
   .puck-ground__beam {
     transition: none;
+  }
+  /* One still circle instead of moving waves. */
+  .puck-ground__wave {
+    animation: none;
+  }
+  .puck-ground__wave:first-child {
+    opacity: var(--locate-radius-fill);
   }
 }
 .mapscreen__top {

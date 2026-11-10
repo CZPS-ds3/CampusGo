@@ -20,6 +20,7 @@ import {
   pinHtml,
   puckHtml,
   rollBall,
+  scalePuck,
   updateGround,
 } from '../map-pins.js';
 import { useMapStyle } from '../mapStyle.js';
@@ -113,6 +114,10 @@ function MapView2D({
       camera.current = { center: [lat, lng], zoom: instance.getZoom(), bearing: 0, pitch: 0 };
     };
     instance.on('moveend', save);
+    // The live position shrinks and fades as the map zooms out.
+    const scale = () => scalePuck(container.current, instance.getZoom());
+    instance.on('zoom', scale);
+    scale();
     save();
     instance.on('dragstart', () => latest.current.onUserMove());
     // While following, the map's middle is a little above the visitor, so the ball sits low in the middle.
