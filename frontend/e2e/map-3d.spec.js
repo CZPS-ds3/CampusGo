@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { expectNoHorizontalScroll, login, openCheckpoint, shot } from './helpers.js';
+import { expectNoHorizontalScroll, login, open, openCheckpoint, shot } from './helpers.js';
 
 // Made-up test positions on the Bildungscampus (the seed's placeholder checkpoints), never a real student's.
 const CAMPUS_GARDEN = { latitude: 49.147082, longitude: 9.217206, accuracy: 10 };
@@ -69,7 +69,7 @@ test.describe('map buttons, 3D map and live location', () => {
   }, testInfo) => {
     await offlineMap(page);
     await login(page);
-    await page.goto('/profile');
+    await open(page, '/profile');
     await page.getByTestId('map-type').getByRole('radio', { name: '3D with buildings' }).click();
     await page.goto('/map');
 
@@ -312,7 +312,7 @@ test.describe('map buttons, 3D map and live location', () => {
   }) => {
     await offlineMap(page);
     await login(page);
-    await page.goto('/profile');
+    await open(page, '/profile');
     const settings = page.getByTestId('map-style');
     await settings.locator('summary').click();
     await settings.getByRole('button', { name: /Ocean/ }).click(); // tint 30 %
@@ -335,7 +335,7 @@ test.describe('map buttons, 3D map and live location', () => {
 
   test('BR48 the map style offers a colour for the 3D buildings', async ({ page }) => {
     await login(page);
-    await page.goto('/profile');
+    await open(page, '/profile');
     const settings = page.getByTestId('map-style');
     await settings.locator('summary').click();
     await settings.getByRole('button', { name: 'Buildings (3D map)' }).click();
@@ -344,6 +344,7 @@ test.describe('map buttons, 3D map and live location', () => {
     await settings.getByRole('button', { name: 'Save map style' }).click();
     await expect(page.getByText('Map style saved')).toBeVisible();
     await page.reload();
+    await open(page, '/profile'); // a reload starts on the map
     await page.getByTestId('map-style').locator('summary').click();
     await page.getByTestId('map-style').getByRole('button', { name: 'Buildings (3D map)' }).click();
     await expect(

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { api, USE_MOCKS } from '../api/client.js';
 import { errorText } from '../api/errorText.js';
 import { Avatar, PRESET_COUNT } from '../components/Avatar.jsx';
@@ -29,7 +29,6 @@ const looksLikeEmail = (value) => {
 export default function Login() {
   const { student, ready, setStudent } = useSession();
   const navigate = useNavigate();
-  const { state } = useLocation();
   const [step, setStep] = useState('email');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -59,7 +58,8 @@ export default function Login() {
     return () => clearInterval(id);
   }, [step]);
 
-  if (ready && student && !welcome) return <Navigate to={state?.from ?? '/map'} replace />;
+  // Every login opens the map, whatever page the visitor came from.
+  if (ready && student && !welcome) return <Navigate to="/map" replace />;
 
   const run = async (work) => {
     setBusy(true);
@@ -104,7 +104,7 @@ export default function Login() {
         // The picture is optional; a failed upload must not block the first login.
       }
     }
-    setTimeout(() => navigate(state?.from ?? '/map', { replace: true }), 700);
+    setTimeout(() => navigate('/map', { replace: true }), 700);
   };
 
   const verify = (digits, withProfile) =>

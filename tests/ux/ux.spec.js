@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
-import { login } from '../../frontend/e2e/helpers.js';
+import { login, open } from '../../frontend/e2e/helpers.js';
 
 const ADMIN = { first: 'Study', last: 'Office', email: 'sekretariat.dski@heilbronn.dhbw.de' };
 const SCREENS = ['/map', '/quests', '/team', '/ranks', '/profile'];
@@ -39,7 +39,7 @@ test.describe('accessibility (axe, WCAG 2.1 A and AA)', () => {
         theme,
       );
       for (const path of SCREENS) {
-        await page.goto(path);
+        await open(page, path);
         await page.evaluate(
           (value) => document.documentElement.setAttribute('data-theme', value),
           theme,
@@ -52,7 +52,7 @@ test.describe('accessibility (axe, WCAG 2.1 A and AA)', () => {
 
   test('the admin dashboard has no serious problems', async ({ page }) => {
     await login(page, ADMIN);
-    await page.goto('/admin');
+    await open(page, '/admin');
     await expect(page.getByRole('heading', { name: 'Logins and quests per day' })).toBeVisible();
     expect(await seriousProblems(page)).toEqual([]);
   });
@@ -63,7 +63,7 @@ test.describe('accessibility (axe, WCAG 2.1 A and AA)', () => {
     await login(page, ADMIN);
     for (const theme of ['light', 'dark']) {
       for (const path of ADMIN_SCREENS) {
-        await page.goto(path);
+        await open(page, path);
         await page.evaluate(
           (value) => document.documentElement.setAttribute('data-theme', value),
           theme,
@@ -71,7 +71,7 @@ test.describe('accessibility (axe, WCAG 2.1 A and AA)', () => {
         await page.waitForTimeout(500);
         expect(await seriousProblems(page), `${path} (${theme})`).toEqual([]);
       }
-      await page.goto('/admin/quests/1');
+      await open(page, '/admin/quests/1');
       await page.evaluate(
         (value) => document.documentElement.setAttribute('data-theme', value),
         theme,
@@ -81,7 +81,7 @@ test.describe('accessibility (axe, WCAG 2.1 A and AA)', () => {
       await page.waitForTimeout(700); // the pop-up fades in; axe must see its final colours
       expect(await seriousProblems(page), `question pop-up (${theme})`).toEqual([]);
       await page.keyboard.press('Escape');
-      await page.goto('/admin/teams');
+      await open(page, '/admin/teams');
       await page.getByRole('button', { name: 'Add a student' }).first().click();
       await expect(page.getByRole('alertdialog')).toBeVisible();
       await page.waitForTimeout(700); // the pop-up fades in; axe must see its final colours
@@ -95,7 +95,7 @@ test.describe('layout and touch', () => {
     await page.setViewportSize({ width: 320, height: 640 });
     await login(page, ADMIN);
     for (const path of ADMIN_SCREENS) {
-      await page.goto(path);
+      await open(page, path);
       await page.waitForTimeout(300);
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth - window.innerWidth,
@@ -108,7 +108,7 @@ test.describe('layout and touch', () => {
     await page.setViewportSize({ width: 320, height: 640 });
     await login(page);
     for (const path of SCREENS) {
-      await page.goto(path);
+      await open(page, path);
       await page.waitForTimeout(300);
       const wide = await page.evaluate(() =>
         [...document.querySelectorAll('body *')]
@@ -131,7 +131,7 @@ test.describe('layout and touch', () => {
   test('buttons and links are big enough to touch (at least 40 px)', async ({ page }) => {
     await login(page);
     for (const path of ['/quests', '/team', '/profile']) {
-      await page.goto(path);
+      await open(page, path);
       await page.waitForTimeout(300);
       const small = await page.evaluate(() =>
         [...document.querySelectorAll('button, a[href]')]
@@ -156,7 +156,7 @@ test.describe('keyboard and focus', () => {
     page,
   }) => {
     await login(page);
-    await page.goto('/profile');
+    await open(page, '/profile');
     const seen = new Set();
     // The round menu button is the last control in tab order, so keep going until it has been reached.
     for (let i = 0; i < 80 && ![...seen].some((label) => /menu/i.test(label)); i += 1) {

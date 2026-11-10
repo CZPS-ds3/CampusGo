@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { OTP, expectNoHorizontalScroll, login, shot } from './helpers.js';
+import { OTP, expectNoHorizontalScroll, login, open, shot } from './helpers.js';
 
 const ADMIN = { first: 'Study', last: 'Office', email: 'sekretariat.dski@heilbronn.dhbw.de' };
 const LINK = 'https://www.google.com/maps/@49.1502,9.2201,19z';
@@ -47,7 +47,7 @@ test.describe('teams: leader and invitations', () => {
     page,
   }) => {
     await login(page);
-    await page.goto('/team');
+    await open(page, '/team');
     await page.getByLabel('Team name *').fill('Night Owls');
     await page.getByRole('button', { name: 'Create team' }).click();
     await expect(page.getByRole('heading', { name: 'Night Owls' })).toBeVisible();
@@ -66,7 +66,7 @@ test.describe('teams: leader and invitations', () => {
     page,
   }) => {
     await login(page);
-    await page.goto('/team');
+    await open(page, '/team');
     await page.getByRole('button', { name: 'Accept' }).click();
     await expect(page.getByText('Campus Crew').first()).toBeVisible();
     await expect(page.getByText('Leader')).toBeVisible();
@@ -79,7 +79,7 @@ test.describe('admin: students, teams and deleted accounts', () => {
     page,
   }, testInfo) => {
     await login(page, ADMIN);
-    await page.goto('/admin/teams');
+    await open(page, '/admin/teams');
     await page.getByRole('button', { name: 'Add a student' }).first().click();
     const dialog = page.getByRole('alertdialog');
     await expect(dialog.getByRole('list', { name: 'Students without a team' })).toBeVisible();
@@ -96,7 +96,7 @@ test.describe('admin: students, teams and deleted accounts', () => {
     page,
   }, testInfo) => {
     await login(page, ADMIN);
-    await page.goto('/admin/users');
+    await open(page, '/admin/users');
     await expect(page.getByLabel('Status').locator('option', { hasText: 'Deleted' })).toHaveCount(
       0,
     );
@@ -117,7 +117,7 @@ test.describe('admin: students, teams and deleted accounts', () => {
     page,
   }, testInfo) => {
     await login(page, ADMIN);
-    await page.goto('/admin/users');
+    await open(page, '/admin/users');
     await page.getByLabel('Search').fill('Aiko');
     await page.getByRole('link', { name: /Aiko/ }).first().click();
     const card = page.getByTestId('role-card');
@@ -130,7 +130,7 @@ test.describe('admin: students, teams and deleted accounts', () => {
     await expect(card.getByRole('radio', { name: 'Admin' })).toBeChecked();
     await expect(page.getByRole('heading', { name: 'Account actions' })).toHaveCount(0);
 
-    await page.goto('/admin/users');
+    await open(page, '/admin/users');
     await page.getByLabel('Role').selectOption('admin');
     await expect(page.getByRole('link', { name: /Aiko/ })).toBeVisible();
     await page.getByRole('link', { name: /Aiko/ }).first().click();
@@ -147,7 +147,7 @@ test.describe('admin: quests', () => {
     page,
   }, testInfo) => {
     await login(page, ADMIN);
-    await page.goto('/admin/quests');
+    await open(page, '/admin/quests');
     await expect(page.getByTestId('quest-card')).toHaveCount(8);
     await page.getByRole('link', { name: 'New quest' }).click();
     await page.getByLabel('Title').fill('Sports Hall');
@@ -178,7 +178,7 @@ test.describe('admin: quests', () => {
     context,
   }, testInfo) => {
     await login(page, ADMIN);
-    await page.goto('/admin/quests/new');
+    await open(page, '/admin/quests/new');
     await page.getByLabel('Title').fill('Sports Hall');
     await page.getByLabel('Google Maps link').fill(LINK);
     await page.getByLabel('Question types').selectOption('MIXED');
@@ -218,7 +218,8 @@ test.describe('admin: quests', () => {
       sessionStorage.setItem('cq-mock-v2', JSON.stringify(saved));
     });
     await context.setGeolocation(CAMPUS);
-    await page.goto('/quests');
+    await page.reload(); // the mock app reads the changed account again (and starts on the map)
+    await open(page, '/quests');
     await page.getByRole('link', { name: /Sports Hall/ }).click();
     await expect(page.getByTestId('quest-types')).toContainText('Multiple choice');
     await expect(page.getByTestId('quest-types')).toContainText('Multi-select');
@@ -249,7 +250,7 @@ test.describe('admin: quests', () => {
 
   test('BR49 deleting a quest asks first and removes a quest nobody played', async ({ page }) => {
     await login(page, ADMIN);
-    await page.goto('/admin/quests/new');
+    await open(page, '/admin/quests/new');
     await page.getByLabel('Title').fill('Temp Quest');
     await page.getByLabel('Google Maps link').fill(LINK);
     await page.getByRole('button', { name: 'Create quest' }).click();
@@ -270,7 +271,7 @@ test.describe('map style', () => {
   }, testInfo) => {
     await login(page);
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-    await page.goto('/profile');
+    await open(page, '/profile');
     const settings = page.getByTestId('map-style');
     await settings.locator('summary').click();
     await expect(settings.getByRole('radio', { name: 'Follow the app' })).toBeChecked();
@@ -297,6 +298,7 @@ test.describe('map style', () => {
 
     // The one saved style comes back after a reload; reset returns to the default.
     await page.reload();
+    await open(page, '/profile'); // a reload starts on the map
     await page.getByTestId('map-style').locator('summary').click();
     await expect(page.getByTestId('map-style').getByRole('radio', { name: 'Dark' })).toBeChecked();
     await page.getByTestId('map-style').getByRole('button', { name: 'Reset to default' }).click();
@@ -306,7 +308,7 @@ test.describe('map style', () => {
 
   test('BR48 the dark theme and the map style work together', async ({ page }) => {
     await login(page);
-    await page.goto('/profile');
+    await open(page, '/profile');
     await page.getByRole('switch', { name: 'Dark mode' }).click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
     await page.getByTestId('map-style').locator('summary').click();
@@ -324,7 +326,7 @@ test.describe('admin: the checkpoint circle', () => {
     page,
   }, testInfo) => {
     await login(page, ADMIN);
-    await page.goto('/admin/quests');
+    await open(page, '/admin/quests');
     await page.getByTestId('quest-card').first().getByRole('link').first().click();
     const map = page.locator('.geo-preview__map');
     await expect(map).toBeVisible();

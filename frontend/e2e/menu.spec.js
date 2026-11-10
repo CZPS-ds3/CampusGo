@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { expectNoHorizontalScroll, login, shot } from './helpers.js';
+import { expectNoHorizontalScroll, login, open, shot } from './helpers.js';
 
 test.describe('GO badge menu', () => {
   test('opens five bars, marks the page, navigates and closes with Escape', async ({
@@ -55,13 +55,13 @@ test.describe('GO badge menu', () => {
       ['/team', 'Team', '13-team'],
       ['/ranks', 'Ranks', '14-ranks'],
     ]) {
-      await page.goto(path);
+      await open(page, path);
       await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible();
       await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
       await expectNoHorizontalScroll(page);
       await shot(page, testInfo, name);
     }
-    await page.goto('/profile');
+    await open(page, '/profile');
     await expect(page.getByRole('heading', { name: 'Ada' })).toBeVisible();
     await expectNoHorizontalScroll(page);
     await shot(page, testInfo, '15-profile');
@@ -73,7 +73,7 @@ test.describe('preferences', () => {
     page,
   }, testInfo) => {
     await login(page);
-    await page.goto('/profile');
+    await open(page, '/profile');
     await page.getByRole('switch', { name: 'Dark mode' }).click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
     await page.getByRole('radio', { name: 'Large', exact: true }).click();
@@ -82,7 +82,29 @@ test.describe('preferences', () => {
     await expectNoHorizontalScroll(page);
     await shot(page, testInfo, '16-profile-dark-de');
     await page.reload();
+    await open(page, '/profile'); // a reload starts on the map
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
     await expect(page.getByText('Einstellungen')).toBeVisible();
+  });
+});
+
+test.describe('the app always opens on the map', () => {
+  test('a reload or a bookmark of another page, with the session still active, lands on the map', async ({
+    page,
+  }) => {
+    await login(page);
+    await open(page, '/profile');
+    await expect(page).toHaveURL(/\/profile$/);
+    await page.reload();
+    await expect(page).toHaveURL(/\/map$/);
+    await page.goto('/ranks');
+    await expect(page).toHaveURL(/\/map$/);
+  });
+
+  test('logging in from another page opens the map, not that page', async ({ page }) => {
+    await page.goto('/profile');
+    await expect(page).toHaveURL(/\/login$/);
+    await login(page);
+    await expect(page).toHaveURL(/\/map$/);
   });
 });

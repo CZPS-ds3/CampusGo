@@ -72,7 +72,8 @@ export function fuseFix(shown, fix) {
   const ahead = moved(shown, east * seconds, north * seconds);
   const variance = shown.accuracy ** 2 + DRIFT_M2_PER_S * seconds;
   const off = distanceM([ahead.lat, ahead.lng], [fix.lat, fix.lng]);
-  if (off > 3 * (Math.sqrt(variance) + fix.accuracy)) return fresh;
+  // Further off than 2.5 times the combined uncertainty of the estimate and the fix: a real move, taken as it is.
+  if (off > 2.5 * Math.sqrt(variance + fix.accuracy ** 2)) return fresh;
   const gain = variance / (variance + fix.accuracy ** 2);
   const lat = ahead.lat + gain * (fix.lat - ahead.lat);
   const lng = ahead.lng + gain * (fix.lng - ahead.lng);

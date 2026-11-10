@@ -1,5 +1,12 @@
 import { expect, test } from '@playwright/test';
-import { expectNoHorizontalScroll, login, openCheckpoint, rightOption, shot } from './helpers.js';
+import {
+  expectNoHorizontalScroll,
+  login,
+  open,
+  openCheckpoint,
+  rightOption,
+  shot,
+} from './helpers.js';
 
 const ADMIN = { first: 'Study', last: 'Office', email: 'sekretariat.dski@heilbronn.dhbw.de' };
 const CAMPUS_GARDEN = { latitude: 49.147082, longitude: 9.217206, accuracy: 10 };
@@ -34,7 +41,7 @@ test.describe('admin points', () => {
     context,
   }, testInfo) => {
     await login(page, ADMIN);
-    await page.goto('/admin/test-quests');
+    await open(page, '/admin/test-quests');
     await page.getByRole('link', { name: 'Test quiz' }).first().click();
     await expect(page.getByRole('timer')).toBeVisible();
     await page.goBack();
@@ -43,7 +50,7 @@ test.describe('admin points', () => {
     await context.setGeolocation(CAMPUS_GARDEN);
     await page.goto('/');
     await login(page);
-    await page.goto('/team');
+    await open(page, '/team');
     await page.getByRole('button', { name: 'Accept' }).click();
     await expect(page.getByText(/Team score \(average of 2 members, rounded up\)/)).toBeVisible();
     await openCheckpoint(page, 'Campus Garden');
@@ -63,7 +70,7 @@ test.describe('admin points', () => {
     await expectNoHorizontalScroll(page);
     await shot(page, testInfo, '29-result-team-rank');
 
-    await page.goto('/ranks');
+    await open(page, '/ranks');
     await page.getByRole('tab', { name: /team/i }).click();
     await expect(page.getByText(/Team score = average points of the members/)).toBeVisible();
   });

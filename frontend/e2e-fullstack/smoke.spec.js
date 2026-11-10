@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { open } from '../e2e/helpers.js';
 import { plantCode } from './known-code.js';
 
 test('real stack: sign up with an e-mail code, check in, pass a quiz, appear in the ranking', async ({
@@ -20,7 +21,7 @@ test('real stack: sign up with an e-mail code, check in, pass a quiz, appear in 
   await page.getByRole('button', { name: 'Enter campus' }).click();
   await expect(page.getByRole('link', { name: 'Open profile' })).toBeVisible();
 
-  await page.goto('/quests');
+  await open(page, '/quests');
   await page.getByRole('link', { name: /Campus Garden/ }).click();
   await page.getByRole('link', { name: 'Start quest' }).click();
   await expect(page.getByText(/PLACEHOLDER fact 1/)).toBeVisible();
@@ -36,7 +37,7 @@ test('real stack: sign up with an e-mail code, check in, pass a quiz, appear in 
   }
   await expect(page.getByText('Checkpoint cleared')).toBeVisible();
 
-  await page.goto('/ranks');
+  await open(page, '/ranks');
   // With demo players in the database the new player is a row of the list; without them it is the "you" card.
   await expect(page.getByText('Smoke T.').first()).toBeVisible();
 });
@@ -60,11 +61,11 @@ test('real stack: the pre-seeded admin signs in without a sign-up form and tests
   await expect(page.getByRole('menuitem').first()).toContainText('Admin');
   await page.keyboard.press('Escape');
 
-  await page.goto('/admin');
+  await open(page, '/admin');
   await expect(page.getByRole('heading', { name: 'Logins and quests per day' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Top players' })).toBeVisible();
 
-  await page.goto('/admin/test-quests');
+  await open(page, '/admin/test-quests');
   await page.getByRole('link', { name: 'Test quiz' }).first().click();
   await expect(page.getByRole('timer')).toBeVisible();
 });
