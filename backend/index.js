@@ -1,6 +1,6 @@
 import { createApp } from './src/app.js';
 import { systemClock } from './src/clock.js';
-import { loadConfig, productionProblems } from './src/config.js';
+import { loadConfig, productionProblems, productionWarnings } from './src/config.js';
 import { describeListenError } from './src/listen-error.js';
 import { createPool } from './src/db/pool.js';
 import { createMailer } from './src/services/mailer.js';
@@ -12,9 +12,32 @@ if (problems.length > 0) {
   process.exit(1);
 }
 
+for (const warning of productionWarnings(config)) console.warn(`[config] warning: ${warning}`);
+
+// A stray error outside a request (a timer, a library callback) must never take the API down silently: that is
+// what makes the web app show "proxy error". It is logged (message only: no bodies, codes or coordinates).
+process.on('unhandledRejection', (reason) => {
+  console.error(`[server] unhandled promise rejection: ${reason?.message ?? reason}`);
+});
+process.on('uncaughtException', (error) => {
+  console.error(`[server] uncaught error: ${error?.stack ?? error}`);
+});
+
 const pool = createPool(config.databaseUrl);
 const mailer = createMailer(config);
 const { app, services } = createApp({ pool, config, mailer, clock: systemClock });
+
+// BR52: say once how login codes reach people, so nobody wonders where the code is.
+services.settings
+  .otpPreview()
+  .then((preview) => {
+    if (preview) {
+      console.log(
+        '[mail] Code preview is ON (admin switch): every login code is also shown in the test inbox and printed here.',
+      );
+    }
+  })
+  .catch(() => {}); // the database message below explains a missing database
 
 // Tells the operator straight away whether login codes can be delivered (wrong password, blocked port ...).
 mailer.verify().then(({ ok, detail }) => (ok ? console.log : console.error)(`[mail] ${detail}`));
@@ -67,8 +90,8 @@ const server = app.listen(config.port, () => {
 
 // A port that is taken (another API still running) gets one clear line instead of a stack trace.
 server.on('error', (error) => {
-  const text = describeListenError(error, config.port);
-  if (!text) throw error;
+  // Without a listening port the API is useless, so any listen error ends the process with a clear line.
+  const text = describeListenError(error, config.port) ?? `could not listen: ${error.message}`;
   console.error(`[server] ${text}`);
   clearInterval(sweep);
   clearInterval(housekeeping);

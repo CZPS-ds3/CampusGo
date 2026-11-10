@@ -16,7 +16,7 @@ Yuri is rewriting the backend. The frontend now expects the following from it; e
 
 ## Small edits in existing files
 
-- `config.js`: `adminEmail` (`ADMIN_EMAIL`, default `sekretariat.dski@heilbronn.dhbw.de`).
+- `config.js`: `adminEmails` from `ADMIN_EMAIL` (comma-separated, default `sekretariat.dski@heilbronn.dhbw.de,dhbw.campus@gmail.com`); `adminEmail` is the first one (main admin, id 1). `auth.js` `mayLogIn()` = school domain or one of these addresses (BR37).
 - `services/auth.js`: `role` in `publicStudent`; in `verifyOtp` refuse non-active accounts (`ACCOUNT_UNAVAILABLE`), run the name filter on sign-up, make the admin address an admin, write `login` events; `authenticate` returns null for non-active accounts; `logout` writes a `logout` event.
 - `services/teams.js`: name filter on team creation; in `invite` refuse with `TEAM_FULL` when members plus pending invitations are 5 (checked **before** the invitee lookup so R-43 holds); only invite `active` students with role `student`.
 - `services/leaderboards.js`: only `status = 'active' AND role = 'student'` students, and only active members count for teams.
@@ -55,5 +55,5 @@ See [api-documentation.md](api-documentation.md) (sections Account deletion and 
 - New: `services/checkpoint-admin.js` (quest CRUD, photos, facts, questions, readiness), `services/map-link.js` (Google Maps link reader), `map-area.js` (the shared map bounds), `services/map-style.js`, `pictures.js` `storeQuestPhoto`.
 - `services/quiz.js`: question types (`DRAWABLE_QUESTIONS` per type, `drawQuestions` with the mixed guarantee, `answer(..., optionIds)` judged by exact match, `attempt_answers`), the hard question moves to the last slot of N questions, per-quest time limit, attempts keep `question_count` and `pass_threshold`, archived quests are hidden.
 - `services/teams.js`: `ensureLeader`, `removeMember`, `cancelInvitation`. `services/account.js`: soft delete, restore, purge, `account_deleted_by_student` event. `services/admin.js`: `restoreUser`, `purgeUser`, `addTeamMember`, `listUsers({ noTeam })`.
-- `config.js`: in development without SMTP the resend cooldown and hourly limit default to 0 and 1000 (BR52); the mailer prints a clear "LOGIN CODE" line.
+- `config.js`: the same resend limits in every environment; `otpPreviewDefault` is the start value of the admin switch *code preview* (BR52, 2026-11-10: `services/settings.js`, `auth.previewCode`, `POST /auth/otp-preview`). `services/teams.js` also has `leave`, `repairTeam`, `renumberTeam` and the team order `TEAM_ORDER` (BR54); `db/seed.js` seeds the pilot checkpoints once (BR55).
 - Tests: `map-link`, `checkpoint-admin`, `multi-select`, `team-management`, `deleted-accounts`, `map-style` in `backend/tests/`; `helpers.js` removes quests named `TQ ...` and resets the seeded ones.

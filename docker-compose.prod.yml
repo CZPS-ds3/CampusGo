@@ -1,0 +1,96 @@
+# Campus & City Quest: PRODUCTION stack for the Ubuntu server (Docker Engine + the compose plugin).
+# The school's web server terminates HTTPS for the subdomain and forwards plain HTTP to HTTP_PORT here.
+#
+#   cp .env.production.example .env.production        then fill in every value (see the comments there)
+#   docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
+#   docker compose --env-file .env.production -f docker-compose.prod.yml logs -f backend
+#   docker compose --env-file .env.production -f docker-compose.prod.yml down          (data stays in volumes)
+#
+# Differences from docker-compose.yml (development): built web app served by nginx, API in production mode
+# (refuses development secrets, needs SMTP and an https:// PUBLIC_URL), code preview off, no demo players,
+# MySQL and the API are not reachable from outside, only the web container publishes a port.
+
+name: campus-city-quest-prod
+
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env.production}
+      MYSQL_USER: cq
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env.production}
+      TZ: UTC
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./docker/mysql-init:/docker-entrypoint-initdb.d:ro
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --default-time-zone=+00:00
+    healthcheck:
+      test: ['CMD-SHELL', 'mysqladmin ping -h 127.0.0.1 -uroot -p"$$MYSQL_ROOT_PASSWORD" --silent']
+      interval: 5s
+      timeout: 3s
+      retries: 40
+      start_period: 20s
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    # Every API setting (secrets, SMTP, admins, limits) comes from .env.production; the lines below are fixed.
+    env_file:
+      - path: .env.production
+        required: true
+    environment:
+      NODE_ENV: production
+      PORT: '3000'
+      DATABASE_URL: mysql://cq:${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env.production}@mysql:3306/campusquest
+      FRONTEND_ORIGIN: ${PUBLIC_URL:?Set PUBLIC_URL (https://your-subdomain) in .env.production}
+      # Two proxies in front of the API: the school's web server and nginx in the web container.
+      TRUST_PROXY: ${TRUST_PROXY:-2}
+      OTP_PREVIEW_DEFAULT: 'false'
+      UPLOAD_DIR: uploads
+      DB_WAIT_SECONDS: '90'
+    volumes:
+      - uploads:/app/backend/uploads
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/api/health').then((r)=>process.exit(r.ok?0:1),()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 30
+      start_period: 30s
+
+  web:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_MAP_TILE_URL: ${VITE_MAP_TILE_URL:-}
+        VITE_MAP_ATTRIBUTION: ${VITE_MAP_ATTRIBUTION:-}
+        VITE_MAP_DARKEN: ${VITE_MAP_DARKEN:-}
+        VITE_MAP_BASE: ${VITE_MAP_BASE:-}
+        VITE_MAP_VIEW: ${VITE_MAP_VIEW:-}
+        VITE_ROUTING_URL: ${VITE_ROUTING_URL:-}
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    # The only published port. The school's web server forwards https://<subdomain> to it.
+    ports:
+      - '${HTTP_PORT:-8080}:80'
+
+volumes:
+  mysql-data:
+  uploads:

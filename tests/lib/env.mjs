@@ -49,6 +49,8 @@ export function apiEnv(dbUrl) {
     FRONTEND_ORIGIN: `http://localhost:${WEB_PORT}`,
     SMTP_HOST: '',
     OTP_SECRET: TEST_OTP_SECRET,
+    // BR52: the test API starts like production (no code preview); a test turns it on through the admin API.
+    OTP_PREVIEW_DEFAULT: 'false',
     OTP_RESEND_COOLDOWN_SECONDS: '0',
     OTP_RESEND_MAX_PER_HOUR: '1000',
     UPLOAD_DIR: join(REPORTS, 'uploads'),

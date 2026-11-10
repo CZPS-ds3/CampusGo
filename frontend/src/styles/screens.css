@@ -1488,17 +1488,22 @@ ol.stack {
 }
 .admin-filters {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
 }
 .admin-list {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
-.admin-user {
+/* Two classes so this beats `a.card { display: flex }`: as a flex row the name and the stats line sat side by side
+   and a long name pushed the page wider than a phone. */
+.admin-list .admin-user {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
 }
 .admin-user__chips {
@@ -1866,5 +1871,48 @@ ol.stack {
   .geo__controls {
     grid-template-columns: minmax(140px, 200px) 1fr;
     align-items: end;
+  }
+}
+
+/* ---------- team order (BR54): admin Teams page ---------- */
+.team-order {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.team-order__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.team-order__place {
+  min-width: 1.5rem;
+  color: var(--mute);
+}
+.team-order__moves {
+  display: inline-flex;
+  gap: 6px;
+}
+.rot-up {
+  transform: rotate(-90deg);
+}
+.rot-down {
+  transform: rotate(90deg);
+}
+.linkbtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.team__leave {
+  width: 100%;
+}
+@media (max-width: 420px) {
+  .team-order__row > .grow {
+    flex-basis: calc(100% - 2.5rem);
   }
 }

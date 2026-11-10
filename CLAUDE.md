@@ -10,8 +10,8 @@
 **Source of truth:** `docs/business-rules.md` (BR01-BR25 + resolutions R-nn + scoring examples + acceptance checks). Entities and constraints: `docs/data-model.md`. Location: `docs/geofencing.md`. Questions: `docs/question-bank.md`. Rule-to-test matrix: `docs/traceability.md`. Plan: `docs/project_handbook.md`. If code, tests or other docs contradict `docs/business-rules.md`, the business rules win; to change a rule, edit that file first (with the team's approval).
 
 Key rules in short (read the file before implementing):
-- **Login (BR01-03):** OTP by e-mail only, no passwords. The e-mail must end with `heilbronn.dhbw.de`. Login responds generically ("If the account exists, an email containing the OTP has been sent."). One active session per student; sessions expire after inactivity. OTP codes and session tokens are stored only as hashes.
-- **Teams (BR05, BR06, BR44-46):** 1-5 members, one team per user, invitations by e-mail (accept/reject, 24 h expiry). The creator is the team leader and can remove members; any member can cancel a pending invitation; an admin can add a student to any team. Team leaderboard = ceil(average of members' total points), only teams with >= 2 members, visible only to users in a team.
+- **Login (BR01-03, BR52):** OTP by e-mail only, no passwords. The e-mail must end with `heilbronn.dhbw.de`; the only exception is the pre-seeded admin addresses in `ADMIN_EMAIL` (study office + shared mailbox `dhbw.campus@gmail.com`, BR37). Login responds generically ("If the account exists, an email containing the OTP has been sent."). One active session per student; sessions expire after inactivity. OTP codes and session tokens are stored only as hashes. The admin switch *code preview* (admin page Settings, `app_settings.otp_preview`) also shows the e-mailed code in a test inbox on the login page and prints it in the backend terminal: on by default only in development, must be off for the pilot.
+- **Teams (BR05, BR06, BR44-46, BR54):** 1-5 members, one team per user, invitations by e-mail (accept/reject, 24 h expiry), team name 3-30 characters. The creator is the team leader and can remove members; any member can cancel a pending invitation or leave the team; when the leader leaves, the next member in the team order (`students.team_position`) becomes the leader; an admin can add or remove students, choose the leader and change the order. Team leaderboard = ceil(average of members' total points), only teams with >= 2 members, visible only to users in a team.
 - **Checkpoints (BR07-08):** 8 pilot checkpoints (Mensa, Library, CAS Cafe, Campus Garden, Care.box and Shop.box, Building B, Building C, Sensoricum). Only active ones unlock quizzes.
 - **Location (BR12):** verified by the server when an attempt starts (browser Geolocation API; lenient: 200 m accuracy, 30 m grace zone, radii 60-80 m). Poor accuracy or denied permission = check again, without consuming an attempt or starting the timer. Leaving the geofence afterwards does NOT end the attempt. There is no 30-second leave rule.
 - **Quiz (BR09-10, 13-15, 20-23, 25, 49-50):** random distinct questions (3 or 5 in the pilot seed, admins may set 1-10), 4 options each, question types MCQ (1 right) and MULTI (2-3 right, exact match only; students are told the types before they start), 1 minute per question by default (one deadline per attempt, server clock; admins may set a time limit), no retry, right answer(s) revealed after a wrong answer, pass at 4/5 or 2/3 (or the quest's pass mark), a passed checkpoint is final, every attempt is a new record, question set and state survive refresh/reconnect.
@@ -34,7 +34,8 @@ design/               Architecture, ER diagram, API docs, decisions, UI spec, pr
 tests/                run-all.mjs + manifest.json (all categories), Python suites (python/, regression/), ui-ux, browser, perf budgets; see tests/README.md
 testing/              location-testing-guide.md + checkpoint-coordinates.json (test positions for all checkpoints, DevTools steps)
 docs/                 business-rules.md (SOURCE OF TRUTH), data-model, geofencing, question-bank, traceability, git-workflow, project_handbook
-docker-compose.yml    MySQL 8.4 for development and tests
+docker-compose.yml    MySQL 8.4 + API + web app (npm run dev starts only the mysql service)
+docker-compose.prod.yml  Production stack (backend/Dockerfile, frontend/Dockerfile + nginx.conf, .env.production.example)
 scripts/              setup.mjs (after npm install), ensure-db.mjs (starts the database)
 CLAUDE.md, README.md, requirements.md, project_brief.md, project_chater.md
 ```
@@ -47,6 +48,8 @@ The project uses Node.js (LTS, v20 or newer), **npm only** (no yarn/pnpm), npm w
 |------|---------|
 | Install (also creates the `.env` files) | `npm install` (clean: `npm ci`) |
 | Start MySQL, migrate, seed, run API (3000) and web app (5173) | `npm run dev` |
+| The same, everything in Docker (Linux containers, `backend/Dockerfile.dev`, `frontend/Dockerfile.dev`) | `npm run docker:up` / `npm run docker:down` |
+| Production on the Ubuntu server (HTTPS by the school's web server; see README) | `docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build` |
 | Web app only with in-browser mock API (no Docker) | `npm run dev:mock` |
 | Lint / auto-fix (ESLint, zero warnings) | `npm run lint` / `npm run lint:fix` |
 | Check formatting / format (Prettier) | `npm run format:check` / `npm run format` |
@@ -64,7 +67,7 @@ Rules:
 - Use `npm ci` for a clean install; use `npm install <pkg>` only when deliberately adding a dependency, and commit `package-lock.json`.
 - Never commit `node_modules/`, build output, uploads or `.env` files.
 - Secrets (database URL, session and OTP secrets, SMTP credentials) live in `backend/.env` and are documented by name only in `backend/.env.example`. Never hard-code or print them.
-- Seed data (checkpoint coordinates, questions) is **placeholder** until replaced; never present it as real. New migrations (008-010) need `npm run db:reset` on an old local database.
+- Seed data (checkpoint coordinates, questions) is **placeholder** until replaced; never present it as real. The 8 pilot checkpoints are seeded once (BR55); the seed must never re-create, reset or re-photograph quests that admins changed. New migrations (008-012) apply with `npm run db:migrate` (`npm run db:reset` only if an old local database is broken).
 - Python is used only for the tests in `tests/` (pytest, requests, pymysql, black, pylint; `python -m pip install -r tests/requirements.txt`). Python code must be black-formatted and score 10/10 in pylint (`npm run lint:py`). See `requirements.md` section 8.
 
 ## Linting / Testing
@@ -79,7 +82,7 @@ Before proposing a commit or Merge Request, run `npm run check` (ESLint + Pretti
 - **Structure**: Small, single-purpose functions and components. Prefer composition over inheritance. No dead code or commented-out code.
 - **Comments**: Explain *why*, not *what*. Public functions get a short doc comment.
 - **Error handling**: Never swallow errors silently. Validate all external input (location samples, answers, API responses, form data).
-- **Privacy**: E-mail, names, pictures and location are personal data. Require consent for location, store only "inside radius yes/no + timestamp", never store or log raw coordinates, never log OTP codes or tokens, never show e-mail addresses or last names to other users, and never include real student data or locations in tests, fixtures, or commits. All timing and location decisions are made on the server.
+- **Privacy**: E-mail, names, pictures and location are personal data. Require consent for location, store only "inside radius yes/no + timestamp", never store or log raw coordinates, never log OTP codes or tokens (the only exception is the admin-switched code preview of BR52, which prints the code on purpose while it is on), never show e-mail addresses or last names to other users, and never include real student data or locations in tests, fixtures, or commits. All timing and location decisions are made on the server.
 - **UI**: Mobile-first and responsive; interactive elements must be accessible (labels, contrast, keyboard focus).
 - **Dependencies**: Do not add a new dependency without stating why in the MR description.
 - **Scope**: Change only what the task requires. Do not refactor unrelated code.

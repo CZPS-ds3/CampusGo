@@ -1,3 +1,17 @@
+# Campus & City Quest: the whole development stack in Docker (Linux containers; works on Windows with Docker
+# Desktop and on Ubuntu with Docker Engine + the compose plugin).
+#
+#   docker compose up --build      MySQL + API (http://localhost:3000) + web app (http://localhost:5173)
+#   npm run docker:up              the same
+#   docker compose down            stop (add -v to also delete the database and uploaded pictures)
+#
+# `npm run dev` keeps working as before: it starts only the `mysql` service here and runs the API and the web
+# app on the host. Do not run both at the same time (ports 3000 and 5173).
+#
+# Settings: backend/.env and frontend/.env (created by `npm install` from the .env.example files; secrets live
+# only there, never in this file). The values under `environment:` are the ones that must differ inside Docker
+# (service names instead of localhost) and win over the .env files.
+
 services:
   mysql:
     image: mysql:8.4
@@ -24,5 +38,70 @@ services:
       retries: 40
       start_period: 10s
 
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.dev
+    container_name: campus-city-quest-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    env_file:
+      - path: backend/.env
+        required: false
+    environment:
+      NODE_ENV: development
+      PORT: '3000'
+      DATABASE_URL: mysql://cq:cq_dev_password@mysql:3306/campusquest
+      TEST_DATABASE_URL: mysql://cq:cq_dev_password@mysql:3306/campusquest_test
+      FRONTEND_ORIGIN: http://localhost:5173
+      DB_WAIT_SECONDS: '90'
+      UPLOAD_DIR: uploads
+    ports:
+      - '3000:3000'
+    volumes:
+      - ./backend/src:/app/backend/src
+      - ./frontend/src/api/places.json:/app/frontend/src/api/places.json:ro
+      - cq-uploads:/app/backend/uploads
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/api/health').then((r)=>process.exit(r.ok?0:1),()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile.dev
+    container_name: campus-city-quest-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    env_file:
+      - path: frontend/.env
+        required: false
+    environment:
+      # The Vite dev server forwards /api and /uploads to the API container.
+      BACKEND_URL: http://backend:3000
+      VITE_API_URL: ''
+      VITE_USE_MOCKS: 'false'
+      # File changes made on Windows reach a Linux container reliably only by polling.
+      CHOKIDAR_USEPOLLING: 'true'
+    ports:
+      - '5173:5173'
+    volumes:
+      - ./frontend/src:/app/frontend/src
+      - ./frontend/public:/app/frontend/public
+
 volumes:
   cq-mysql-data:
+  cq-uploads:

@@ -149,6 +149,14 @@ class Player:
         """DELETE helper."""
         return self.request("DELETE", path, **kwargs)
 
+    def put(self, path, body=None, **kwargs):
+        """PUT helper with a JSON body."""
+        return self.request("PUT", path, json=body or {}, **kwargs)
+
+    def patch(self, path, body=None, **kwargs):
+        """PATCH helper with a JSON body."""
+        return self.request("PATCH", path, json=body or {}, **kwargs)
+
     def sign_in(self, first="Test", last="Player", nickname=None):
         """Code login with a planted code (see plant_code). A new address creates the account."""
         code = known_code(self.email)

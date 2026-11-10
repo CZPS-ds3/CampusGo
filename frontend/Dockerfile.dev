@@ -1,0 +1,29 @@
+# Development image of the web app (React + Vite dev server). Built by docker-compose.yml with the repository
+# root as context:   docker compose up --build        (or: npm run docker:up)
+# Linux container (Debian bookworm), so it runs the same on Windows (Docker Desktop, WSL 2), macOS and Ubuntu.
+FROM node:22-bookworm-slim
+
+WORKDIR /app
+ENV NODE_ENV=development
+
+# Dependencies first, so a code change does not reinstall them. npm workspaces need every package.json.
+# Installed inside Linux, so esbuild and rollup get their Linux builds, never the ones of a Windows checkout.
+# --ignore-scripts skips the root postinstall (it writes .env files; the container gets its settings from compose).
+COPY package.json package-lock.json ./
+COPY backend/package.json backend/
+COPY frontend/package.json frontend/
+RUN npm ci --workspace frontend --include-workspace-root=false --ignore-scripts --no-audit --no-fund \
+  && npm cache clean --force
+
+# The code. docker-compose.yml also mounts src and public over it, so edits reload the page without a rebuild.
+COPY frontend/index.html frontend/vite.config.js frontend/
+COPY frontend/public frontend/public
+COPY frontend/src frontend/src
+
+WORKDIR /app/frontend
+RUN chown -R node:node /app/frontend
+USER node
+EXPOSE 5173
+
+# --host 0.0.0.0: reachable from the host's browser at http://localhost:5173. /api goes to BACKEND_URL.
+CMD ["npx", "vite", "--host", "0.0.0.0", "--port", "5173", "--strictPort"]

@@ -393,6 +393,13 @@ export function createQuizService({ pool, config, clock }) {
       await conn.query('SELECT student_id FROM students WHERE student_id = ? FOR UPDATE', [
         studentId,
       ]);
+      // BR49: an admin may have erased or archived the quest since the first read. The shared lock makes the check
+      // and the insert below one step, so the student gets a clear 404 instead of a foreign-key error (500).
+      const [[still]] = await conn.query(
+        'SELECT checkpoint_id FROM checkpoints WHERE checkpoint_id = ? AND archived_at IS NULL FOR SHARE',
+        [checkpoint.checkpoint_id],
+      );
+      if (!still) throw new AppError(404, 'NOT_AVAILABLE', 'This checkpoint is not available.');
       // Re-checked under the lock: an attempt may have been passed since the first check (BR23).
       const [[passed]] = await conn.query(
         "SELECT attempt_id FROM attempts WHERE student_id = ? AND checkpoint_id = ? AND status = 'passed'",

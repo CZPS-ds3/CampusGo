@@ -24,6 +24,7 @@ import AdminNames from './pages/admin/AdminNames.jsx';
 import AdminOverview from './pages/admin/AdminOverview.jsx';
 import AdminQuest from './pages/admin/AdminQuest.jsx';
 import AdminQuests from './pages/admin/AdminQuests.jsx';
+import AdminSettings from './pages/admin/AdminSettings.jsx';
 import AdminTeams from './pages/admin/AdminTeams.jsx';
 import AdminTestQuests from './pages/admin/AdminTestQuests.jsx';
 import AdminUser from './pages/admin/AdminUser.jsx';
@@ -87,6 +88,7 @@ export default function App() {
             <Route path="quests" element={<AdminQuests />} />
             <Route path="quests/:id" element={<AdminQuest />} />
             <Route path="test-quests" element={<AdminTestQuests />} />
+            <Route path="settings" element={<AdminSettings />} />
           </Route>
         </Route>
         <Route path="*" element={<NotFound />} />

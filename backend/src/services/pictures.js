@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { basename, join } from 'node:path';
 import sharp from 'sharp';
 import { AppError } from '../middleware/errors.js';
 
@@ -52,4 +52,17 @@ async function storeImage(buffer, uploadDir, { width, height }) {
   const name = `${randomBytes(16).toString('hex')}.webp`;
   await writeFile(join(uploadDir, name), output);
   return `/uploads/${name}`;
+}
+
+/**
+ * Removes an uploaded picture that nothing uses any more (replaced profile or team picture, erased quest photo).
+ * Only files under /uploads/ are touched; a file that is already gone is fine; any other failure is logged.
+ */
+export async function deleteUpload(uploadDir, url) {
+  if (typeof url !== 'string' || !url.startsWith('/uploads/')) return;
+  try {
+    await rm(join(uploadDir, basename(url)), { force: true });
+  } catch (error) {
+    console.error('[uploads] could not delete an unused file:', error.code ?? error.message);
+  }
 }

@@ -60,10 +60,16 @@ def test_one_e_mail_can_belong_to_one_account_only(db):
 
 
 def test_the_administrator_exists_from_the_start_as_id_one(db):
-    rows = query(db, "SELECT student_id, role, status FROM students WHERE role = 'admin'")
-    assert rows == [{"student_id": 1, "role": "admin", "status": "active"}]
-    mail = query(db, "SELECT email FROM students WHERE student_id = 1")[0]["email"]
-    assert mail == ADMIN_EMAIL
+    """BR37: both pre-seeded admins exist from the first seed on; the main one has id 1."""
+    rows = query(
+        db,
+        "SELECT student_id, email, status FROM students WHERE role = 'admin' ORDER BY student_id",
+    )
+    assert [(row["email"], row["status"]) for row in rows] == [
+        (ADMIN_EMAIL, "active"),
+        ("dhbw.campus@gmail.com", "active"),
+    ]
+    assert rows[0]["student_id"] == 1
 
 
 def test_the_eight_pilot_checkpoints_have_sensible_geofences(db):

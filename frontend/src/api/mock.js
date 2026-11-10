@@ -16,6 +16,10 @@ const ACCURACY_CREDIT_M = 50; // at most this much of a reading's error margin c
 const NEARER_MARGIN_M = 20; // another checkpoint must be this much nearer to win
 const MAX_POSITION_AGE_MS = 30_000;
 const ADMIN_EMAIL = `sekretariat.dski@${DOMAIN}`;
+// BR37: the pre-seeded admins, as in the server's ADMIN_EMAIL default; they may log in outside the school domain.
+const ADMIN_EMAILS = [ADMIN_EMAIL, 'dhbw.campus@gmail.com'];
+const mayLogIn = (email) =>
+  (email.endsWith(DOMAIN) && email.split('@').length === 2) || ADMIN_EMAILS.includes(email);
 const PLACE_SLUGS = {
   Mensa: 'mensa',
   Library: 'library',
@@ -167,6 +171,8 @@ const fresh = () => ({
     },
   ],
   lastOtpEmail: null,
+  // BR52: the admin switch of the code preview (the mock has no real e-mail, so it starts on).
+  settings: { otpPreview: true },
   admin: {
     nextId: 200,
     users: [
@@ -195,12 +201,14 @@ const fresh = () => ({
       teamName,
       totalPoints,
       questsPassed,
+      questsTotal: 8,
       createdAt: new Date(Date.now() - (9 - i) * 86400e3).toISOString(),
       lastLoginAt: new Date(Date.now() - (i + 1) * 5 * 3600e3).toISOString(),
     })),
+    // `members` is the team order (BR54); the leader is the first member unless an admin chose another one.
     teams: [
-      { id: 1, name: 'Bildungscampus Bandits', score: 6800, members: [100, 101] },
-      { id: 2, name: 'Mensa Mavericks', score: 3100, members: [102] },
+      { id: 1, name: 'Bildungscampus Bandits', score: 6800, members: [100, 101], leaderId: 100 },
+      { id: 2, name: 'Mensa Mavericks', score: 3100, members: [102], leaderId: 102 },
     ],
     terms: [],
   },
@@ -484,7 +492,7 @@ export function createMockApi(ApiError, getUnauthorized) {
   const methods = {
     async requestOtp(email) {
       const clean = String(email).trim().toLowerCase();
-      if (!clean.endsWith(DOMAIN) || clean.split('@').length !== 2) {
+      if (!mayLogIn(clean)) {
         throw fail(
           400,
           'INVALID_EMAIL',
@@ -505,7 +513,7 @@ export function createMockApi(ApiError, getUnauthorized) {
         if (rude) throw fail(400, 'NAME_NOT_ALLOWED', 'Please choose a different name.');
         state.student = {
           id: 1,
-          role: clean === ADMIN_EMAIL ? 'admin' : 'student',
+          role: ADMIN_EMAILS.includes(clean) ? 'admin' : 'student',
           email: clean,
           firstName,
           lastName,
@@ -542,7 +550,14 @@ export function createMockApi(ApiError, getUnauthorized) {
       save();
       return null;
     },
-    async devLastOtp() {
+    async authConfig() {
+      return { otpPreview: state.settings?.otpPreview ?? true, mailConfigured: false };
+    },
+    // BR52: the test inbox shows the same code the e-mail would carry, only while the switch is on.
+    async otpPreview() {
+      if (!(state.settings?.otpPreview ?? true))
+        throw fail(404, 'PREVIEW_OFF', 'The code preview is switched off.');
+      if (!state.lastOtpEmail) throw fail(404, 'NO_CODE', 'No code was sent yet.');
       return { otp: OTP };
     },
     async me() {
@@ -920,6 +935,14 @@ export function createMockApi(ApiError, getUnauthorized) {
       save();
       return { team: teamView() };
     },
+    // BR54: any member leaves; a leader who leaves hands over to the next member in the team order.
+    async leaveTeam() {
+      needLogin();
+      if (!state.team) throw fail(409, 'NO_TEAM', 'You are not in a team.');
+      state.team = null;
+      save();
+      return { team: null };
+    },
     async removeFromTeam(studentId) {
       needLogin();
       if (!state.team) throw fail(403, 'NO_TEAM', 'You are not in a team.');
@@ -1039,7 +1062,7 @@ export function createMockApi(ApiError, getUnauthorized) {
     state.admin.users.some((u) => u.email === email && u.id !== ignoreId);
   const checkAdminEmail = (raw, ignoreId) => {
     const email = String(raw).trim().toLowerCase();
-    if (!email.endsWith(DOMAIN) || email.split('@').length !== 2)
+    if (!mayLogIn(email))
       throw fail(
         400,
         'INVALID_EMAIL',
@@ -1558,6 +1581,7 @@ export function createMockApi(ApiError, getUnauthorized) {
         teamName: null,
         totalPoints: 0,
         questsPassed: 0,
+        questsTotal: 8,
         createdAt: new Date().toISOString(),
         lastLoginAt: null,
       };
@@ -1669,8 +1693,63 @@ export function createMockApi(ApiError, getUnauthorized) {
           score: t.score,
           size: t.members.length,
           createdAt: new Date().toISOString(),
-          members: t.members.map((m) => ({ id: m, displayName: adminUser(m).displayName })),
+          leaderId: t.leaderId ?? t.members[0] ?? null,
+          members: t.members.map((m, index) => ({
+            id: m,
+            displayName: adminUser(m).displayName,
+            position: index + 1,
+            status: adminUser(m).status,
+          })),
         })),
+      };
+    },
+    async setTeamLeader(teamId, studentId) {
+      needAdmin();
+      const team = state.admin.teams.find((t) => t.id === Number(teamId));
+      if (!team) throw fail(404, 'NOT_FOUND', 'Team not found.');
+      if (!team.members.includes(Number(studentId)))
+        throw fail(404, 'NOT_A_MEMBER', 'This person is not in this team.');
+      if (adminUser(studentId).status !== 'active')
+        throw fail(409, 'STUDENT_NOT_ACTIVE', 'Only an active member can lead the team.');
+      team.leaderId = Number(studentId);
+      save();
+      return null;
+    },
+    async reorderTeam(teamId, studentIds) {
+      needAdmin();
+      const team = state.admin.teams.find((t) => t.id === Number(teamId));
+      if (!team) throw fail(404, 'NOT_FOUND', 'Team not found.');
+      const wanted = studentIds.map(Number);
+      const same =
+        new Set(wanted).size === wanted.length &&
+        wanted.length === team.members.length &&
+        wanted.every((id) => team.members.includes(id));
+      if (!same)
+        throw fail(400, 'ORDER_MISMATCH', 'The new order must list every member exactly once.');
+      team.members = wanted;
+      save();
+      return null;
+    },
+    async settings() {
+      needAdmin();
+      return {
+        settings: {
+          otpPreview: state.settings?.otpPreview ?? true,
+          mailConfigured: false,
+          environment: 'mock',
+        },
+      };
+    },
+    async saveSettings({ otpPreview }) {
+      needAdmin();
+      state.settings = { ...(state.settings ?? {}), otpPreview: Boolean(otpPreview) };
+      save();
+      return {
+        settings: {
+          otpPreview: state.settings.otpPreview,
+          mailConfigured: false,
+          environment: 'mock',
+        },
       };
     },
     async renameTeam(id, name) {
@@ -1685,6 +1764,10 @@ export function createMockApi(ApiError, getUnauthorized) {
       needAdmin();
       const team = state.admin.teams.find((t) => t.id === Number(teamId));
       team.members = team.members.filter((m) => m !== Number(studentId));
+      // BR44: the next member in the team order takes over from a leader who was removed.
+      if (team.leaderId === Number(studentId)) team.leaderId = team.members[0] ?? null;
+      if (team.members.length === 0)
+        state.admin.teams = state.admin.teams.filter((t) => t.id !== team.id);
       const user = adminUser(studentId);
       user.teamId = null;
       user.teamName = null;

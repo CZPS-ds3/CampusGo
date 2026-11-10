@@ -18,6 +18,7 @@ const TABLES = [
   'teams',
   'audit_events',
   'banned_terms',
+  'app_settings',
 ];
 
 export const DOMAIN = 'heilbronn.dhbw.de';
@@ -48,7 +49,7 @@ export async function createTestContext(envOverrides = {}) {
       await conn.query(
         "UPDATE checkpoints SET time_limit_seconds = NULL, type_mode = 'MCQ_ONLY', archived_at = NULL",
       );
-      await seedReference(conn);
+      await seedReference(conn, { restore: true });
       await seedPlaceholderFacts(conn);
       await seedPlaceholderQuestions(conn); // inserts once, later runs only reset the flags below
       await conn.query('UPDATE checkpoints SET is_active = 1');

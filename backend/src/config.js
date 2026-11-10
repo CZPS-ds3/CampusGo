@@ -24,7 +24,22 @@ function trustProxy(value) {
   return Number.isFinite(hops) ? hops : value;
 }
 
+/** BR37: the pre-seeded administrators. The first one is the main admin and takes id 1. */
+export const DEFAULT_ADMIN_EMAILS = 'sekretariat.dski@heilbronn.dhbw.de,dhbw.campus@gmail.com';
+
+/** `ADMIN_EMAIL` holds one address or several, separated by commas. */
+function adminEmails(value) {
+  const parse = (text) =>
+    String(text)
+      .split(',')
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean);
+  const list = parse(value ?? '');
+  return [...new Set(list.length > 0 ? list : parse(DEFAULT_ADMIN_EMAILS))];
+}
+
 export function loadConfig(env = process.env) {
+  const admins = adminEmails(env.ADMIN_EMAIL);
   const nodeEnv = env.NODE_ENV ?? 'development';
   const smtpPort = int(env.SMTP_PORT, 587);
   return {
@@ -41,12 +56,17 @@ export function loadConfig(env = process.env) {
         : (env.DATABASE_URL ?? 'mysql://cq:cq_dev_password@127.0.0.1:3307/campusquest'),
     sessionSecret: env.SESSION_SECRET ?? 'dev-session-secret',
     otpSecret: env.OTP_SECRET ?? 'dev-otp-secret',
-    adminEmail: (env.ADMIN_EMAIL ?? 'sekretariat.dski@heilbronn.dhbw.de').trim().toLowerCase(),
+    adminEmails: admins,
+    adminEmail: admins[0],
     allowedEmailDomain: (env.ALLOWED_EMAIL_DOMAIN ?? 'heilbronn.dhbw.de').toLowerCase(),
     otpTtlMinutes: int(env.OTP_TTL_MINUTES, 10),
     otpMaxFailedAttempts: int(env.OTP_MAX_FAILED_ATTEMPTS, 5),
     otpResendCooldownSeconds: int(env.OTP_RESEND_COOLDOWN_SECONDS, 30),
     otpResendMaxPerHour: int(env.OTP_RESEND_MAX_PER_HOUR, 5),
+    // BR52: start value of the admin switch "show the login code in the test inbox" (the admin can change it).
+    otpPreviewDefault: env.OTP_PREVIEW_DEFAULT
+      ? env.OTP_PREVIEW_DEFAULT === 'true'
+      : nodeEnv === 'development',
     sessionInactivityMinutes: int(env.SESSION_INACTIVITY_MINUTES, 30),
     invitationTtlHours: int(env.INVITATION_TTL_HOURS, 24),
     // Geofencing settings (Main Project Document, section 5 "Settings kept in one config file").
@@ -92,4 +112,17 @@ export function productionProblems(config) {
     problems.push('FRONTEND_ORIGIN must be an https:// address (geolocation needs HTTPS).');
   }
   return problems;
+}
+
+/**
+ * Things that are allowed but risky in production: printed as warnings at start-up, never a reason to refuse.
+ * The code preview (BR52) lets anyone log in as anyone, so a live system should start with it off.
+ */
+export function productionWarnings(config) {
+  if (!config.isProd) return [];
+  return config.otpPreviewDefault
+    ? [
+        'OTP_PREVIEW_DEFAULT=true: login codes are shown on the login page until an admin turns it off.',
+      ]
+    : [];
 }

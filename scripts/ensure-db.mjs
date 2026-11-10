@@ -5,6 +5,7 @@
 //   node scripts/ensure-db.mjs --reset   drop the volume and start from scratch
 // Docker Desktop is started for you when it is not running. Set SKIP_DOCKER=1 to use your own MySQL (DATABASE_URL in backend/.env).
 import { spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -20,10 +21,25 @@ const fail = (message) => {
 const dockerRunning = () =>
   spawnSync('docker info', { shell: true, encoding: 'utf8' }).status === 0;
 
+/** Docker Desktop on Windows: the machine-wide install or the per-user install (no admin rights needed). */
+function windowsDockerDesktop() {
+  const candidates = [
+    join(
+      process.env.ProgramFiles ?? String.raw`C:\Program Files`,
+      'Docker',
+      'Docker',
+      'Docker Desktop.exe',
+    ),
+    join(process.env.LOCALAPPDATA ?? '', 'Programs', 'DockerDesktop', 'Docker Desktop.exe'),
+  ];
+  const found = candidates.find((path) => existsSync(path));
+  return found ? `start "" "${found}"` : null;
+}
+
 /** On Windows and macOS, opens Docker Desktop and waits (up to two minutes) until the engine answers. */
 function startDockerDesktop() {
   const launch = {
-    win32: String.raw`start "" "C:\Program Files\Docker\Docker\Docker Desktop.exe"`,
+    win32: windowsDockerDesktop(),
     darwin: 'open -a Docker',
   }[process.platform];
   if (!launch) return false;
@@ -48,7 +64,8 @@ if (!process.env.SKIP_DOCKER) {
   }
   if (args.has('--reset')) run('docker compose down -v');
   console.log('[db] starting MySQL (docker compose) ...');
-  if (run('docker compose up -d --wait').status !== 0)
+  // Only the database: the backend and frontend containers of docker-compose.yml are for `npm run docker:up`.
+  if (run('docker compose up -d --wait mysql').status !== 0)
     fail('MySQL container did not become healthy.');
 }
 

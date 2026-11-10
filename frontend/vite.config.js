@@ -10,6 +10,8 @@ export default defineConfig(({ mode }) => {
     optimizeDeps: { exclude: ['maplibre-gl'] },
     server: {
       port: 5173,
+      // In Docker on Windows (docker-compose.yml) file events do not cross into the container, so Vite polls.
+      watch: env.CHOKIDAR_USEPOLLING === 'true' ? { usePolling: true, interval: 300 } : undefined,
       proxy: {
         '/api': { target: env.BACKEND_URL || 'http://localhost:3000', changeOrigin: false },
         '/uploads': { target: env.BACKEND_URL || 'http://localhost:3000', changeOrigin: false },

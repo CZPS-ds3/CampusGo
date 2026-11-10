@@ -20,6 +20,13 @@ export const normalizeEmail = (value) =>
  * R-31: exactly one "@", at most 254 characters, local part 1-64 characters without whitespace/control
  * characters, and the address must END with the school domain (preceded by "@" or ".").
  */
+/**
+ * BR01 + BR37: students need a school address; only the pre-seeded administrator addresses (`ADMIN_EMAIL`) may
+ * use another domain, so the team's shared admin mailbox can log in too.
+ */
+export const mayLogIn = (email, config) =>
+  isSchoolEmail(email, config.allowedEmailDomain) || config.adminEmails.includes(email);
+
 export function isSchoolEmail(email, domain) {
   if (email.length > 254) return false;
   const parts = email.split('@');
@@ -67,7 +74,12 @@ export function otpEmail(to, code, ttlMinutes) {
   };
 }
 
-export function createAuthService({ pool, config, mailer, clock, nameRules }) {
+// BR52: at most this many codes are kept for the test inbox at once (oldest dropped first).
+const PREVIEW_LIMIT = 500;
+
+export function createAuthService({ pool, config, mailer, clock, nameRules, settings }) {
+  // BR52 code preview: the code that was e-mailed, kept in memory only (never in the database, which holds hashes).
+  const previews = new Map();
   const hashCode = (email, code) =>
     createHmac('sha256', config.otpSecret).update(`${email}:${code}`).digest('hex');
   const hashToken = (token) => createHash('sha256').update(token).digest('hex');
@@ -77,7 +89,7 @@ export function createAuthService({ pool, config, mailer, clock, nameRules }) {
   /** R-32/R-33: always returns normally; sending, throttling and "no such account" look identical. */
   async function requestOtp(rawEmail) {
     const email = normalizeEmail(rawEmail);
-    if (!isSchoolEmail(email, config.allowedEmailDomain)) {
+    if (!mayLogIn(email, config)) {
       throw new AppError(
         400,
         'INVALID_EMAIL',
@@ -105,7 +117,41 @@ export function createAuthService({ pool, config, mailer, clock, nameRules }) {
         [email, hashCode(email, code), at(now), at(now + config.otpTtlMinutes * 60 * 1000)],
       );
     });
-    mailer.send(otpEmail(email, code, config.otpTtlMinutes));
+    const preview = settings ? await settings.otpPreview() : false;
+    if (preview) rememberPreview(email, code, now);
+    // Real e-mail whenever SMTP is set up. Without SMTP but with the preview on, the test inbox is the delivery.
+    if (mailer.configured !== false || !preview) {
+      mailer.send(otpEmail(email, code, config.otpTtlMinutes));
+    }
+  }
+
+  function rememberPreview(email, code, now) {
+    previews.delete(email);
+    previews.set(email, { code, expiresAt: now + config.otpTtlMinutes * 60 * 1000 });
+    while (previews.size > PREVIEW_LIMIT) previews.delete(previews.keys().next().value);
+    // Development helper on purpose (BR52): only while an admin has the preview switched on.
+    if (!config.isTest) console.log(`[mail:preview] login code for ${email}: ${code}`);
+  }
+
+  /**
+   * BR52: the code that was e-mailed last, for the test inbox of the login page. Only while the admin switch is
+   * on, and only while that code is still the valid one (the newest unused, unexpired code of the address).
+   */
+  async function previewCode(rawEmail) {
+    if (!settings || !(await settings.otpPreview())) {
+      throw new AppError(404, 'PREVIEW_OFF', 'The code preview is switched off.');
+    }
+    const email = normalizeEmail(rawEmail);
+    const now = clock.now();
+    const entry = previews.get(email);
+    const noCode = new AppError(404, 'NO_CODE', 'No code was sent yet. Press "Resend code".');
+    if (!entry || entry.expiresAt <= now) throw noCode;
+    const [[otp]] = await pool.query(
+      'SELECT code_hash FROM otp_codes WHERE email = ? AND is_used = 0 AND expires_at > ? ORDER BY created_at DESC LIMIT 1',
+      [email, at(now)],
+    );
+    if (!otp || !sameHash(otp.code_hash, hashCode(email, entry.code))) throw noCode;
+    return entry.code;
   }
 
   async function createSession(conn, studentId, now) {
@@ -132,7 +178,7 @@ export function createAuthService({ pool, config, mailer, clock, nameRules }) {
    */
   async function verifyOtp(rawEmail, rawCode, profile) {
     const email = normalizeEmail(rawEmail);
-    if (!isSchoolEmail(email, config.allowedEmailDomain)) {
+    if (!mayLogIn(email, config)) {
       throw new AppError(400, 'INVALID_CODE', 'Invalid or expired code.');
     }
     const code = String(rawCode ?? '').replace(/\s+/g, '');
@@ -168,7 +214,7 @@ export function createAuthService({ pool, config, mailer, clock, nameRules }) {
       }
       let student = existing;
       let created = false;
-      const isAdminEmail = email === config.adminEmail;
+      const isAdminEmail = config.adminEmails.includes(email);
       if (!student) {
         if (!profile?.firstName || !profile?.lastName) return { status: 'profile_required' }; // OTP stays usable
         await nameRules.assertAllowed(profile.firstName, profile.lastName, profile.nickname);
@@ -199,6 +245,7 @@ export function createAuthService({ pool, config, mailer, clock, nameRules }) {
         student = { ...student, role: 'admin' };
       }
       await conn.query('UPDATE otp_codes SET is_used = 1 WHERE otp_id = ?', [otp.otp_id]);
+      previews.delete(email);
       const token = await createSession(conn, student.student_id, now);
       await recordEvent(conn, now, { studentId: student.student_id, type: 'login' });
       return { status: 'ok', created, token, student: publicStudent(student) };
@@ -257,5 +304,13 @@ export function createAuthService({ pool, config, mailer, clock, nameRules }) {
     );
   }
 
-  return { requestOtp, verifyOtp, authenticate, logout, purgeOldOtps, purgeOldSessions };
+  return {
+    requestOtp,
+    previewCode,
+    verifyOtp,
+    authenticate,
+    logout,
+    purgeOldOtps,
+    purgeOldSessions,
+  };
 }

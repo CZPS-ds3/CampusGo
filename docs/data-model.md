@@ -238,6 +238,13 @@ erDiagram
   - `Attempt.question_count` and `Attempt.pass_threshold`: the values the attempt started with. `Attempt_Question.is_correct` (judged when answered).
   - New table `Attempt_Answer (attempt_id, question_number, question_id, option_id)`: every option a student ticked (one row for MCQ, several for MULTI). `Attempt_Question.selected_option_id` keeps the first one.
 
+### 3.z Additions of 2026-11-10 (migration 012)
+
+- `012_settings_and_team_order.sql`:
+  - New table `App_Setting (setting_key PK, setting_value, updated_at, updated_by FK Student ON DELETE SET NULL)`: settings an admin changes at run time. Keys: `otp_preview` (`true`/`false`, the code preview switch, BR52) and `pilot_checkpoints_seeded` (the 8 pilot checkpoints were seeded once; the seed never re-creates or edits quests after that, BR55). Existing databases get the marker at once.
+  - `Student.team_position` (1 to 5, nullable, null without a team): the team order (BR54). Backfilled by `team_joined_at`, then `student_id`. The leader hand-over (`ensureLeader`) and every member list order by `team_position, team_joined_at, student_id`. Gaps are closed when someone leaves.
+- The login code of the code preview is kept **in the API's memory only** (at most 500 addresses, until the code expires or is used); the database keeps storing only code hashes (BR01).
+
 ## 4. Seed data for BR11 (no admin UI)
 
 **Approach.** Reference data and the question bank are plain files in the repository (SQL or CSV) loaded by a seed script, run by the developers at deployment. The script is idempotent: it upserts by natural key (`difficulty`, `bonus_type`, `attempt_number`, `checkpoint_name`, and for questions a stable external key kept in the seed file), so running it twice gives the same result. Changing a point value means editing the table (or the seed file) and re-running it; no backend code changes (BR11). The script runs in one transaction and ends with a validation step that fails the whole load if any of these is violated:

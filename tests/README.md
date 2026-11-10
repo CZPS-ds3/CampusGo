@@ -27,15 +27,15 @@ docker compose up -d --wait                    # MySQL (the runner does this too
 | `format` | formatting | Prettier | |
 | `black` | formatting | black on the Python tests | Python |
 | `pylint` | formatting | pylint, must score 10/10 | Python |
-| `python-unit` | **unit** (pytest) | photo list and credits, banned-word document equals the source list, seed checkpoints, migrations numbered without gaps, Python reference of the scoring and team-average rules | |
-| `node-config` | unit (node:test) | production config problems, lenient geofence defaults, admin address, start-up error text, dev OTP route absent in production | |
-| `unit-backend` | **backend** (Vitest) | the 230+ backend tests: scoring examples, auth, quiz, teams, admin, players, stats, geofence, quests, map links, question types, map style, deleted accounts | MySQL test DB |
+| `python-unit` | **unit** (pytest) | photo list and credits, banned-word document equals the source list, seed checkpoints, migrations numbered without gaps, Python reference of the scoring and team-average rules, the Docker files (three services, ports, env files, no secrets, Linux installs, LF endings, `npm run dev` starts only MySQL) | |
+| `node-config` | unit (node:test) | production config problems, lenient geofence defaults, admin address, start-up error text, no route hands out a login code, production starts with the code preview off (BR52) | |
+| `unit-backend` | **backend** (Vitest) | the 270+ backend tests: scoring examples, auth, quiz, teams, admin, players, stats, geofence, quests, map links, question types, map style, deleted accounts, the code preview (BR52), leaving a team and the team order (BR54), deleting quests and the seed (BR49, BR55) | MySQL test DB |
 | `unit-frontend` | **frontend** (Vitest) | components, hooks, i18n coverage, mock API rules | |
 | `build` | build | production build of the web app | |
 | `python-db` | **database** (pytest) | tables, migrations in order, unique e-mail, admin id 1, 8 geofences, BR11 tables, 4 options per question with the right number of right answers per type, attempt snapshots, `attempt_answers`, no coordinates in `location_checks`, hashes only | fresh test DB |
-| `python-api` | **integration** (pytest) | real HTTP: login, one session, teams, invitations, the 5 cap, privacy, every checkpoint inside and outside, a whole quiz | fresh DB, API |
+| `python-api` | **integration** (pytest) | real HTTP: login, one session, teams, invitations, the 5 cap, privacy, every checkpoint inside and outside, a whole quiz, leaving a team and the admin's leader and order choice, the code preview switch, every page after a quest is erased or archived | fresh DB, API |
 | `python-security` | **security** (pytest) | headers, HttpOnly cookie, forged cookie, hostile e-mail strings, cross-site requests, OTP lock, login rate limit, owner-only attempts, **coordinate canary** (no coordinates, code or token in any table or in the API log) | fresh DB, API |
-| `regression` | **regression** (pytest) | one test per bug that was fixed (Cass, invitation cap, admin ranked, team average, Building B, delete account, ties, multi-select exact match, cancelled invitation, restore of a deleted account, ...) | fresh DB, API |
+| `regression` | **regression** (pytest) | one test per bug that was fixed (Cass, invitation cap, admin ranked, team average, Building B, delete account, ties, multi-select exact match, cancelled invitation, restore of a deleted account, the sign-up picture, a deleted quest breaking the app, the seed undoing quest changes, ...) | fresh DB, API |
 | `e2e-mock` | **end-to-end** (Playwright) | whole player and admin journeys on 6 screen sizes with the mock API (`frontend/e2e`) | browsers |
 | `ux` | **UI/UX** (Playwright + axe) | WCAG 2.1 A/AA scan in light and dark on every screen, keyboard and focus rings, touch targets of 40 px, no sideways scroll at 320 px, German switch, reduced motion | browsers |
 | `browser` | **browser** (Playwright) | smoke test: start, sign in, map, menu, a whole quiz, offline notice; Chromium (+ Firefox and WebKit with `--all-browsers`) | browsers |

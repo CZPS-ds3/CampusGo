@@ -4,9 +4,16 @@ Each name starts with the bug and names the business rule it protects. If one of
 bug is back.
 """
 
-import pytest
+import os
+import shutil
+import struct
+import subprocess
+import zlib
 
-from conftest import Player, connect_db, known_code, query, unique_email
+import pytest
+import requests
+
+from conftest import API_URL, DB_URL, ROOT, Player, connect_db, known_code, query, unique_email
 
 pytestmark = pytest.mark.api
 
@@ -242,3 +249,108 @@ def test_bug_a_student_at_the_checkpoint_with_a_weak_signal_was_turned_away_br12
     student = player("weak-signal")
     reply = student.start_quiz("Mensa", accuracy=150)
     assert reply.json()["status"] == "OK", reply.text
+
+
+def tiny_png():
+    """A valid 2x2 PNG made without any image library (sharp on the server re-encodes it)."""
+
+    def chunk(kind, data):
+        body = kind + data
+        return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body))
+
+    raw = b"".join(b"\x00" + b"\xff\x00\x00" * 2 for _ in range(2))
+    header = struct.pack(">IIBBBBB", 2, 2, 8, 2, 0, 0, 0)
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", header)
+        + chunk(b"IDAT", zlib.compress(raw))
+        + chunk(b"IEND", b"")
+    )
+
+
+def upload_picture(student):
+    """Uploads a profile picture as the sign-up page does and returns the stored address."""
+    reply = student.request(
+        "POST", "/me/picture", files={"file": ("me.png", tiny_png(), "image/png")}
+    )
+    assert reply.status_code == 200, reply.text
+    return reply.json()["pictureUrl"]
+
+
+def test_bug_the_sign_up_picture_did_not_show_and_old_files_piled_up_br02(player):
+    student = player("picture")
+    first = upload_picture(student)
+    assert student.get("/me").json()["student"]["pictureUrl"] == first
+    assert requests.get(f"{API_URL}{first}", timeout=15).status_code == 200
+    second = upload_picture(student)
+    assert second != first
+    assert student.get("/me").json()["student"]["pictureUrl"] == second
+    # The replaced picture is deleted from the disk, the new one is served.
+    assert requests.get(f"{API_URL}{first}", timeout=15).status_code == 404
+    assert requests.get(f"{API_URL}{second}", timeout=15).status_code == 200
+
+
+def test_bug_deleting_a_quest_made_the_app_fail_br49(admin, player):
+    student = player("after-delete")
+    body = {
+        "name": f"TQ Regress {unique_email()[7:13]}",
+        "description": "Deleted at once.",
+        "mapLink": "https://www.google.com/maps/@49.1504,9.2204,19z",
+        "radius": 40,
+        "questionCount": 3,
+        "passThreshold": 2,
+    }
+    quest = admin.post("/admin/checkpoints", body).json()["quest"]
+    assert admin.delete(f"/admin/checkpoints/{quest['id']}").status_code == 200
+    for path in ["/admin/stats", "/admin/overview", "/admin/checkpoints", "/admin/users"]:
+        assert admin.get(path).status_code == 200, path
+    for path in ["/checkpoints", "/leaderboards/solo", "/me"]:
+        assert student.get(path).status_code == 200, path
+
+
+def test_bug_the_seed_undid_admin_quest_changes_and_stopped_the_api_br49(admin, db):
+    """`npm run dev` seeds on every start. An admin-set time limit made the old seed fail (CHECK)."""
+    cas = query(db, "SELECT * FROM checkpoints WHERE checkpoint_name = 'CAS Cafe'")[0]
+    try:
+        changed = admin.patch(
+            f"/admin/checkpoints/{cas['checkpoint_id']}",
+            {"questionCount": 1, "passThreshold": 1, "timeLimitSeconds": 20},
+        )
+        assert changed.status_code == 200, changed.text
+        env = {**os.environ, "NODE_ENV": "development", "DATABASE_URL": DB_URL}
+        seed = subprocess.run(
+            [shutil.which("node") or "node", str(ROOT / "backend" / "src" / "db" / "seed.js")],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+        assert seed.returncode == 0, seed.stderr
+        after = query(db, "SELECT * FROM checkpoints WHERE checkpoint_name = 'CAS Cafe'")[0]
+        assert (after["question_count"], after["time_limit_seconds"]) == (1, 20)
+    finally:
+        admin.patch(
+            f"/admin/checkpoints/{cas['checkpoint_id']}",
+            {
+                "questionCount": cas["question_count"],
+                "passThreshold": cas["pass_threshold"],
+                "timeLimitSeconds": cas["time_limit_seconds"],
+            },
+        )
+
+
+def test_bug_the_admin_user_list_scrolled_sideways_on_phones_after_a_deletion_br47():
+    """`a.card { display: flex }` outranked `.admin-user { display: grid }`: the name and the stats line sat side
+    by side, and a long name pushed the page wider than a phone (seen after deleting an account)."""
+    css = (ROOT / "frontend" / "src" / "styles" / "screens.css").read_text(encoding="utf-8")
+    rule = css.split(".admin-list .admin-user {", 1)[1].split("}", 1)[0]
+    assert "display: grid" in rule
+    assert "grid-template-columns: minmax(0, 1fr)" in rule
+
+
+def test_bug_the_test_runner_started_the_whole_docker_app_and_blocked_npm_run_dev_br55():
+    """`docker compose up -d --wait` without a service name started the API and web containers too."""
+    runner = (ROOT / "tests" / "run-all.mjs").read_text(encoding="utf-8")
+    assert "docker compose up -d --wait mysql" in runner
+    assert "'docker compose up -d --wait'" not in runner

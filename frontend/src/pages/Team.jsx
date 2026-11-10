@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { errorText } from '../api/errorText.js';
 import { Avatar } from '../components/Avatar.jsx';
@@ -92,8 +92,11 @@ export default function Team() {
   const [fieldError, setFieldError] = useState('');
   const [notice, setNotice] = useState('');
   const [removing, setRemoving] = useState(null);
+  const [leaving, setLeaving] = useState(false);
   const [, tick] = useState(0);
   const fileInput = useRef(null);
+  const pictureUrl = useMemo(() => (picture ? URL.createObjectURL(picture) : undefined), [picture]);
+  useEffect(() => () => pictureUrl && URL.revokeObjectURL(pictureUrl), [pictureUrl]);
 
   const load = useCallback(async () => {
     try {
@@ -141,8 +144,8 @@ export default function Team() {
 
   const create = (event) => {
     event.preventDefault();
-    if (name.trim().length < 2) {
-      setFieldError(t('Team name is required'));
+    if (name.trim().length < 3) {
+      setFieldError(t('A team name has 3 to 30 characters.'));
       return undefined;
     }
     return guarded('create', async () => {
@@ -207,6 +210,17 @@ export default function Team() {
       await refresh();
     }).then(() => setRemoving(null));
 
+  // BR54: any member can leave. A leader who leaves hands over to the next member in the team order.
+  const leaveTeam = () =>
+    guarded('leave', async () => {
+      await api.leaveTeam();
+      setLeaving(false);
+      setTeam(null);
+      toast.info(t('You left the team.'));
+      await refresh();
+      await load();
+    }).then(() => setLeaving(false));
+
   if (team === undefined) {
     return (
       <Page title={t('Team')}>
@@ -234,11 +248,7 @@ export default function Team() {
             </Display>
             <div className="row">
               {picture ? (
-                <Avatar
-                  size={56}
-                  avatar={{ url: URL.createObjectURL(picture) }}
-                  label={t('Team picture')}
-                />
+                <Avatar size={56} avatar={{ url: pictureUrl }} label={t('Team picture')} />
               ) : (
                 <span className="empty__icon">
                   <Icon name="team" />
@@ -289,6 +299,8 @@ export default function Team() {
   });
   const full = team.members.length + team.pending.length >= MAX_MEMBERS;
   const iAmLeader = team.leaderId === student.id;
+  // The next leader if this person leaves: the first other member in the team order (BR54).
+  const heir = team.members.find((m) => m.id !== student.id);
 
   return (
     <Page title={team.name} wide>
@@ -390,6 +402,17 @@ export default function Team() {
               </li>
             ),
           )}
+          <li>
+            <Button
+              small
+              variant="ghost"
+              className="team__leave"
+              onClick={() => setLeaving(true)}
+              aria-label={t('Leave the team {name}', { name: team.name })}
+            >
+              <Icon name="back" size={18} /> {t('Leave team')}
+            </Button>
+          </li>
         </ul>
         <section className="stack" aria-labelledby="invite-title">
           <Display as="h2" size="h2" id="invite-title">
@@ -423,6 +446,28 @@ export default function Team() {
           )}
         </section>
       </div>
+      {leaving && (
+        <Modal title={t('Confirm leaving the team')} onClose={() => setLeaving(false)}>
+          <Display as="h2" size="h2">
+            {t('Leave {name}?', { name: team.name })}
+          </Display>
+          <p className="muted mt-s">
+            {!heir
+              ? t('You are the last member, so the team is deleted.')
+              : iAmLeader
+                ? t('{name} becomes the team leader.', { name: heir.displayName })
+                : t('You can join a team again later. Your points stay yours.')}
+          </p>
+          <div className="grid2 mt">
+            <Button small variant="ghost" onClick={() => setLeaving(false)} data-autofocus>
+              {t('Stay in team')}
+            </Button>
+            <Button small busy={busy === 'leave'} onClick={leaveTeam}>
+              {t('Yes, leave')}
+            </Button>
+          </div>
+        </Modal>
+      )}
       {removing && (
         <Modal title={t('Confirm removing a member')} onClose={() => setRemoving(null)}>
           <Display as="h2" size="h2">

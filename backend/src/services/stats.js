@@ -138,6 +138,7 @@ export function createStatsService({ pool, clock }) {
          FROM checkpoints c
          LEFT JOIN (SELECT x.* FROM attempts x JOIN students s ON s.student_id = x.student_id
                     WHERE s.role = 'student') a ON a.checkpoint_id = c.checkpoint_id
+         WHERE c.archived_at IS NULL
          GROUP BY c.checkpoint_id ORDER BY c.checkpoint_id`,
       );
       return rows.map((r) => ({
