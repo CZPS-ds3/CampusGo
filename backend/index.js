@@ -3,6 +3,7 @@ import { systemClock } from './src/clock.js';
 import { loadConfig, productionProblems } from './src/config.js';
 import { describeListenError } from './src/listen-error.js';
 import { createPool } from './src/db/pool.js';
+import { seedAdmins } from './src/db/seed.js';
 import { createMailer } from './src/services/mailer.js';
 
 const config = loadConfig();
@@ -18,6 +19,13 @@ const { app, services } = createApp({ pool, config, mailer, clock: systemClock }
 
 // Tells the operator straight away whether login codes can be delivered (wrong password, blocked port ...).
 mailer.verify().then(({ ok, detail }) => (ok ? console.log : console.error)(`[mail] ${detail}`));
+
+// The pre-seeded admin accounts (ADMIN_EMAILS, BR26/BR37) exist on every server, however it was started: missing
+// ones are created and existing ones stay admins. Safe to repeat on every start. Without the database (not up
+// yet) the start goes on; the next start or "npm run db:seed" adds them.
+seedAdmins(pool, config.adminEmails)
+  .then(() => console.log(`[admin] ${config.adminEmails.length} admin account(s) ready`))
+  .catch((error) => console.error(`[admin] admin accounts not checked: ${error.message}`));
 
 // A stopped database (Docker Desktop closed) is the usual development problem: say so once, in plain words,
 // instead of repeating the raw connection error every few seconds, and say when it is back.

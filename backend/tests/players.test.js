@@ -77,7 +77,7 @@ describe('BR36 player profiles', () => {
 
 describe('BR37 the administrator account exists from the start', () => {
   it('BR37 seedAdmin creates the account once, as id 1 when free, and login needs no sign-up form', async () => {
-    const email = ctx.config.adminEmail;
+    const [email] = ctx.config.adminEmails;
     const id = await seedAdmin(ctx.pool, email);
     expect(id).toBe(1);
     expect(await seedAdmin(ctx.pool, email)).toBe(1);
@@ -87,6 +87,28 @@ describe('BR37 the administrator account exists from the start', () => {
     const otp = ctx.mailer.lastTo(email).text.match(/\b(\d{6})\b/)[1];
     const res = await agent.post('/api/auth/verify').send({ email, otp }).expect(200);
     expect(res.body.student).toMatchObject({ id: 1, role: 'admin' });
+  });
+
+  it('BR26 BR37 every listed admin is seeded, may log in from outside the school domain and stays an admin', async () => {
+    const gmail = 'dhbw.campusgo@gmail.com';
+    expect(ctx.config.adminEmails).toContain('sekretariat.dski@heilbronn.dhbw.de');
+    expect(ctx.config.adminEmails).toContain(gmail);
+    const id = await seedAdmin(ctx.pool, gmail, ['Campus', 'GO'], { main: false });
+    expect(id).not.toBe(1);
+    const agent = request.agent(ctx.app);
+    await agent.post('/api/auth/request-otp').send({ email: gmail }).expect(200);
+    await ctx.mailer.idle();
+    const otp = ctx.mailer.lastTo(gmail).text.match(/\b(\d{6})\b/)[1];
+    const res = await agent.post('/api/auth/verify').send({ email: gmail, otp }).expect(200);
+    expect(res.body.student).toMatchObject({ id, role: 'admin' });
+    // Any other address outside the school domain is still refused (R-31).
+    await request(ctx.app)
+      .post('/api/auth/request-otp')
+      .send({ email: 'someone@gmail.com' })
+      .expect(400);
+    // Another admin cannot make it a student, so it can never be deleted either.
+    const admin = await adminLogin();
+    await admin.agent.post(`/api/admin/users/${id}/role`).send({ role: 'student' }).expect(403);
   });
 
   it('BR37 the administrator cannot be deleted through the app, the admin area or the account service', async () => {

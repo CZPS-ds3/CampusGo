@@ -298,7 +298,7 @@ export function rollBall(element, east, north, { bearing = 0, pitch = 0 } = {}) 
   }
 }
 
-const GLIDE_MS = 900; // about the time between two readings while walking, so the ball keeps moving
+const GLIDE_MS = 350; // short, so the ball shows a new reading almost at once, without a jump
 const JUMP_M = 150; // further than a walk between two readings: jump instead of sliding across the map
 const reducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 const nextFrame = (step) =>

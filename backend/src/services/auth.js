@@ -30,6 +30,13 @@ export function isSchoolEmail(email, domain) {
   return new RegExp(`^([a-z0-9-]+\\.)*${escapeRegex(domain)}$`).test(host);
 }
 
+/**
+ * Whether an address may log in or be given an account: a school address (R-31), or one of the pre-seeded admin
+ * addresses (BR26), which may be outside the school domain.
+ */
+export const mayLogIn = (email, config) =>
+  isSchoolEmail(email, config.allowedEmailDomain) || config.adminEmails.includes(email);
+
 export const displayName = (row) =>
   row.nickname
     ? row.nickname
@@ -77,7 +84,7 @@ export function createAuthService({ pool, config, mailer, clock, nameRules }) {
   /** R-32/R-33: always returns normally; sending, throttling and "no such account" look identical. */
   async function requestOtp(rawEmail) {
     const email = normalizeEmail(rawEmail);
-    if (!isSchoolEmail(email, config.allowedEmailDomain)) {
+    if (!mayLogIn(email, config)) {
       throw new AppError(
         400,
         'INVALID_EMAIL',
@@ -132,7 +139,7 @@ export function createAuthService({ pool, config, mailer, clock, nameRules }) {
    */
   async function verifyOtp(rawEmail, rawCode, profile) {
     const email = normalizeEmail(rawEmail);
-    if (!isSchoolEmail(email, config.allowedEmailDomain)) {
+    if (!mayLogIn(email, config)) {
       throw new AppError(400, 'INVALID_CODE', 'Invalid or expired code.');
     }
     const code = String(rawCode ?? '').replace(/\s+/g, '');
@@ -168,7 +175,7 @@ export function createAuthService({ pool, config, mailer, clock, nameRules }) {
       }
       let student = existing;
       let created = false;
-      const isAdminEmail = email === config.adminEmail;
+      const isAdminEmail = config.adminEmails.includes(email);
       if (!student) {
         if (!profile?.firstName || !profile?.lastName) return { status: 'profile_required' }; // OTP stays usable
         await nameRules.assertAllowed(profile.firstName, profile.lastName, profile.nickname);

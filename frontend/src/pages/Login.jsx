@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { api, USE_MOCKS } from '../api/client.js';
 import { errorText } from '../api/errorText.js';
 import { Avatar, PRESET_COUNT } from '../components/Avatar.jsx';
@@ -14,24 +14,21 @@ import { t } from '../i18n.js';
 
 const RESEND_SECONDS = USE_MOCKS ? 0 : 30;
 const CODE_LIFETIME_SECONDS = 600;
-const SCHOOL_DOMAIN = 'heilbronn.dhbw.de';
 // Only the in-browser mock API (no backend) shows its fake inbox; the real API sends real e-mails.
 const SHOW_INBOX = USE_MOCKS;
 
-const looksLikeSchoolEmail = (value) => {
-  const email = value.trim().toLowerCase();
-  const parts = email.split('@');
-  return (
-    parts.length === 2 &&
-    parts[0].length > 0 &&
-    (parts[1] === SCHOOL_DOMAIN || parts[1].endsWith(`.${SCHOOL_DOMAIN}`))
-  );
+/**
+ * A school address, or at least a well-formed one: the server decides about other domains (the pre-seeded admin
+ * addresses may be outside the school domain, BR26), and the page does not know which they are.
+ */
+const looksLikeEmail = (value) => {
+  const parts = value.trim().toLowerCase().split('@');
+  return parts.length === 2 && parts[0].length > 0 && /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(parts[1]);
 };
 
 export default function Login() {
   const { student, ready, setStudent } = useSession();
   const navigate = useNavigate();
-  const { state } = useLocation();
   const [step, setStep] = useState('email');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -61,7 +58,8 @@ export default function Login() {
     return () => clearInterval(id);
   }, [step]);
 
-  if (ready && student && !welcome) return <Navigate to={state?.from ?? '/map'} replace />;
+  // Every login opens the map, whatever page the visitor came from.
+  if (ready && student && !welcome) return <Navigate to="/map" replace />;
 
   const run = async (work) => {
     setBusy(true);
@@ -82,7 +80,7 @@ export default function Login() {
       setShake((n) => n + 1);
       return undefined;
     }
-    if (!looksLikeSchoolEmail(email)) {
+    if (!looksLikeEmail(email)) {
       setError(t('Use your @heilbronn.dhbw.de school email'));
       setShake((n) => n + 1);
       return undefined;
@@ -106,7 +104,7 @@ export default function Login() {
         // The picture is optional; a failed upload must not block the first login.
       }
     }
-    setTimeout(() => navigate(state?.from ?? '/map', { replace: true }), 700);
+    setTimeout(() => navigate('/map', { replace: true }), 700);
   };
 
   const verify = (digits, withProfile) =>

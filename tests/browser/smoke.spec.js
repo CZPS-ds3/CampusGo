@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { login } from '../../frontend/e2e/helpers.js';
+import { login, open } from '../../frontend/e2e/helpers.js';
 
 test('the app starts, a player signs in and sees the map with the checkpoints', async ({
   page,
@@ -23,7 +23,7 @@ test('the round menu opens, navigates and closes in every browser', async ({ pag
 
 test('a quiz can be played to the end and shows the result', async ({ page }) => {
   await login(page);
-  await page.goto('/quests');
+  await open(page, '/quests');
   await page.getByRole('link', { name: /Campus Garden/ }).click();
   await page.getByRole('link', { name: 'Start quest' }).click();
   await page.getByRole('button', { name: "I'm ready" }).click();

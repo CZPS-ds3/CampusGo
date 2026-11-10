@@ -22,6 +22,18 @@ export async function login(
 }
 
 /** The page must never scroll sideways. */
+/**
+ * Opens a page inside the running app, like a tap in the menu. A fresh page load (page.goto) always starts on the map,
+ * so tests reach other pages this way.
+ */
+export async function open(page, path) {
+  if (!page.url().startsWith('http')) await page.goto('/map');
+  await page.evaluate((to) => {
+    window.history.pushState({}, '', to);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  }, path);
+}
+
 export async function expectNoHorizontalScroll(page) {
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - window.innerWidth,
@@ -34,7 +46,7 @@ export const rightOption = (page) => page.getByRole('button', { name: /placehold
 
 /** Opens a checkpoint from the quest list, which shows its sheet on the map. */
 export async function openCheckpoint(page, name) {
-  await page.goto('/quests');
+  await open(page, '/quests');
   await page.getByRole('link', { name: new RegExp(name) }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
 }

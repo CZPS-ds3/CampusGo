@@ -22,10 +22,14 @@ test('the lenient geofence defaults are in place and can be tuned by environment
   assert.equal(loadConfig({ GEOFENCE_SLACK_M: '10' }).geofenceSlackM, 10);
 });
 
-test('the administrator address comes from the configuration, in lower case', () => {
-  assert.equal(
-    loadConfig({ ADMIN_EMAIL: ' Boss@Heilbronn.DHBW.de ' }).adminEmail,
-    'boss@heilbronn.dhbw.de',
+test('BR26 the administrator addresses come from the configuration, in lower case, both by default', () => {
+  assert.deepEqual(loadConfig({}).adminEmails, [
+    'sekretariat.dski@heilbronn.dhbw.de',
+    'dhbw.campusgo@gmail.com',
+  ]);
+  assert.deepEqual(
+    loadConfig({ ADMIN_EMAILS: ' Boss@Heilbronn.DHBW.de , b@gmail.com' }).adminEmails,
+    ['boss@heilbronn.dhbw.de', 'b@gmail.com'],
   );
 });
 
