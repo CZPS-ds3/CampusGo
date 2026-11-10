@@ -23,6 +23,7 @@ const PINS_PADDING = { top: 190, left: 60, bottom: 150, right: 60 };
 const ROUTE_PADDING = { top: 200, left: 50, bottom: 150, right: 50 };
 // Following the visitor looks a little steeper, like a navigation app.
 const FOLLOW_PITCH = 60;
+const TILT_MS = 700;
 
 /** A focusable pin that opens its checkpoint with a click, Enter or Space, like the flat map's markers. */
 function pinElement(checkpoint, selected, onSelect) {
@@ -163,7 +164,7 @@ export default function MapView3D({
     closeCreditsOnce(container.current);
     if (fromFlat) {
       instance.once('load', () =>
-        instance.easeTo({ pitch: PITCH, duration: 700, essential: false }),
+        instance.easeTo({ pitch: PITCH, duration: TILT_MS, essential: false }),
       );
     }
     const report = () =>
@@ -198,6 +199,24 @@ export default function MapView3D({
       panTo: ([lat, lng]) =>
         instance.easeTo({ center: [lng, lat], duration: 800, essential: false }),
       fitPoints: (points) => showAll(instance, points, ROUTE_PADDING, true),
+      // The way back to the flat map: the tilt-in in reverse, ending north up like the flat map.
+      flatten: () =>
+        new Promise((resolve) => {
+          if (instance.getPitch() === 0 && instance.getBearing() === 0) {
+            resolve();
+            return;
+          }
+          let fallback = null;
+          const done = () => {
+            clearTimeout(fallback);
+            resolve();
+          };
+          fallback = setTimeout(done, TILT_MS + 300); // never leave the switch waiting
+          // A running move (a follow pan) ends first, so its end is not taken for the end of the flattening.
+          instance.stop();
+          instance.once('moveend', done);
+          instance.easeTo({ pitch: 0, bearing: 0, duration: TILT_MS, essential: false });
+        }),
       fitPins: () =>
         showAll(
           instance,

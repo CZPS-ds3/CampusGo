@@ -3,7 +3,6 @@ import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import { insideMapArea } from '../geo.js';
 import { useToast } from '../hooks/useToast.jsx';
 import { getMapBase, getMapView, t } from '../i18n.js';
-import { BEARING, PITCH } from '../map-3d.js';
 import { MAX_ZOOM, createBaseLayers } from '../map-layers.js';
 import {
   PIN_ANCHOR,
@@ -97,11 +96,14 @@ function MapView2D({
     }).setView(saved?.center ?? CAMPUS_CENTER, saved?.zoom ?? 17);
     map.current = instance;
     layers.current = createBaseLayers({ minZoom: MIN_ZOOM });
-    instance.on('moveend', () => {
+    // The flat map looks straight down with north up; the 3D map starts from exactly this view and tilts from
+    // it. Saved at once too, so a switch right after opening also starts flat.
+    const save = () => {
       const { lat, lng } = instance.getCenter();
-      // The flat map looks straight down with north up; the 3D map starts from exactly this view.
       camera.current = { center: [lat, lng], zoom: instance.getZoom(), bearing: 0, pitch: 0 };
-    });
+    };
+    instance.on('moveend', save);
+    save();
     instance.on('dragstart', () => latest.current.onUserMove());
     const fly = (point, zoom) =>
       reducedMotion()
@@ -280,11 +282,13 @@ export function MapView({
   const [view, setView] = useState(getMapView);
   const [base, setBase] = useState(getMapBase);
   const [following, setFollowing] = useState(true);
-  const [turn, setTurn] = useState({ bearing: BEARING, pitch: PITCH });
+  // Flat and north up until the 3D map reports its real turn and tilt.
+  const [turn, setTurn] = useState({ bearing: 0, pitch: 0 });
   const [mapVersion, setMapVersion] = useState(0);
   const api = useRef(null);
   const camera = useRef(null);
   const centred = useRef(false);
+  const switching = useRef(false);
   const followed = useRef('');
   const here = me && insideMapArea([me.lat, me.lng]) ? me : null;
   const latest = useRef({});
@@ -342,6 +346,22 @@ export function MapView({
     api.current?.flyTo([here.lat, here.lng], FOLLOW_ZOOM);
   };
 
+  // 3D to 2D: the 3D map first eases back to flat and north up, then the flat map takes over at that view.
+  const toggleView = async () => {
+    if (switching.current) return;
+    if (view === '2d') {
+      setView('3d');
+      return;
+    }
+    switching.current = true;
+    try {
+      await api.current?.flatten?.();
+    } finally {
+      switching.current = false;
+    }
+    setView('2d');
+  };
+
   // No WebGL, no network or a blocked map style: the student is told and keeps a working map.
   const fail = useCallback(() => {
     toast.info(t('The 3D map could not be loaded, so the flat map is shown.'));
@@ -372,7 +392,7 @@ export function MapView({
       )}
       <MapControls
         view={view}
-        onToggleView={() => setView((now) => (now === '3d' ? '2d' : '3d'))}
+        onToggleView={toggleView}
         base={base}
         onBase={setBase}
         camera={turn}
