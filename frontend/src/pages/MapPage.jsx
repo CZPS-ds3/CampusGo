@@ -31,15 +31,17 @@ function CheckpointSheet({ checkpoint, active, onClose, onRoute }) {
         <IconButton icon="close" label={t('Close checkpoint')} onClick={onClose} />
       </div>
       <div className="sheet__head">
-        <Chip
-          tone={state === 'done' ? 'ok' : state === 'open' ? 'sub' : 'mute'}
-          icon={state === 'done' ? 'check' : state === 'open' ? 'pin' : 'lock'}
-        >
-          {state === 'done' ? t('Cleared') : state === 'open' ? t('Open') : t('Not open yet')}
-        </Chip>
-        <Display as="h2" size="h2" className="mt-s">
+        <Display as="h2" size="h2">
           {checkpoint.name}
         </Display>
+        <div className="mt-s">
+          <Chip
+            tone={state === 'done' ? 'ok' : state === 'open' ? 'sub' : 'mute'}
+            icon={state === 'done' ? 'check' : state === 'open' ? 'pin' : 'lock'}
+          >
+            {state === 'done' ? t('Cleared') : state === 'open' ? t('Open') : t('Not open yet')}
+          </Chip>
+        </div>
       </div>
       <div className="mt">
         <Carousel

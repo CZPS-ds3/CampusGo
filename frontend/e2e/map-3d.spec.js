@@ -226,7 +226,7 @@ test.describe('map buttons, 3D map and live location', () => {
     await expect(viewSwitch(page)).toHaveText('2D');
   });
 
-  test('checkpoint card: the status sits above the name and the X stays in the corner while it scrolls', async ({
+  test('checkpoint card: the status sits below the name and the X stays in the corner while it scrolls', async ({
     page,
   }) => {
     await login(page);
@@ -237,7 +237,7 @@ test.describe('map buttons, 3D map and live location', () => {
     const status = card.getByText('Open', { exact: true });
     const name = card.getByRole('heading', { name: 'Building B' });
     await card.evaluate((box) => box.scrollTo(0, 0));
-    expect((await status.boundingBox()).y).toBeLessThan((await name.boundingBox()).y);
+    expect((await status.boundingBox()).y).toBeGreaterThan((await name.boundingBox()).y);
 
     const close = card.getByRole('button', { name: 'Close checkpoint' });
     const atTop = await close.boundingBox();
