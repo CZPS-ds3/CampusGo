@@ -33,6 +33,9 @@ const CAMPUS_CENTER = [49.1485, 9.2165];
 const MAX_BOUNDS = L.latLngBounds([49.12, 9.17], [49.18, 9.26]);
 const MIN_ZOOM = 14;
 
+// Worse than this (metres), the phone is sharing only an approximate location.
+const APPROXIMATE_M = 100;
+
 const reducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 /** The zoom of the following view: on a phone as close as the map goes, on a larger screen FOLLOW_ZOOM. */
 const followZoom = () =>
@@ -320,6 +323,20 @@ export function MapView({
 }) {
   const toast = useToast();
   const [view, setView] = useState(getMapView);
+  // Phones can share only an approximate location (iOS "Precise Location", Android "Use precise location" turned
+  // off for the browser): the page cannot change that, so it says once how to turn it on.
+  const coarse = (me?.accuracy ?? 0) > APPROXIMATE_M;
+  const toldCoarse = useRef(false);
+  useEffect(() => {
+    if (!coarse || toldCoarse.current) return;
+    toldCoarse.current = true;
+    toast.info(
+      t(
+        'Your phone only shares an approximate location (about {m} m). For your exact spot, turn on precise location for this browser in the phone settings.',
+        { m: Math.round(latest.current.meAccuracy) },
+      ),
+    );
+  }, [coarse, toast]);
   const [base, setBase] = useState(getMapBase);
   const [following, setFollowing] = useState(true);
   // Flat and north up until the 3D map reports its real turn and tilt.
@@ -332,9 +349,11 @@ export function MapView({
   // The view the switch shows: it changes at the tap, before the map has finished animating to it.
   const [switchView, setSwitchView] = useState(view);
   const followed = useRef('');
+  // Where a 2D/3D switch should end: the following view, when the map is in it at the switch; otherwise null.
+  const switchTo = useRef(null);
   const here = me && insideMapArea([me.lat, me.lng]) ? me : null;
   const latest = useRef({});
-  latest.current = { following, here, route };
+  latest.current = { following, here, route, meAccuracy: me?.accuracy };
 
   const onReady = useCallback((value) => {
     api.current = value;
@@ -343,7 +362,8 @@ export function MapView({
   const onUserMove = useCallback(() => setFollowing(false), []);
   const mayFitPins = useCallback(() => !(latest.current.following && latest.current.here), []);
 
-  // Following: the first position flies in close, later ones pan gently. A 2D/3D switch alone never moves the map.
+  // Following: the first position flies in close, later ones pan gently. The 2D/3D switch animation itself ends in
+  // the other map's following view (see toggleView), so nothing moves again after it.
   const hereLat = here?.lat;
   const hereLng = here?.lng;
   useEffect(() => {
@@ -392,6 +412,11 @@ export function MapView({
   // 3D to 2D: the 3D map first eases back to flat and north up, then the flat map takes over at that view.
   const toggleView = async () => {
     if (switching.current) return;
+    // In the following view (following, still at its zoom) the switch goes in one move to the other map's following
+    // view; away from it the switch keeps the place and zoom.
+    const inFollowView =
+      following && here && Math.abs((camera.current?.zoom ?? 0) - followZoom()) < 0.5;
+    switchTo.current = inFollowView ? { point: [here.lat, here.lng], zoom: followZoom() } : null;
     if (view === '2d') {
       setSwitchView('3d');
       setView('3d');
@@ -400,7 +425,7 @@ export function MapView({
     switching.current = true;
     setSwitchView('2d');
     try {
-      await api.current?.flatten?.();
+      await api.current?.flatten?.(switchTo.current);
     } finally {
       switching.current = false;
     }
@@ -433,7 +458,7 @@ export function MapView({
         <MapView2D {...props} />
       ) : (
         <Suspense fallback={<div className="map" />}>
-          <MapView3D {...props} onCamera={setTurn} onFail={fail} />
+          <MapView3D {...props} switchTo={switchTo} onCamera={setTurn} onFail={fail} />
         </Suspense>
       )}
       <MapControls

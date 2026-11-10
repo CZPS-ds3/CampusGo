@@ -118,6 +118,7 @@ export default function MapView3D({
   onUserMove,
   onCamera,
   onFail,
+  switchTo,
 }) {
   const container = useRef(null);
   const map = useRef(null);
@@ -188,9 +189,21 @@ export default function MapView3D({
     }
     map.current = instance;
     closeCreditsOnce(container.current);
+    // Coming from the flat map in its following view, the tilt-in goes straight into the 3D following view in one
+    // move; otherwise it tilts on the spot.
+    const target = switchTo?.current;
     if (fromFlat) {
       instance.once('load', () =>
-        instance.easeTo({ pitch: PITCH, duration: TILT_MS, essential: false }),
+        instance.easeTo({
+          pitch: target ? FOLLOW_PITCH : PITCH,
+          ...(target && {
+            center: [target.point[1], target.point[0]],
+            offset: [0, instance.getContainer().clientHeight * FOLLOW_LOW],
+            zoom: toGlZoom(target.zoom),
+          }),
+          duration: TILT_MS,
+          essential: false,
+        }),
       );
     }
     const report = () =>
@@ -218,16 +231,21 @@ export default function MapView3D({
       zoomOut: () => instance.zoomOut(),
       north: () => instance.easeTo({ bearing: 0 }),
       // While following, the visitor is shown below the middle, so the ball sits low in the middle.
-      flyTo: ([lat, lng], zoom) =>
-        instance.flyTo({
-          center: [lng, lat],
-          offset: [0, instance.getContainer().clientHeight * FOLLOW_LOW],
-          zoom: toGlZoom(zoom),
-          pitch: FOLLOW_PITCH,
-          speed: 1.1,
-          curve: 1.42,
-          essential: false,
-        }),
+      flyTo: ([lat, lng], zoom) => {
+        const fly = () =>
+          instance.flyTo({
+            center: [lng, lat],
+            offset: [0, instance.getContainer().clientHeight * FOLLOW_LOW],
+            zoom: toGlZoom(zoom),
+            pitch: FOLLOW_PITCH,
+            speed: 1.1,
+            curve: 1.42,
+            essential: false,
+          });
+        // Right after a switch the map may still be loading its style; it flies once it has.
+        if (instance.isStyleLoaded()) fly();
+        else instance.once('load', fly);
+      },
       // At the pace of the ball's glide, so a walking visitor stays in the middle.
       panTo: ([lat, lng]) =>
         instance.easeTo({
@@ -239,9 +257,11 @@ export default function MapView3D({
         }),
       fitPoints: (points) => showAll(instance, points, ROUTE_PADDING, true),
       // The way back to the flat map: the tilt-in in reverse, ending north up like the flat map.
-      flatten: () =>
+      // `to` (the flat map's following view, or null) is where the flattening ends, so the flat map takes over there
+      // without a second move.
+      flatten: (to) =>
         new Promise((resolve) => {
-          if (instance.getPitch() === 0 && instance.getBearing() === 0) {
+          if (!to && instance.getPitch() === 0 && instance.getBearing() === 0) {
             resolve();
             return;
           }
@@ -254,7 +274,17 @@ export default function MapView3D({
           // A running move (a follow pan) ends first, so its end is not taken for the end of the flattening.
           instance.stop();
           instance.once('moveend', done);
-          instance.easeTo({ pitch: 0, bearing: 0, duration: TILT_MS, essential: false });
+          instance.easeTo({
+            pitch: 0,
+            bearing: 0,
+            ...(to && {
+              center: [to.point[1], to.point[0]],
+              offset: [0, instance.getContainer().clientHeight * FOLLOW_LOW],
+              zoom: toGlZoom(to.zoom),
+            }),
+            duration: TILT_MS,
+            essential: false,
+          });
         }),
       fitPins: () =>
         showAll(
@@ -265,7 +295,7 @@ export default function MapView3D({
         ),
     });
     setReady(true);
-  }, [style, camera]);
+  }, [style, camera, switchTo]);
 
   useEffect(() => {
     const markerStore = markers.current;

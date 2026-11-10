@@ -4,7 +4,7 @@ import { withTransaction } from '../db/pool.js';
 import { AppError, notFound } from '../middleware/errors.js';
 import { createAccountService, eraseStudentData, leaveTeam } from './account.js';
 import { recordEvent } from './audit.js';
-import { displayName, isSchoolEmail, normalizeEmail } from './auth.js';
+import { displayName, mayLogIn, normalizeEmail } from './auth.js';
 import { SUBSTRING_TERMS, TOKEN_TERMS } from './name-filter-terms.js';
 import { createStatsService } from './stats.js';
 import { MAX_TEAM_SIZE, ensureLeader, refreshTeamScore } from './teams.js';
@@ -12,7 +12,7 @@ import { MAX_TEAM_SIZE, ensureLeader, refreshTeamScore } from './teams.js';
 const SETTABLE_STATUSES = ['active', 'blocked', 'archived'];
 const ROLES = ['student', 'admin'];
 
-const makeUserView = (mainAdminEmail) => (row) => ({
+const makeUserView = (mainAdminEmails) => (row) => ({
   id: row.student_id,
   email: row.email,
   firstName: row.first_name,
@@ -20,8 +20,8 @@ const makeUserView = (mainAdminEmail) => (row) => ({
   nickname: row.nickname,
   displayName: displayName(row),
   role: row.role,
-  // The pre-seeded administrator cannot be demoted or deleted (BR26).
-  mainAdmin: row.email === mainAdminEmail,
+  // The pre-seeded administrators cannot be demoted or deleted (BR26, BR37).
+  mainAdmin: mainAdminEmails.includes(row.email),
   status: row.status,
   statusReason: row.status_reason,
   reported: Boolean(row.reported_at),
@@ -38,7 +38,7 @@ const duplicateEmail = () =>
   new AppError(409, 'EMAIL_TAKEN', 'This e-mail address already belongs to an account.');
 
 export function createAdminService({ pool, config, clock, nameRules }) {
-  const userView = makeUserView(config.adminEmail);
+  const userView = makeUserView(config.adminEmails);
   const accounts = createAccountService({ pool, clock });
   const stats = createStatsService({ pool, clock });
 
@@ -183,7 +183,7 @@ export function createAdminService({ pool, config, clock, nameRules }) {
 
   async function checkEmail(raw, ignoreId = null) {
     const email = normalizeEmail(raw);
-    if (!isSchoolEmail(email, config.allowedEmailDomain)) {
+    if (!mayLogIn(email, config)) {
       throw new AppError(
         400,
         'INVALID_EMAIL',
@@ -205,7 +205,7 @@ export function createAdminService({ pool, config, clock, nameRules }) {
          VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?)`,
         [
           clean,
-          clean === config.adminEmail ? 'admin' : role,
+          config.adminEmails.includes(clean) ? 'admin' : role,
           firstName,
           lastName,
           nickname || null,
@@ -344,7 +344,7 @@ export function createAdminService({ pool, config, clock, nameRules }) {
       if (target.student_id === actorId) {
         throw new AppError(403, 'FORBIDDEN', 'You cannot change your own role.');
       }
-      if (target.email === config.adminEmail) {
+      if (config.adminEmails.includes(target.email)) {
         throw new AppError(403, 'FORBIDDEN', 'The main administrator account cannot be changed.');
       }
       if (target.role === role) return;

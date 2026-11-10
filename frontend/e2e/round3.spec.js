@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { expectNoHorizontalScroll, login, shot } from './helpers.js';
+import { expectNoHorizontalScroll, login, open, shot } from './helpers.js';
 
 const ADMIN = { first: 'Study', last: 'Office', email: 'sekretariat.dski@heilbronn.dhbw.de' };
 
@@ -8,7 +8,7 @@ test.describe('invitations', () => {
     page,
   }, testInfo) => {
     await login(page);
-    await page.goto('/team');
+    await open(page, '/team');
     await page.getByLabel('Team name *').fill('Night Owls');
     await page.getByRole('button', { name: 'Create team' }).click();
     await expect(page.getByRole('heading', { name: 'Night Owls' })).toBeVisible();
@@ -37,7 +37,7 @@ test.describe('place photos', () => {
   test('the carousel moves on after 5 seconds and can be stepped by hand', async ({ page }) => {
     await page.clock.install();
     await login(page);
-    await page.goto('/quests');
+    await open(page, '/quests');
     await page.getByRole('link', { name: /Mensa/ }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByRole('group', { name: /Photos of Mensa/ })).toBeVisible();
@@ -57,13 +57,13 @@ test.describe('admin area', () => {
     page,
   }, testInfo) => {
     await login(page);
-    await page.goto('/admin');
+    await open(page, '/admin');
     await expect(page).toHaveURL(/\/map/);
     await page.goto('/');
     await page.evaluate(() => sessionStorage.clear());
 
     await login(page, ADMIN);
-    await page.goto('/admin');
+    await open(page, '/admin');
     await expect(page.getByRole('heading', { name: 'Admin' })).toBeVisible();
     await expect(page.getByText('Active players')).toBeVisible();
     await expectNoHorizontalScroll(page);
@@ -100,7 +100,7 @@ test.describe('admin area', () => {
 test.describe('delete my account', () => {
   test('BR30 the profile can delete the account after a confirmation', async ({ page }) => {
     await login(page);
-    await page.goto('/profile');
+    await open(page, '/profile');
     await page.getByRole('button', { name: 'Delete my account' }).click();
     await expect(page.getByRole('alertdialog')).toBeVisible();
     await page.getByRole('button', { name: 'Keep my account' }).click();

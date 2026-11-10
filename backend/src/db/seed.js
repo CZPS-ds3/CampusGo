@@ -162,7 +162,15 @@ export async function seedImages(conn) {
  * The administrator account exists from the first seed on (no sign-up step). It takes id 1 when that id is
  * free, otherwise the next id. An existing account with the address is promoted instead of duplicated.
  */
-export async function seedAdmin(conn, email) {
+/**
+ * One pre-seeded administrator (BR37). The main one (`main`, the first listed) takes id 1 when that id is free.
+ */
+export async function seedAdmin(
+  conn,
+  email,
+  [firstName, lastName] = ['Study', 'Office'],
+  { main = true } = {},
+) {
   const [[existing]] = await conn.query('SELECT student_id FROM students WHERE email = ?', [email]);
   if (existing) {
     await conn.query("UPDATE students SET role = 'admin', status = 'active' WHERE student_id = ?", [
@@ -175,10 +183,18 @@ export async function seedAdmin(conn, email) {
   const [inserted] = await conn.query(
     `INSERT INTO students (student_id, email, role, first_name, last_name, nickname, total_points, points_exact_x100,
        points_updated_at, created_at)
-     VALUES (?, ?, 'admin', 'Study', 'Office', 'Admin', 0, 0, ?, ?)`,
-    [idOne ? null : 1, email, now, now],
+     VALUES (?, ?, 'admin', ?, ?, 'Admin', 0, 0, ?, ?)`,
+    [idOne || !main ? null : 1, email, firstName, lastName, now, now],
   );
   return inserted.insertId;
+}
+
+/** Every pre-seeded administrator (BR37): the first listed (the study office) as the main one, id 1 when free. */
+export async function seedAdmins(conn, emails) {
+  for (const [index, email] of emails.entries()) {
+    const main = index === 0;
+    await seedAdmin(conn, email, main ? ['Study', 'Office'] : ['Campus', 'GO'], { main });
+  }
 }
 
 /** Three placeholder "read first" facts per checkpoint (replace with verified texts before the pilot). */
@@ -211,7 +227,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     await seedPlaceholderQuestions(pool);
     await seedPlaceholderFacts(pool);
     await seedImages(pool);
-    await seedAdmin(pool, config.adminEmail);
+    await seedAdmins(pool, config.adminEmails);
     console.log(
       '[seed] reference data, the 8 Bildungscampus checkpoints and placeholder questions are in place',
     );

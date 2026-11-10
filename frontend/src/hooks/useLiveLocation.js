@@ -30,18 +30,66 @@ export function headingFrom({ coords }, anchor) {
   return { heading: null, anchor: anchor ?? here, fromGps: false };
 }
 
-const BETTER_FIX_WINS_MS = 10000;
+// How far the true position can drift from the prediction per second, as a variance (m²/s): a person changing pace
+// or turning. Smaller smooths more, larger follows quicker.
+const DRIFT_M2_PER_S = 9;
+const M_PER_DEG = 111320;
+
+/** A position moved `east` and `north` metres. */
+function moved({ lat, lng }, east, north) {
+  return {
+    lat: lat + north / M_PER_DEG,
+    lng: lng + east / (M_PER_DEG * Math.cos((lat * Math.PI) / 180)),
+  };
+}
+
+// How quickly the walking speed follows the readings when the GPS does not report one, and the fastest pace it may
+// reach, so GPS jitter while standing never turns into a drift.
+const SPEED_GAIN = 0.35;
+const MAX_SPEED_MPS = 3;
+const TRUSTED_FIX_M = 15;
+
+/** The walking velocity [east, north] in m/s the GPS reported with a fix, or null without one. */
+function gpsVelocity({ speed, heading }) {
+  if (!Number.isFinite(speed) || !Number.isFinite(heading)) return null;
+  const angle = (heading * Math.PI) / 180;
+  return [speed * Math.sin(angle), speed * Math.cos(angle)];
+}
 
 /**
- * Whether a new reading should replace the shown position. A much coarser reading (say a 60 m Wi-Fi fix right after
- * a 5 m GPS fix) is ignored for a few seconds unless it shows a real move, so the ball does not jump off the
- * visitor's actual spot; after that, or when the visitor clearly moved, the new reading always wins.
+ * The shown position from the readings so far, like a phone's fused location (a small Kalman filter). The last
+ * position is first moved on by the walking velocity (the one the GPS reported, else one learned from the readings),
+ * then each new fix is weighed by its accuracy against it: GPS jitter is smoothed out, a coarse Wi-Fi fix hardly
+ * moves a precise one, and the ball keeps up with a walking visitor instead of trailing behind. A fix far outside
+ * both accuracies is a real jump and is taken as it is. A fix is { lat, lng, accuracy (m), time (ms), speed (m/s)
+ * and heading (degrees) or null }; the result also carries `velocity`.
  */
-export function keepReading(shown, next) {
-  if (!shown) return true;
-  if (next.accuracy <= shown.accuracy * 1.5) return true;
-  if (next.time - shown.time > BETTER_FIX_WINS_MS) return true;
-  return distanceM([shown.lat, shown.lng], [next.lat, next.lng]) > shown.accuracy + next.accuracy;
+export function fuseFix(shown, fix) {
+  const fresh = { ...fix, velocity: gpsVelocity(fix) ?? [0, 0] };
+  if (!shown) return fresh;
+  const seconds = Math.max(0, (fix.time - shown.time) / 1000);
+  const [east, north] = shown.velocity ?? [0, 0];
+  const ahead = moved(shown, east * seconds, north * seconds);
+  const variance = shown.accuracy ** 2 + DRIFT_M2_PER_S * seconds;
+  const off = distanceM([ahead.lat, ahead.lng], [fix.lat, fix.lng]);
+  // Further off than 2.5 times the combined uncertainty of the estimate and the fix: a real move, taken as it is.
+  if (off > 2.5 * Math.sqrt(variance + fix.accuracy ** 2)) return fresh;
+  const gain = variance / (variance + fix.accuracy ** 2);
+  const lat = ahead.lat + gain * (fix.lat - ahead.lat);
+  const lng = ahead.lng + gain * (fix.lng - ahead.lng);
+  return { ...fix, lat, lng, accuracy: Math.sqrt((1 - gain) * variance), velocity: learn() };
+
+  /** The velocity for the next step: the GPS's own, else nudged by how far this fix was from the prediction. */
+  function learn() {
+    const reported = gpsVelocity(fix);
+    if (reported) return reported;
+    if (!seconds || fix.accuracy > TRUSTED_FIX_M) return [east, north];
+    const missE = (fix.lng - ahead.lng) * M_PER_DEG * Math.cos((lat * Math.PI) / 180);
+    const missN = (fix.lat - ahead.lat) * M_PER_DEG;
+    const next = [east + (SPEED_GAIN * missE) / seconds, north + (SPEED_GAIN * missN) / seconds];
+    const speed = Math.hypot(...next);
+    return speed > MAX_SPEED_MPS ? next.map((v) => (v * MAX_SPEED_MPS) / speed) : next;
+  }
 }
 
 /** How far the screen is turned from the device's natural position (0, 90, 180 or 270), so sideways works too. */
@@ -136,9 +184,11 @@ export function useLiveLocation() {
           lng: reading.coords.longitude,
           accuracy: reading.coords.accuracy,
           time: reading.timestamp ?? Date.now(),
+          speed: reading.coords.speed,
+          heading: reading.coords.heading,
         };
-        if (!keepReading(shown.current, fix)) return;
-        shown.current = fix;
+        const fused = fuseFix(shown.current, fix);
+        shown.current = fused;
         const next = headingFrom(reading, anchor.current);
         anchor.current = next.anchor;
         if (next.fromGps) {
@@ -150,7 +200,7 @@ export function useLiveLocation() {
         setState((now) => ({
           ...now,
           status: 'on',
-          position: { lat: fix.lat, lng: fix.lng, accuracy: fix.accuracy },
+          position: { lat: fused.lat, lng: fused.lng, accuracy: fused.accuracy },
           heading: next.heading ?? now.heading,
         }));
       },

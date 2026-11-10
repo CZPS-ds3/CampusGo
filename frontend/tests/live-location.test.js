@@ -4,7 +4,7 @@ import { bearingDeg, distanceM, insideMapArea, leadIn, routeProgress } from '../
 import {
   compassFrom,
   headingFrom,
-  keepReading,
+  fuseFix,
   useLiveLocation,
 } from '../src/hooks/useLiveLocation.js';
 
@@ -189,20 +189,53 @@ describe('device orientation turns the live arrow', () => {
   });
 });
 
-describe('which reading the live position shows', () => {
-  const gps = { lat: A[0], lng: A[1], accuracy: 5, time: 0 };
+describe('the live position is fused from the readings, like a phone does', () => {
+  const fix = (north, accuracy, seconds, extra = {}) => ({
+    lat: A[0] + north / 111320,
+    lng: A[1],
+    accuracy,
+    time: seconds * 1000,
+    speed: null,
+    heading: null,
+    ...extra,
+  });
+  const northOfA = (shown) => (shown.lat - A[0]) * 111320;
 
-  it('keeps a precise GPS fix when a coarse Wi-Fi reading comes right after it', () => {
-    expect(keepReading(gps, { lat: 49.14805, lng: A[1], accuracy: 60, time: 2000 })).toBe(false);
+  it('takes the first reading as it is', () => {
+    expect(fuseFix(null, fix(0, 5, 0))).toMatchObject({ ...fix(0, 5, 0), velocity: [0, 0] });
   });
 
-  it('takes a coarser reading after a while, or when the visitor clearly moved', () => {
-    expect(keepReading(gps, { lat: 49.14805, lng: A[1], accuracy: 60, time: 11000 })).toBe(true);
-    expect(keepReading(gps, { ...gps, lat: NORTH_OF_A[0], accuracy: 60, time: 2000 })).toBe(true);
+  it('hardly moves a precise GPS fix for a coarse Wi-Fi reading right after it', () => {
+    const shown = fuseFix(fix(0, 5, 0), fix(40, 60, 1));
+    expect(northOfA(shown)).toBeLessThan(1);
   });
 
-  it('always takes the first reading and any about as precise one', () => {
-    expect(keepReading(null, gps)).toBe(true);
-    expect(keepReading(gps, { ...gps, accuracy: 7, time: 1000 })).toBe(true);
+  it('smooths GPS jitter while standing still', () => {
+    let shown = null;
+    [4, -4, 4, -4, 4, -4, 4, -4].forEach((north, s) => {
+      shown = fuseFix(shown, fix(north, 5, s));
+    });
+    expect(Math.abs(northOfA(shown))).toBeLessThan(2.5); // the readings themselves are 4 m off
+    expect(shown.accuracy).toBeLessThan(5);
+  });
+
+  it('keeps up with a walking visitor, using the speed and direction the GPS reports', () => {
+    let shown = null;
+    for (let s = 0; s <= 10; s += 1) {
+      shown = fuseFix(shown, fix(1.4 * s, 5, s, { speed: 1.4, heading: 0 }));
+    }
+    expect(Math.abs(northOfA(shown) - 14)).toBeLessThan(0.5);
+  });
+
+  it('keeps up with a walking visitor even when the GPS reports no speed', () => {
+    let shown = null;
+    for (let s = 0; s <= 20; s += 1) shown = fuseFix(shown, fix(1.4 * s, 5, s));
+    expect(Math.abs(northOfA(shown) - 28)).toBeLessThan(1.5);
+    expect(shown.velocity[1]).toBeGreaterThan(1);
+  });
+
+  it('takes a fix far outside both accuracies as a real jump', () => {
+    const shown = fuseFix(fix(0, 5, 0), fix(300, 10, 1));
+    expect(northOfA(shown)).toBeCloseTo(300, 0);
   });
 });

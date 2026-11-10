@@ -15,7 +15,8 @@ const GEOFENCE_SLACK_M = 30; // grace zone added to every radius
 const ACCURACY_CREDIT_M = 50; // at most this much of a reading's error margin counts for the student
 const NEARER_MARGIN_M = 20; // another checkpoint must be this much nearer to win
 const MAX_POSITION_AGE_MS = 30_000;
-const ADMIN_EMAIL = `sekretariat.dski@${DOMAIN}`;
+// The pre-seeded administrators, as on the server (BR26): they may be outside the school domain.
+const ADMIN_EMAILS = [`sekretariat.dski@${DOMAIN}`, 'dhbw.campusgo@gmail.com'];
 const PLACE_SLUGS = {
   Mensa: 'mensa',
   Library: 'library',
@@ -484,7 +485,8 @@ export function createMockApi(ApiError, getUnauthorized) {
   const methods = {
     async requestOtp(email) {
       const clean = String(email).trim().toLowerCase();
-      if (!clean.endsWith(DOMAIN) || clean.split('@').length !== 2) {
+      const school = clean.endsWith(DOMAIN) && clean.split('@').length === 2;
+      if (!school && !ADMIN_EMAILS.includes(clean)) {
         throw fail(
           400,
           'INVALID_EMAIL',
@@ -505,7 +507,7 @@ export function createMockApi(ApiError, getUnauthorized) {
         if (rude) throw fail(400, 'NAME_NOT_ALLOWED', 'Please choose a different name.');
         state.student = {
           id: 1,
-          role: clean === ADMIN_EMAIL ? 'admin' : 'student',
+          role: ADMIN_EMAILS.includes(clean) ? 'admin' : 'student',
           email: clean,
           firstName,
           lastName,
