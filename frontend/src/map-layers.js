@@ -12,42 +12,75 @@ const AERIAL_URL =
   import.meta.env.VITE_MAP_AERIAL_URL ||
   'https://owsproxy.lgl-bw.de/owsproxy/ows/WMS_LGL-BW_ATKIS_DOP_20_C';
 const AERIAL_LAYER = import.meta.env.VITE_MAP_AERIAL_LAYER || 'IMAGES_DOP_20_RGB';
-const AERIAL_ATTRIBUTION =
+export const AERIAL_ATTRIBUTION =
   'Datenquelle: <a href="https://www.lgl-bw.de">LGL</a>, ' +
   '<a href="https://www.govdata.de/dl-de/by-2-0">dl-de/by-2-0</a>';
 
 // The previews in the preferences show the middle of the Bildungscampus.
+/** Closest zoom of the campus map (Leaflet's numbers); the tiles are enlarged above the servers' own levels. */
+export const MAX_ZOOM = 21;
 const PREVIEW_CENTRE = { lat: 49.1476, lng: 9.2172 };
 const PREVIEW_ZOOM = 17;
 const EARTH_RADIUS_M = 6378137;
 
 /**
- * Adds the aerial photo and the street map to a Leaflet map, with a switch between them, and starts with the type
- * chosen in the preferences. Only the street tiles get the `map-tiles--street` class, so the dark theme's CSS filter
- * and the street-map style never turn the photo into a negative.
+ * The aerial photo and the street map as two Leaflet layers. Only the street tiles get the `map-tiles--street`
+ * class, so the dark theme's CSS filter and the street-map style never turn the photo into a negative.
  */
-export function addBaseLayers(map, { minZoom, position = 'topright' }) {
+export function createBaseLayers({ minZoom }) {
+  // Beyond the last level a server delivers, its tiles are enlarged instead of the layer disappearing.
   const aerial = L.tileLayer.wms(AERIAL_URL, {
     layers: AERIAL_LAYER,
     format: 'image/jpeg',
     version: '1.3.0',
     attribution: AERIAL_ATTRIBUTION,
     minZoom,
-    maxZoom: 19,
+    maxZoom: MAX_ZOOM,
+    maxNativeZoom: 20,
     crossOrigin: true,
   });
   const street = L.tileLayer(STREET_URL, {
     attribution: STREET_ATTRIBUTION,
     minZoom,
-    maxZoom: 19,
+    maxZoom: MAX_ZOOM,
+    maxNativeZoom: 19,
     subdomains: 'abcd',
     crossOrigin: true,
     className: 'map-tiles--street',
   });
+  return { aerial, street };
+}
+
+/**
+ * Adds both map types to a Leaflet map with Leaflet's own switch (used by the admin's geofence editor) and starts
+ * with the type chosen in the preferences.
+ */
+export function addBaseLayers(map, { minZoom, position = 'topright' }) {
+  const { aerial, street } = createBaseLayers({ minZoom });
   (getMapBase() === 'street' ? street : aerial).addTo(map);
   L.control
     .layers({ [t('Aerial photo')]: aerial, [t('Street map')]: street }, undefined, { position })
     .addTo(map);
+}
+
+/**
+ * The aerial photo as a tile address for the 3D map (MapLibre fills in each tile's Web Mercator box). Written by
+ * hand because URLSearchParams would encode the placeholder's braces.
+ */
+export function aerialTileUrl() {
+  const params = [
+    'SERVICE=WMS',
+    'VERSION=1.3.0',
+    'REQUEST=GetMap',
+    `LAYERS=${encodeURIComponent(AERIAL_LAYER)}`,
+    'STYLES=',
+    'CRS=EPSG:3857',
+    'BBOX={bbox-epsg-3857}',
+    'WIDTH=256',
+    'HEIGHT=256',
+    'FORMAT=image/jpeg',
+  ];
+  return `${AERIAL_URL}?${params.join('&')}`;
 }
 
 /** Web Mercator metres for a position (the map projection both layers use). */

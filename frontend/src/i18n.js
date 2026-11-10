@@ -14,12 +14,22 @@ const browserLang = () =>
 
 export const MAP_BASES = ['aerial', 'street'];
 const DEFAULT_MAP_BASE = import.meta.env.VITE_MAP_BASE === 'street' ? 'street' : 'aerial';
+// The flat map stays the default: the 3D map needs WebGL and is heavier on older phones.
+export const MAP_VIEWS = ['2d', '3d'];
+const DEFAULT_MAP_VIEW = import.meta.env.VITE_MAP_VIEW === '3d' ? '3d' : '2d';
 
 function load() {
-  const base = { lang: browserLang(), theme: 'light', size: 'm', mapBase: DEFAULT_MAP_BASE };
+  const base = {
+    lang: browserLang(),
+    theme: 'light',
+    size: 'm',
+    mapBase: DEFAULT_MAP_BASE,
+    mapView: DEFAULT_MAP_VIEW,
+  };
   try {
     const stored = { ...base, ...JSON.parse(localStorage.getItem(KEY) || '{}') };
     if (!MAP_BASES.includes(stored.mapBase)) stored.mapBase = DEFAULT_MAP_BASE;
+    if (!MAP_VIEWS.includes(stored.mapView)) stored.mapView = DEFAULT_MAP_VIEW;
     return stored;
   } catch {
     return base;
@@ -68,4 +78,6 @@ export function t(key, vars) {
 export const getLang = () => state.lang;
 /** The map type a map starts with on this device: 'aerial' or 'street'. */
 export const getMapBase = () => state.mapBase;
+/** The view a map starts with on this device: '2d' (Leaflet) or '3d' (MapLibre, tilted with buildings). */
+export const getMapView = () => state.mapView;
 export const formatNumber = (n) => n.toLocaleString(state.lang === 'de' ? 'de-DE' : 'en-US');

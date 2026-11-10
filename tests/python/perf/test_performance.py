@@ -102,10 +102,36 @@ def gzip_size(paths):
     return sum(len(gzip.compress(path.read_bytes())) for path in paths)
 
 
-def test_the_built_web_app_stays_within_its_size_budget():
+# The 3D map (MapLibre) is a chunk of its own that is only downloaded when someone opens the 3D map.
+LAZY_3D_PREFIX = "MapView3D-"
+
+
+def built_assets():
+    """The built assets folder, or a skip when the web app was not built."""
     assets = ROOT / "frontend" / "dist" / "assets"
     if not assets.exists():
         pytest.skip("run the build first: npm run build")
-    js, css = gzip_size(assets.glob("*.js")), gzip_size(assets.glob("*.css"))
+    return assets
+
+
+def first_load(assets, pattern):
+    """The files of one type that every visitor downloads (all except the 3D map chunk)."""
+    return [p for p in assets.glob(pattern) if not p.name.startswith(LAZY_3D_PREFIX)]
+
+
+def test_the_built_web_app_stays_within_its_size_budget():
+    assets = built_assets()
+    js = gzip_size(first_load(assets, "*.js"))
+    css = gzip_size(first_load(assets, "*.css"))
     assert js < BUDGETS["bundle_js_gzip_bytes"], f"JS {js} bytes gzipped"
     assert css < BUDGETS["bundle_css_gzip_bytes"], f"CSS {css} bytes gzipped"
+
+
+def test_the_3d_map_is_loaded_separately_and_stays_within_its_budget():
+    assets = built_assets()
+    js_files = list(assets.glob(f"{LAZY_3D_PREFIX}*.js"))
+    assert js_files, "the 3D map should be a chunk of its own"
+    js = gzip_size(js_files)
+    css = gzip_size(assets.glob(f"{LAZY_3D_PREFIX}*.css"))
+    assert js < BUDGETS["map3d_js_gzip_bytes"], f"3D map JS {js} bytes gzipped"
+    assert css < BUDGETS["map3d_css_gzip_bytes"], f"3D map CSS {css} bytes gzipped"

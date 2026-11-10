@@ -40,6 +40,14 @@ describe('BR48 colours', () => {
       open: '#010203',
     });
   });
+
+  it('BR48 the colour of the 3D buildings is checked like every other colour', () => {
+    expect(validateMapStyle({ buildings: '#ABC' }).buildings).toBe('#aabbcc');
+    expect(validateMapStyle({}).buildings).toBe(DEFAULT_MAP_STYLE.buildings);
+    expect(() => validateMapStyle({ buildings: 'url(x)' })).toThrowError(
+      /buildings is not a colour/,
+    );
+  });
 });
 
 describe('BR48 one map style per account', () => {

@@ -59,6 +59,15 @@ describe('BR48 the map style of a student', () => {
     expect(cleanStyle(null)).toEqual(DEFAULT_MAP_STYLE);
   });
 
+  it('BR48 the 3D buildings have their own colour; a broken one falls back to the default', () => {
+    expect(cleanStyle({ buildings: 'rgb(18, 52, 86)' }).buildings).toBe('#123456');
+    expect(cleanStyle({ buildings: 'url(x)' }).buildings).toBe(DEFAULT_MAP_STYLE.buildings);
+    expect(styleVariables({ ...DEFAULT_MAP_STYLE, buildings: '#123456' })['--buildings']).toBe(
+      '#123456',
+    );
+    for (const preset of Object.values(PRESETS)) expect(preset.buildings).toMatch(/^#[0-9a-f]{6}$/);
+  });
+
   it('BR48 every preset is a complete, valid style', () => {
     for (const [name, preset] of Object.entries(PRESETS)) {
       expect(cleanStyle(preset), name).toEqual(preset);

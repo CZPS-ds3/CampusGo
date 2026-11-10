@@ -1,34 +1,45 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { errorText } from '../api/errorText.js';
 import { Avatar } from '../components/Avatar.jsx';
 import { Button } from '../components/Button.jsx';
 import { Carousel } from '../components/Carousel.jsx';
-import { Icon } from '../components/icons.jsx';
+import { Icon, IconButton } from '../components/icons.jsx';
 import { MapView } from '../components/MapView.jsx';
 import { QuestTypes } from '../components/QuestTypes.jsx';
 import { Modal, Sheet } from '../components/Sheet.jsx';
 import { Chip, Display } from '../components/ui.jsx';
+import { distanceM, leadIn, routeProgress } from '../geo.js';
+import { useLiveLocation } from '../hooks/useLiveLocation.js';
 import { useRoute } from '../hooks/useRoute.js';
 import { useSession } from '../hooks/useSession.jsx';
 import { useToast } from '../hooks/useToast.jsx';
 import { formatNumber, t } from '../i18n.js';
 
+// A new route is fetched when the visitor is this far off the route, at most every REROUTE_MS.
+const OFF_ROUTE_M = 40;
+const REROUTE_MS = 20000;
+const ARRIVED_M = 20;
+
 function CheckpointSheet({ checkpoint, active, onClose, onRoute }) {
   const state = checkpoint.completed ? 'done' : checkpoint.isActive ? 'open' : 'closed';
   return (
     <Sheet title={t('{name} checkpoint', { name: checkpoint.name })} onClose={onClose}>
-      <div className="row row--between row--top">
-        <Display as="h2" size="h2" className="grow">
-          {checkpoint.name}
-        </Display>
+      {/* The same X as on the other screens; it stays in the corner while the card scrolls. */}
+      <div className="sheet__closebar">
+        <IconButton icon="close" label={t('Close checkpoint')} onClick={onClose} />
+      </div>
+      <div className="sheet__head">
         <Chip
           tone={state === 'done' ? 'ok' : state === 'open' ? 'sub' : 'mute'}
           icon={state === 'done' ? 'check' : state === 'open' ? 'pin' : 'lock'}
         >
           {state === 'done' ? t('Cleared') : state === 'open' ? t('Open') : t('Not open yet')}
         </Chip>
+        <Display as="h2" size="h2" className="mt-s">
+          {checkpoint.name}
+        </Display>
       </div>
       <div className="mt">
         <Carousel
@@ -102,6 +113,43 @@ export default function MapPage() {
   const [confirmReset, setConfirmReset] = useState(false);
   const [resetting, setResetting] = useState(false);
   const route = useRoute();
+  const screen = useRef(null);
+  const header = useRef(null);
+
+  // The map buttons sit just below the header, which grows with a route or a running quiz.
+  useEffect(() => {
+    const top = header.current;
+    if (!top || typeof ResizeObserver === 'undefined') return undefined;
+    const place = () =>
+      screen.current?.style.setProperty('--map-header', `${top.offsetTop + top.offsetHeight}px`);
+    const watcher = new ResizeObserver(place);
+    watcher.observe(top);
+    place();
+    return () => watcher.disconnect();
+  }, []);
+  const live = useLiveLocation();
+  const me = live.position;
+  const { reroute } = route;
+
+  // While walking, only the part of the route still ahead is drawn and counted, with a dotted curve from the
+  // visitor to where it starts.
+  const progress = useMemo(
+    () => (route.route && me ? routeProgress(route.route.points, [me.lat, me.lng]) : null),
+    [route.route, me],
+  );
+  const shownRoute = useMemo(() => {
+    if (!route.route || !progress) return route.route;
+    const lead = leadIn([me.lat, me.lng], progress.points);
+    // The first metres of the route can become part of the dotted curve, so it joins without a sharp bend.
+    return { ...route.route, points: lead?.route ?? progress.points, lead: lead?.curve ?? null };
+  }, [route.route, progress, me]);
+  const lastReroute = useRef(0);
+  useEffect(() => {
+    if (!progress || !me || progress.offRouteM < OFF_ROUTE_M) return;
+    if (Date.now() - lastReroute.current < REROUTE_MS) return;
+    lastReroute.current = Date.now();
+    reroute([me.lat, me.lng]);
+  }, [progress, me, reroute]);
 
   useEffect(() => {
     let alive = true;
@@ -140,19 +188,31 @@ export default function MapPage() {
   };
   const showRoute = () => {
     setSheetOpen(false);
-    route.show([selected.latitude, selected.longitude]);
+    route.show([selected.latitude, selected.longitude], me ? [me.lat, me.lng] : null);
   };
   const routeTarget = route.status === 'idle' ? null : selected;
+  const arrived = Boolean(
+    me && route.target && distanceM([me.lat, me.lng], route.target) < ARRIVED_M,
+  );
+  const metersLeft = progress ? progress.meters : route.route?.meters;
+  const minutesLeft =
+    route.route?.seconds && route.route.meters
+      ? Math.max(1, Math.round((route.route.seconds * metersLeft) / route.route.meters / 60))
+      : null;
 
   return (
-    <div className="mapscreen">
+    <div className="mapscreen" ref={screen}>
       <div className={`mapscreen__map${zone === 'city' ? ' is-grey' : ''}`}>
         <MapView
           checkpoints={zone === 'campus' ? checkpoints : []}
           selectedId={selectedId}
           onSelect={select}
-          route={route.route}
-          from={route.from}
+          route={shownRoute}
+          fitRoute={route.shown}
+          me={zone === 'campus' ? me : null}
+          heading={live.heading}
+          locationStatus={live.status}
+          onLocate={live.start}
         />
       </div>
 
@@ -170,7 +230,7 @@ export default function MapPage() {
         </div>
       )}
 
-      <header className="mapscreen__top">
+      <header className="mapscreen__top" ref={header}>
         <div className="card card--tight row mapscreen__me">
           <Link to="/profile" className="mapscreen__avatar" aria-label={t('Open profile')}>
             <Avatar
@@ -214,7 +274,10 @@ export default function MapPage() {
               {route.status === 'denied' &&
                 t('Location is blocked in your browser, so no route can be drawn.')}
               {route.status === 'error' && t('Your position could not be found.')}
-              {route.status === 'ready' && (
+              {route.status === 'ready' && arrived && (
+                <strong>{t('You have arrived at {name}.', { name: routeTarget.name })}</strong>
+              )}
+              {route.status === 'ready' && !arrived && (
                 <>
                   <strong>{t('Route to {name}', { name: routeTarget.name })}</strong>
                   {route.route.straight ? (
@@ -222,8 +285,7 @@ export default function MapPage() {
                   ) : (
                     <>
                       {' · '}
-                      {route.route.meters} m · {Math.max(1, Math.round(route.route.seconds / 60))}{' '}
-                      {t('min walk')}
+                      {metersLeft} m · {minutesLeft} {t('min walk')}
                     </>
                   )}
                 </>
