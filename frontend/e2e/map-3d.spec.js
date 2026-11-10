@@ -153,20 +153,31 @@ test.describe('map buttons, 3D map and live location', () => {
           const started = performance.now();
           const compass = document.querySelector('.mapctl__needle');
           const tilts = [];
+          const toggle = document.querySelector('[role="switch"][aria-label="3D map"]');
+          let early = null;
+          // Shortly after the tap: the switch already shows 2D while the 3D map is still flattening.
+          setTimeout(() => {
+            early = {
+              checked: toggle.getAttribute('aria-checked'),
+              text: toggle.textContent,
+              still3d: Boolean(document.querySelector('[data-testid="map-3d"]')),
+            };
+          }, 60);
           const sample = setInterval(() => {
             const tilt = compass?.style.transform.match(/rotateX\(([\d.]+)deg\)/)?.[1];
             if (tilt !== undefined) tilts.push(Number(tilt));
           }, 50);
-          document.querySelector('[role="switch"][aria-label="3D map"]').click();
+          toggle.click();
           const watcher = new MutationObserver(() => {
             if (!document.querySelector('.leaflet-container')) return;
             watcher.disconnect();
             clearInterval(sample);
-            resolve({ ms: performance.now() - started, tilts });
+            resolve({ ms: performance.now() - started, tilts, early });
           });
           watcher.observe(document.body, { childList: true, subtree: true });
         }),
     );
+    expect(back.early).toEqual({ checked: 'false', text: '2D', still3d: true });
     expect(back.ms).toBeGreaterThan(400);
     expect(back.tilts.some((tilt) => tilt > 5 && tilt < 50)).toBe(true);
     await expect(page.locator('.leaflet-container')).toBeVisible();

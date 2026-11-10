@@ -289,6 +289,8 @@ export function MapView({
   const camera = useRef(null);
   const centred = useRef(false);
   const switching = useRef(false);
+  // The view the switch shows: it changes at the tap, before the map has finished animating to it.
+  const [switchView, setSwitchView] = useState(view);
   const followed = useRef('');
   const here = me && insideMapArea([me.lat, me.lng]) ? me : null;
   const latest = useRef({});
@@ -350,10 +352,12 @@ export function MapView({
   const toggleView = async () => {
     if (switching.current) return;
     if (view === '2d') {
+      setSwitchView('3d');
       setView('3d');
       return;
     }
     switching.current = true;
+    setSwitchView('2d');
     try {
       await api.current?.flatten?.();
     } finally {
@@ -365,6 +369,7 @@ export function MapView({
   // No WebGL, no network or a blocked map style: the student is told and keeps a working map.
   const fail = useCallback(() => {
     toast.info(t('The 3D map could not be loaded, so the flat map is shown.'));
+    setSwitchView('2d');
     setView('2d');
   }, [toast]);
 
@@ -392,6 +397,7 @@ export function MapView({
       )}
       <MapControls
         view={view}
+        switchView={switchView}
         onToggleView={toggleView}
         base={base}
         onBase={setBase}
