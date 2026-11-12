@@ -16,7 +16,7 @@ Yuri is rewriting the backend. The frontend now expects the following from it; e
 
 ## Small edits in existing files
 
-- `config.js`: `adminEmails` from `ADMIN_EMAIL` (comma-separated, default `sekretariat.dski@heilbronn.dhbw.de,dhbw.campus@gmail.com`); `adminEmail` is the first one (main admin, id 1). `auth.js` `mayLogIn()` = school domain or one of these addresses (BR37).
+- `config.js`: `adminEmails` (`ADMIN_EMAILS`, comma-separated, default `sekretariat.dski@heilbronn.dhbw.de` and `dhbw.campusgo@gmail.com`; both are seeded as admins on every start, BR26/BR37).
 - `services/auth.js`: `role` in `publicStudent`; in `verifyOtp` refuse non-active accounts (`ACCOUNT_UNAVAILABLE`), run the name filter on sign-up, make the admin address an admin, write `login` events; `authenticate` returns null for non-active accounts; `logout` writes a `logout` event.
 - `services/teams.js`: name filter on team creation; in `invite` refuse with `TEAM_FULL` when members plus pending invitations are 5 (checked **before** the invitee lookup so R-43 holds); only invite `active` students with role `student`.
 - `services/leaderboards.js`: only `status = 'active' AND role = 'student'` students, and only active members count for teams.

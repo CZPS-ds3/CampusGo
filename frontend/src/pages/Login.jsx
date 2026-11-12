@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { api, USE_MOCKS } from '../api/client.js';
 import { errorText } from '../api/errorText.js';
 import { Avatar, PRESET_COUNT } from '../components/Avatar.jsx';
@@ -15,18 +15,19 @@ import { t } from '../i18n.js';
 
 const RESEND_SECONDS = USE_MOCKS ? 0 : 30;
 const CODE_LIFETIME_SECONDS = 600;
-// Only the shape is checked here. Which domains may log in is the server's decision: students need the school
-// domain, and the pre-seeded admin addresses (BR37) may use another one.
+/**
+ * A school address, or at least a well-formed one: the server decides about other domains (the pre-seeded admin
+ * addresses may be outside the school domain, BR26), and the page does not know which they are.
+ */
 const looksLikeEmail = (value) => {
-  const parts = value.trim().split('@');
-  return parts.length === 2 && parts[0].length > 0 && parts[1].includes('.');
+  const parts = value.trim().toLowerCase().split('@');
+  return parts.length === 2 && parts[0].length > 0 && /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(parts[1]);
 };
 
 export default function Login() {
   const { student, ready, setStudent } = useSession();
   const toast = useToast();
   const navigate = useNavigate();
-  const { state } = useLocation();
   const [step, setStep] = useState('email');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -73,7 +74,8 @@ export default function Login() {
     return () => clearInterval(id);
   }, [step]);
 
-  if (ready && student && !welcome) return <Navigate to={state?.from ?? '/map'} replace />;
+  // Every login opens the map, whatever page the visitor came from.
+  if (ready && student && !welcome) return <Navigate to="/map" replace />;
 
   const run = async (work) => {
     setBusy(true);
@@ -137,7 +139,7 @@ export default function Login() {
       }
     }
     setStudent(me);
-    setTimeout(() => navigate(state?.from ?? '/map', { replace: true }), 700);
+    setTimeout(() => navigate('/map', { replace: true }), 700);
   };
 
   const verify = (digits, withProfile) =>

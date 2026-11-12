@@ -1,6 +1,6 @@
 """Integration tests over real HTTP: the two pre-seeded administrators (BR37).
 
-The team's shared mailbox dhbw.campus@gmail.com is a second admin next to the study office. It may log in
+The team's shared mailbox dhbw.campusgo@gmail.com is a second admin next to the study office. It may log in
 although it is not a school address (BR01 exception for admin addresses only) and is protected like the
 main admin.
 """
@@ -12,7 +12,7 @@ from conftest import API_URL, Player
 
 pytestmark = pytest.mark.api
 
-SHARED_ADMIN = "dhbw.campus@gmail.com"
+SHARED_ADMIN = "dhbw.campusgo@gmail.com"
 
 
 def ask_code(email):

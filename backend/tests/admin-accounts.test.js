@@ -9,7 +9,7 @@ beforeEach(() => ctx.reset());
 afterAll(() => ctx.close());
 
 const MAIN = 'sekretariat.dski@heilbronn.dhbw.de';
-const SHARED = 'dhbw.campus@gmail.com';
+const SHARED = 'dhbw.campusgo@gmail.com';
 
 /** Logs an existing account in with the e-mailed code (no sign-up form). */
 async function codeLogin(email, profile = {}) {
@@ -23,37 +23,44 @@ async function codeLogin(email, profile = {}) {
 }
 
 describe('BR37 the list of pre-seeded administrators', () => {
-  it('BR37 both admin addresses are the default; the first one is the main admin', () => {
-    const config = loadConfig({ NODE_ENV: 'test' });
+  it('BR37 both admin addresses are the default; the study office comes first', () => {
     expect(DEFAULT_ADMIN_EMAILS.split(',')).toEqual([MAIN, SHARED]);
-    expect(config.adminEmails).toEqual([MAIN, SHARED]);
-    expect(config.adminEmail).toBe(MAIN);
+    expect(loadConfig({ NODE_ENV: 'test' }).adminEmails).toEqual([MAIN, SHARED]);
   });
 
-  it('BR37 ADMIN_EMAIL takes a comma-separated list; spaces, capitals and repeats are cleaned, empty means default', () => {
+  it('BR37 ADMIN_EMAILS takes a comma-separated list; spaces, capitals and repeats are cleaned, empty means default', () => {
     const list = loadConfig({
       NODE_ENV: 'test',
-      ADMIN_EMAIL: ` ${MAIN} , DHBW.Campus@Gmail.com,${MAIN},`,
+      ADMIN_EMAILS: ` ${MAIN} , DHBW.CampusGO@Gmail.com,${MAIN},`,
     });
     expect(list.adminEmails).toEqual([MAIN, SHARED]);
-    expect(loadConfig({ NODE_ENV: 'test', ADMIN_EMAIL: MAIN }).adminEmails).toEqual([MAIN]);
-    expect(loadConfig({ NODE_ENV: 'test', ADMIN_EMAIL: ' , ' }).adminEmails).toEqual([
+    expect(loadConfig({ NODE_ENV: 'test', ADMIN_EMAILS: MAIN }).adminEmails).toEqual([MAIN]);
+    // A blank line in .env.production must never leave a server without admins.
+    expect(loadConfig({ NODE_ENV: 'test', ADMIN_EMAILS: ' , ' }).adminEmails).toEqual([
       MAIN,
       SHARED,
     ]);
   });
 
-  it('BR37 the seed creates both admins once: the main admin as id 1, the shared mailbox as "Campus Admin"', async () => {
-    const ids = await seedAdmins(ctx.pool, [MAIN, SHARED]);
-    expect(ids[0]).toBe(1);
-    expect(await seedAdmins(ctx.pool, [MAIN, SHARED])).toEqual(ids);
+  it('BR37 the seed creates both admins once: the study office as id 1, the shared mailbox as "Campus GO"', async () => {
+    await seedAdmins(ctx.pool, [MAIN, SHARED]);
+    await seedAdmins(ctx.pool, [MAIN, SHARED]);
     const [rows] = await ctx.pool.query(
-      'SELECT email, role, first_name, last_name FROM students ORDER BY student_id',
+      'SELECT student_id, email, role, first_name, last_name FROM students ORDER BY student_id',
     );
-    expect(rows).toEqual([
-      { email: MAIN, role: 'admin', first_name: 'Study', last_name: 'Office' },
-      { email: SHARED, role: 'admin', first_name: 'Campus', last_name: 'Admin' },
-    ]);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({
+      student_id: 1,
+      email: MAIN,
+      role: 'admin',
+      first_name: 'Study',
+    });
+    expect(rows[1]).toMatchObject({
+      email: SHARED,
+      role: 'admin',
+      first_name: 'Campus',
+      last_name: 'GO',
+    });
   });
 });
 
@@ -67,17 +74,17 @@ describe('BR01 BR37 the shared admin mailbox logs in outside the school domain',
   });
 
   it('BR01 BR37 without the seed, the Gmail admin signs up and becomes an admin at once', async () => {
-    const { res } = await codeLogin(SHARED, { firstName: 'Campus', lastName: 'Admin' });
+    const { res } = await codeLogin(SHARED, { firstName: 'Campus', lastName: 'GO' });
     expect([200, 201]).toContain(res.status);
     expect(res.body.student).toMatchObject({ role: 'admin' });
   });
 
-  it('BR01 any other Gmail address is still refused, before and after the code step', async () => {
-    const asked = await request(ctx.app)
-      .post('/api/auth/request-otp')
-      .send({ email: 'dhbw.campus2@gmail.com' });
-    expect(asked.status).toBe(400);
-    expect(asked.body.error.code).toBe('INVALID_EMAIL');
+  it('BR01 any other Gmail address is refused, the dropped draft address dhbw.campus@gmail.com too', async () => {
+    for (const email of ['dhbw.campus@gmail.com', 'dhbw.campusgo2@gmail.com']) {
+      const asked = await request(ctx.app).post('/api/auth/request-otp').send({ email });
+      expect(asked.status).toBe(400);
+      expect(asked.body.error.code).toBe('INVALID_EMAIL');
+    }
     expect(ctx.mailer.outbox).toHaveLength(0);
     const verified = await request(ctx.app)
       .post('/api/auth/verify')
@@ -85,11 +92,14 @@ describe('BR01 BR37 the shared admin mailbox logs in outside the school domain',
     expect(verified.body.error.code).toBe('INVALID_CODE');
   });
 
-  it('BR01 students still cannot be invited with a Gmail address, not even the admin one', async () => {
+  it('BR01 BR42 the admin address may be invited into a team (the team is then not ranked), other Gmail addresses not', async () => {
     const lead = await ctx.login('lead');
     await lead.agent.post('/api/teams').send({ name: 'Night Owls' }).expect(201);
-    const res = await lead.agent.post('/api/teams/me/invitations').send({ email: SHARED });
-    expect(res.status).toBe(400);
+    await lead.agent.post('/api/teams/me/invitations').send({ email: SHARED }).expect(202);
+    const other = await lead.agent
+      .post('/api/teams/me/invitations')
+      .send({ email: 'someone@gmail.com' });
+    expect(other.status).toBe(400);
   });
 });
 
@@ -117,7 +127,7 @@ describe('BR37 BR53 the shared admin is protected like the main admin', () => {
     const { agent } = await codeLogin(MAIN, { firstName: 'Study', lastName: 'Office' });
     const made = await agent
       .post('/api/admin/users')
-      .send({ email: SHARED, firstName: 'Campus', lastName: 'Admin' });
+      .send({ email: SHARED, firstName: 'Campus', lastName: 'GO' });
     expect(made.status).toBe(201);
     const [[row]] = await ctx.pool.query('SELECT role FROM students WHERE email = ?', [SHARED]);
     expect(row.role).toBe('admin');

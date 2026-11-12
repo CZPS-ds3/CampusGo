@@ -354,3 +354,60 @@ def test_bug_the_test_runner_started_the_whole_docker_app_and_blocked_npm_run_de
     runner = (ROOT / "tests" / "run-all.mjs").read_text(encoding="utf-8")
     assert "docker compose up -d --wait mysql" in runner
     assert "'docker compose up -d --wait'" not in runner
+
+
+def test_bug_a_client_could_fake_its_ip_and_skip_the_login_rate_limits_br01():
+    """The production port listened everywhere and the API trusted two X-Forwarded-For hops, so anyone who reached
+    the port directly could send a new made-up IP with every request and guess login codes without a limit.
+    """
+    nginx = (ROOT / "frontend" / "nginx.conf").read_text(encoding="utf-8")
+    assert "$proxy_add_x_forwarded_for" not in nginx
+    assert nginx.count("proxy_set_header X-Forwarded-For $remote_addr;") == 2
+    assert "include /etc/nginx/trusted-proxies.conf;" in nginx and "real_ip_recursive off;" in nginx
+    compose = (ROOT / "docker-compose.prod.yml").read_text(encoding="utf-8")
+    assert "TRUST_PROXY: '1'" in compose and "TRUST_PROXY: ${TRUST_PROXY:-2}" not in compose
+    assert "TRUSTED_PROXIES: ${TRUSTED_PROXIES:?" in compose
+    assert "'${HTTP_BIND:-0.0.0.0}:${HTTP_PORT:-8080}:80'" in compose
+
+
+def test_bug_the_api_container_got_the_mysql_root_password_br22():
+    """`env_file: .env.production` handed every production setting to the API, the database root password too."""
+    compose = (ROOT / "docker-compose.prod.yml").read_text(encoding="utf-8")
+    backend = compose.split("\n  backend:\n", 1)[1].split("\n  web:\n", 1)[0]
+    assert "env_file" not in backend
+    assert "MYSQL_ROOT_PASSWORD" not in backend
+
+
+def test_bug_production_had_no_database_backup_br11():
+    """Risk R13 (project handbook) asked for a database backup before the pilot; there was none."""
+    script = (ROOT / "scripts" / "backup-prod.sh").read_text(encoding="utf-8")
+    assert "mysqldump" in script and "tar -C /app/backend/uploads" in script
+    assert "\r" not in script, "the Ubuntu server needs LF line endings"
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "bash scripts/backup-prod.sh" in readme
+
+
+def test_bug_placeholder_questions_could_go_live_without_any_warning_br11(admin):
+    """The seed fills every pilot quest with PLACEHOLDER questions; nobody was told they were still live."""
+    placeholders = admin.get("/admin/stats").json()["placeholders"]
+    assert set(placeholders) == {"questions", "facts", "quests"}
+    assert isinstance(placeholders["questions"], int) and isinstance(placeholders["facts"], int)
+    if placeholders["quests"]:
+        assert placeholders["questions"] + placeholders["facts"] > 0
+    index = (ROOT / "backend" / "index.js").read_text(encoding="utf-8")
+    assert "placeholderWarning" in index
+
+
+def test_bug_the_merge_left_two_stacked_doc_comments_in_the_seed_br37():
+    """After the merge of the two admin designs the old doc comment stayed above the new one in seed.js."""
+    seed = (ROOT / "backend" / "src" / "db" / "seed.js").read_text(encoding="utf-8")
+    assert "*/\n/**" not in seed
+
+
+def test_bug_the_first_location_check_timed_out_on_the_small_phone_br12():
+    """The first "Locked on!" of a browser test took longer than the usual 10 s on a cold phone-360 browser."""
+    helpers = (ROOT / "frontend" / "e2e" / "helpers.js").read_text(encoding="utf-8")
+    assert "export const LOCK_ON_TIMEOUT = 25_000;" in helpers
+    for name in ("helpers.js", "flow.spec.js"):
+        text = (ROOT / "frontend" / "e2e" / name).read_text(encoding="utf-8")
+        assert "getByText('Locked on!')).toBeVisible();" not in text, name

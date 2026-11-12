@@ -6,7 +6,10 @@ not break `npm run dev`, which starts only the mysql service of the same compose
 """
 
 import json
+import os
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -114,12 +117,22 @@ PROD_COMPOSE = ROOT / "docker-compose.prod.yml"
 PROD_BACKEND = ROOT / "backend" / "Dockerfile"
 PROD_FRONTEND = ROOT / "frontend" / "Dockerfile"
 NGINX = ROOT / "frontend" / "nginx.conf"
+TRUSTED_PROXIES_SCRIPT = ROOT / "frontend" / "docker-trusted-proxies.sh"
+BACKUP_SCRIPT = ROOT / "scripts" / "backup-prod.sh"
 PROD_ENV_EXAMPLE = ROOT / ".env.production.example"
 
 
 @pytest.mark.parametrize(
     "path",
-    [PROD_COMPOSE, PROD_BACKEND, PROD_FRONTEND, NGINX, PROD_ENV_EXAMPLE],
+    [
+        PROD_COMPOSE,
+        PROD_BACKEND,
+        PROD_FRONTEND,
+        NGINX,
+        TRUSTED_PROXIES_SCRIPT,
+        BACKUP_SCRIPT,
+        PROD_ENV_EXAMPLE,
+    ],
     ids=lambda p: p.name,
 )
 def test_production_files_use_linux_line_endings(path):
@@ -132,7 +145,7 @@ def test_production_stack_publishes_only_the_web_port():
     compose = read(PROD_COMPOSE)
     assert "ports:" not in service_block(compose, "mysql")
     assert "ports:" not in service_block(compose, "backend")
-    assert "'${HTTP_PORT:-8080}:80'" in service_block(compose, "web")
+    assert "'${HTTP_BIND:-0.0.0.0}:${HTTP_PORT:-8080}:80'" in service_block(compose, "web")
 
 
 def test_production_api_runs_in_production_mode_without_code_preview():
@@ -140,15 +153,28 @@ def test_production_api_runs_in_production_mode_without_code_preview():
     assert "NODE_ENV: production" in backend
     assert "OTP_PREVIEW_DEFAULT: 'false'" in backend
     assert "FRONTEND_ORIGIN: ${PUBLIC_URL:?" in backend
-    assert "path: .env.production" in backend
+    # Only nginx stands directly in front of the API; it passes on the one visitor IP it believes.
+    assert "TRUST_PROXY: '1'" in backend
+
+
+def test_production_api_gets_only_its_own_settings_never_the_mysql_root_password():
+    backend = service_block(read(PROD_COMPOSE), "backend")
+    assert "env_file" not in backend, "env_file would hand every line of .env.production to the API"
+    assert "MYSQL_ROOT_PASSWORD" not in backend
+    for name in ("SESSION_SECRET", "OTP_SECRET", "SMTP_HOST", "SMTP_FROM"):
+        assert f"{name}: ${{{name}:?" in backend, name
+    for name in ("SMTP_PORT", "SMTP_SECURE", "SMTP_USER", "SMTP_PASSWORD", "ADMIN_EMAILS"):
+        assert f"{name}: ${{{name}:-" in backend, name
 
 
 def test_production_stack_needs_its_passwords_and_holds_no_secret():
     compose = read(PROD_COMPOSE)
     for name in ("MYSQL_ROOT_PASSWORD", "MYSQL_PASSWORD", "PUBLIC_URL"):
         assert f"${{{name}:?" in compose, name
+    # Secrets are passed on by reference (${NAME...}) from .env.production, never written into the file.
     for name in SECRET_NAMES:
-        assert not re.search(rf"^\s*{name}\s*[:=]", compose, re.MULTILINE), name
+        for line in re.findall(rf"^\s*{name}\s*[:=].*$", compose, re.MULTILINE):
+            assert re.search(rf"[:=]\s*\$\{{{name}[:}}]", line), line
 
 
 def test_production_example_settings_are_empty_where_they_are_secret():
@@ -159,6 +185,7 @@ def test_production_example_settings_are_empty_where_they_are_secret():
         "SESSION_SECRET",
         "OTP_SECRET",
         "SMTP_PASSWORD",
+        "TRUSTED_PROXIES",
     ):
         assert re.search(
             rf"^{name}=$", example, re.MULTILINE
@@ -181,8 +208,85 @@ def test_nginx_serves_the_app_and_forwards_the_api_with_the_proxy_headers():
     for path in ("/api/", "/uploads/"):
         block = nginx.split(f"location {path} {{", 1)[1].split("}", 1)[0]
         assert "proxy_pass http://backend:3000;" in block
-        assert "X-Forwarded-For $proxy_add_x_forwarded_for" in block
+        # One address only (the one nginx believes), so the API cannot be handed a made-up client IP.
+        assert "X-Forwarded-For $remote_addr;" in block
+        assert "$proxy_add_x_forwarded_for" not in block
         assert "X-Forwarded-Proto" in block
+
+
+def test_nginx_believes_the_forwarded_ip_only_from_the_trusted_proxies():
+    nginx = read(NGINX)
+    assert "include /etc/nginx/trusted-proxies.conf;" in nginx
+    assert "real_ip_header X-Forwarded-For;" in nginx
+    assert "real_ip_recursive off;" in nginx
+    web = service_block(read(PROD_COMPOSE), "web")
+    assert "TRUSTED_PROXIES: ${TRUSTED_PROXIES:?" in web
+    dockerfile = read(PROD_FRONTEND)
+    assert "COPY --chmod=755 frontend/docker-trusted-proxies.sh /docker-entrypoint.d/" in dockerfile
+
+
+@pytest.mark.skipif(shutil.which("sh") is None, reason="needs a POSIX shell")
+@pytest.mark.parametrize(
+    ("value", "lines"),
+    [
+        ("10.0.0.5", ["set_real_ip_from 10.0.0.5;"]),
+        (
+            "10.0.0.5, 172.16.0.0/12 2001:db8::1",
+            [
+                "set_real_ip_from 10.0.0.5;",
+                "set_real_ip_from 172.16.0.0/12;",
+                "set_real_ip_from 2001:db8::1;",
+            ],
+        ),
+        ("", []),
+    ],
+    ids=["one", "several", "empty"],
+)
+def test_trusted_proxies_script_writes_one_line_per_address(tmp_path, value, lines):
+    out = run_trusted_proxies(tmp_path, value)
+    assert out.returncode == 0, out.stderr
+    written = (tmp_path / "trusted-proxies.conf").read_text("utf-8")
+    assert [line for line in written.splitlines() if not line.startswith("#")] == lines
+
+
+@pytest.mark.skipif(shutil.which("sh") is None, reason="needs a POSIX shell")
+@pytest.mark.parametrize("value", ["10.0.0.5; allow all", "evil.example.com", "1.2.3.4/8;"])
+def test_trusted_proxies_script_refuses_anything_but_addresses(tmp_path, value):
+    out = run_trusted_proxies(tmp_path, value)
+    assert out.returncode != 0
+    assert "refusing" in out.stderr
+
+
+def run_trusted_proxies(tmp_path, value):
+    """Runs the container start script with its output file moved into tmp_path."""
+    script = read(TRUSTED_PROXIES_SCRIPT).replace(
+        "OUT=/etc/nginx/trusted-proxies.conf", f"OUT='{tmp_path.as_posix()}/trusted-proxies.conf'"
+    )
+    copy = tmp_path / "script.sh"
+    copy.write_bytes(script.encode("utf-8"))
+    return subprocess.run(
+        ["sh", copy.as_posix()],
+        env={**os.environ, "TRUSTED_PROXIES": value},
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+
+
+def test_backup_script_dumps_the_database_and_pictures_safely():
+    script = read(BACKUP_SCRIPT)
+    assert script.startswith("#!/usr/bin/env bash")
+    assert "set -euo pipefail" in script and "umask 077" in script
+    assert '-f "$ROOT/docker-compose.prod.yml"' in script
+    assert "mysqldump" in script and "--single-transaction" in script
+    assert "--databases campusquest" in script
+    # The root password is read inside the container, never put on the command line of the server.
+    assert 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD"' in script
+    assert "tar -C /app/backend/uploads -czf -" in script
+    assert "gzip -t" in script, "a broken dump must never replace a good backup"
+    assert '-mtime +"$KEEP_DAYS" -delete' in script
+    assert "backups/" in read(ROOT / ".gitignore")
 
 
 def test_the_real_production_settings_file_is_ignored_by_git():

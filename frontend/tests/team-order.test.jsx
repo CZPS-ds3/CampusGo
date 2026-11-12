@@ -107,12 +107,12 @@ describe('BR52 BR54 mock API parity', () => {
   });
 
   it('BR01 BR37 the mock lets the shared admin Gmail address log in as an admin, other Gmail addresses not', async () => {
-    await mock.requestOtp('dhbw.campus@gmail.com');
+    await mock.requestOtp('dhbw.campusgo@gmail.com');
     const result = await mock.verify({
-      email: 'dhbw.campus@gmail.com',
+      email: 'dhbw.campusgo@gmail.com',
       otp: '123456',
       firstName: 'Campus',
-      lastName: 'Admin',
+      lastName: 'GO',
     });
     expect(result.student.role).toBe('admin');
     await expect(mock.requestOtp('someone@gmail.com')).rejects.toMatchObject({

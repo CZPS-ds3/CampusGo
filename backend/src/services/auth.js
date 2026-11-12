@@ -20,13 +20,6 @@ export const normalizeEmail = (value) =>
  * R-31: exactly one "@", at most 254 characters, local part 1-64 characters without whitespace/control
  * characters, and the address must END with the school domain (preceded by "@" or ".").
  */
-/**
- * BR01 + BR37: students need a school address; only the pre-seeded administrator addresses (`ADMIN_EMAIL`) may
- * use another domain, so the team's shared admin mailbox can log in too.
- */
-export const mayLogIn = (email, config) =>
-  isSchoolEmail(email, config.allowedEmailDomain) || config.adminEmails.includes(email);
-
 export function isSchoolEmail(email, domain) {
   if (email.length > 254) return false;
   const parts = email.split('@');
@@ -36,6 +29,13 @@ export function isSchoolEmail(email, domain) {
   if (local.length < 1 || local.length > 64 || /[\s\u0000-\u001f\u007f]/.test(local)) return false;
   return new RegExp(`^([a-z0-9-]+\\.)*${escapeRegex(domain)}$`).test(host);
 }
+
+/**
+ * Whether an address may log in or be given an account: a school address (R-31), or one of the pre-seeded admin
+ * addresses (BR26), which may be outside the school domain.
+ */
+export const mayLogIn = (email, config) =>
+  isSchoolEmail(email, config.allowedEmailDomain) || config.adminEmails.includes(email);
 
 export const displayName = (row) =>
   row.nickname

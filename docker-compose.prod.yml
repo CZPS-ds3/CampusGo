@@ -9,6 +9,8 @@
 # Differences from docker-compose.yml (development): built web app served by nginx, API in production mode
 # (refuses development secrets, needs SMTP and an https:// PUBLIC_URL), code preview off, no demo players,
 # MySQL and the API are not reachable from outside, only the web container publishes a port.
+#
+# Backups: scripts/backup-prod.sh (database dump + uploaded pictures, nightly via cron; see the README).
 
 name: campus-city-quest-prod
 
@@ -43,17 +45,25 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
-    # Every API setting (secrets, SMTP, admins, limits) comes from .env.production; the lines below are fixed.
-    env_file:
-      - path: .env.production
-        required: true
+    # Only the settings the API uses are passed on from .env.production (never the MySQL root password). To change
+    # another API setting (backend/.env.example lists them), add it here as NAME: ${NAME:-}.
     environment:
       NODE_ENV: production
       PORT: '3000'
       DATABASE_URL: mysql://cq:${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env.production}@mysql:3306/campusquest
       FRONTEND_ORIGIN: ${PUBLIC_URL:?Set PUBLIC_URL (https://your-subdomain) in .env.production}
-      # Two proxies in front of the API: the school's web server and nginx in the web container.
-      TRUST_PROXY: ${TRUST_PROXY:-2}
+      SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in .env.production}
+      OTP_SECRET: ${OTP_SECRET:?Set OTP_SECRET in .env.production}
+      SMTP_HOST: ${SMTP_HOST:?Set SMTP_HOST in .env.production}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_SECURE: ${SMTP_SECURE:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:?Set SMTP_FROM in .env.production}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+      # One proxy in front of the API: nginx in the web container, which passes on only the visitor's real IP
+      # (taken from the school's web server when it is listed in TRUSTED_PROXIES).
+      TRUST_PROXY: '1'
       OTP_PREVIEW_DEFAULT: 'false'
       UPLOAD_DIR: uploads
       DB_WAIT_SECONDS: '90'
@@ -87,9 +97,13 @@ services:
     depends_on:
       backend:
         condition: service_healthy
-    # The only published port. The school's web server forwards https://<subdomain> to it.
+    environment:
+      # The school's web server (IP or CIDR, comma separated). Only its X-Forwarded-For is believed.
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:?Set TRUSTED_PROXIES (the school web server IP) in .env.production}
+    # The only published port. The school's web server forwards https://<subdomain> to it. HTTP_BIND=127.0.0.1
+    # when that web server runs on this machine; otherwise allow only its IP in the firewall (README, ufw).
     ports:
-      - '${HTTP_PORT:-8080}:80'
+      - '${HTTP_BIND:-0.0.0.0}:${HTTP_PORT:-8080}:80'
 
 volumes:
   mysql-data:

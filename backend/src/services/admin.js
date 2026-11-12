@@ -19,7 +19,7 @@ import {
 const SETTABLE_STATUSES = ['active', 'blocked', 'archived'];
 const ROLES = ['student', 'admin'];
 
-const makeUserView = (protectedEmails) => (row) => ({
+const makeUserView = (mainAdminEmails) => (row) => ({
   id: row.student_id,
   email: row.email,
   firstName: row.first_name,
@@ -28,7 +28,7 @@ const makeUserView = (protectedEmails) => (row) => ({
   displayName: displayName(row),
   role: row.role,
   // The pre-seeded administrators cannot be demoted or deleted (BR26, BR37).
-  mainAdmin: protectedEmails.includes(row.email),
+  mainAdmin: mainAdminEmails.includes(row.email),
   status: row.status,
   statusReason: row.status_reason,
   reported: Boolean(row.reported_at),
@@ -356,11 +356,7 @@ export function createAdminService({ pool, config, clock, nameRules }) {
         throw new AppError(403, 'FORBIDDEN', 'You cannot change your own role.');
       }
       if (config.adminEmails.includes(target.email)) {
-        throw new AppError(
-          403,
-          'FORBIDDEN',
-          'A pre-seeded administrator account cannot be changed.',
-        );
+        throw new AppError(403, 'FORBIDDEN', 'The main administrator account cannot be changed.');
       }
       if (target.role === role) return;
       await conn.query(

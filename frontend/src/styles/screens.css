@@ -356,9 +356,10 @@ ol.stack {
   background: var(--map-tint-ground, var(--map-bg));
 }
 /* The map style of the student (BR48): the base follows the app theme, or is always light or dark, and a tint colour
-   shows through the street-map tiles (the aerial photo is never tinted). */
+   shows through the street-map tiles (the aerial photo is never tinted). `!important` because Leaflet writes an
+   inline `opacity: 1` on every tile layer, which would otherwise hide the tint on the flat map. */
 .map .map-tiles--street {
-  opacity: var(--map-tint-opacity, 1);
+  opacity: var(--map-tint-opacity, 1) !important;
 }
 :root[data-map-base='light'] .map {
   --map-bg: #eef0f2;
@@ -397,11 +398,11 @@ ol.stack {
   font-size: 11px;
   text-align: right;
 }
-/* The credits button ("i", 24 px) sits level with Re-centre (48 px): their middles on one line, beside the GO
-   badge, mirrored on the right. Opened, the credits wrap upwards in the space right of the GO badge. */
+/* The credits button ("i", 24 px) sits level with Re-center (48 px) and the GO ball (72 px): their middles on one
+   line, mirrored on the right. Opened, the credits wrap upwards in the space right of the GO badge. */
 .map3d .maplibregl-ctrl-bottom-right {
   left: calc(50% + var(--ball) / 2 + 8px);
-  bottom: calc(24px + 12px + var(--safe-b));
+  bottom: calc(24px + (var(--ball) - 24px) / 2 + var(--safe-b));
 }
 .map3d .maplibregl-ctrl-bottom-right .maplibregl-ctrl {
   margin: 0 16px 0 0;
@@ -482,24 +483,51 @@ ol.stack {
   background: #3d464d;
 }
 
-/* Re-centre, bottom left, in the shape of a navigation app's button but in the app's own font. */
+/* The Re-center button and the accuracy circle follow the map's own light or dark base, like the 3D map's isDark():
+   white with DHBW slate text on a light map, a light grey with near-black text on a dark one; the red chevron stays
+   in both. (The ball itself looks the same on every map.)
+   The accuracy circle (--locate-radius) is a much lighter red on a light map. */
+:root {
+  --locate: #ffffff;
+  --locate-hover: #f2f3f4;
+  --locate-on: #2b333a;
+  --locate-edge: rgb(43 51 58 / 0.18);
+  --locate-radius: #ff8f9c;
+  --locate-radius-fill: 0.24;
+  --locate-radius-stroke: 0.75;
+}
+:root[data-map-base='dark'],
+:root[data-map-base='follow'][data-theme='dark'] {
+  --locate: #eef1f3;
+  --locate-hover: #ffffff;
+  --locate-on: #14181c;
+  --locate-edge: rgb(0 0 0 / 0.35);
+  --locate-radius: #eef1f3;
+  --locate-radius-fill: 0.12;
+  --locate-radius-stroke: 0.35;
+}
+
+/* Re-center, bottom left, in the app's own look: the --locate colour with the puck's red chevron and the app's
+   button radius (not a navigation app's white pill). Its middle is level with the middle of the centre ball
+   (72 px from 24 px up, so 60 px up). */
 .recenter {
   position: absolute;
   z-index: 1;
   left: 16px;
-  bottom: calc(24px + var(--safe-b));
+  bottom: calc(24px + (var(--ball) - 48px) / 2 + var(--safe-b));
   display: inline-flex;
   align-items: center;
   gap: 8px;
   height: 48px;
   max-width: 200px;
-  padding: 0 18px 0 14px;
+  padding: 0 18px 0 13px;
   border: 0;
-  border-radius: 24px;
-  background: #fff;
-  color: #1a73e8;
+  border-radius: var(--r-1);
+  background: var(--locate);
+  color: var(--locate-on);
   font: 600 0.95rem/1 var(--font);
   box-shadow:
+    0 0 0 1px var(--locate-edge),
     0 1px 3px rgb(0 0 0 / 0.3),
     0 4px 8px rgb(0 0 0 / 0.15);
   cursor: pointer;
@@ -507,22 +535,40 @@ ol.stack {
   white-space: nowrap;
   transition:
     max-width 260ms var(--ease-pop, ease),
-    padding 260ms ease;
+    padding 260ms ease,
+    background-color 200ms ease;
+}
+.recenter:hover {
+  background: var(--locate-hover);
+}
+.recenter:focus-visible {
+  outline: 2px solid var(--locate-on);
+  outline-offset: 2px;
+  box-shadow:
+    0 0 0 6px var(--signal),
+    0 4px 8px rgb(0 0 0 / 0.15);
 }
 .recenter__icon {
   flex-shrink: 0;
   fill: none;
   stroke: currentColor;
-  stroke-width: 2;
+  stroke-width: 3;
+  stroke-linecap: round;
   stroke-linejoin: round;
+  color: var(--signal);
+  transition: color 200ms ease;
 }
-/* While following, it shrinks to a round button with a filled arrow. */
+/* While following, it shrinks to a red square with a white chevron, like the 3D switch when it is on. */
 .recenter.is-following {
   max-width: 48px;
   padding: 0 13px;
+  background: var(--signal);
+}
+.recenter.is-following:hover {
+  background: var(--accent);
 }
 .recenter.is-following .recenter__icon {
-  fill: currentColor;
+  color: var(--on-signal, #fff);
 }
 .recenter.is-following .recenter__text {
   opacity: 0;
@@ -531,60 +577,140 @@ ol.stack {
   transition: opacity 160ms ease;
 }
 
-/* The live position: a blue disc with a white rim and arrow, and a soft pulse around it. */
+/* The size of the live-position ball on screen, on every device and at every zoom. */
+:root {
+  --puck-orb: 42px;
+}
+
+/* The live position: a white low-poly ball (--puck-orb) with red lines between its facets, sitting on the
+   position on the flat and the 3D map alike. Under it lies the ground marker (.puck-ground). */
 .puck-wrap {
   background: none;
   border: 0;
 }
 .puck {
+  --orb: var(--puck-orb);
   position: relative;
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
+  display: block;
+  width: 100%;
+  height: 100%;
 }
-.puck__pulse {
+/* --puck-scale (1 to 0.3, set on the map by zoom in map-pins.js): smaller and fainter when zoomed out. */
+.puck__body {
   position: absolute;
-  inset: 4px;
-  border-radius: 50%;
-  background: rgb(26 115 232 / 0.25);
-  animation: puck-pulse 2s ease-out infinite;
+  top: calc(50% - var(--orb) / 2);
+  left: 50%;
+  width: var(--orb);
+  height: var(--orb);
+  margin-left: calc(var(--orb) / -2);
+  opacity: calc(0.4 + 0.6 * var(--puck-scale, 1));
+  transform: scale(var(--puck-scale, 1));
 }
-.puck__disc {
+.puck__ball {
   position: relative;
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border: 3px solid #fff;
-  border-radius: 50%;
-  background: #1a73e8;
-  box-shadow: 0 1px 4px rgb(0 0 0 / 0.35);
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
 }
-.puck__arrow {
+/* White facets (shaded grey towards the far edge in map-pins.js) on a white backing, no animation. */
+.puck__hull,
+.puck__facet {
   fill: #fff;
-  transition: transform 300ms ease;
 }
-.puck--still .puck__arrow {
-  opacity: 0.75;
+/* Red lines between the facets, in the GO button's red; none round the outline (map-pins.js). */
+.puck__edges {
+  fill: none;
+  stroke: var(--signal);
+  stroke-width: 0.3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
-@keyframes puck-pulse {
+/* The thin red outline round the whole ball, so its edge always shows, even against a light map. */
+.puck__outline {
+  fill: none;
+  stroke: var(--signal);
+  stroke-width: 0.4;
+  stroke-linejoin: round;
+}
+
+/* The ground under the ball (GROUND_SIZE box): sonar waves rolling out from the ball to as far as the GPS accuracy
+   reaches (the same size on screen at every zoom), and the soft red wedge to the walking or compass direction,
+   turned round the position. */
+.puck-ground {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+/* How far the waves go: at least a little past the ball, so they always show. */
+.puck-ground__waves {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  min-width: calc(var(--puck-orb) + 12px);
+  min-height: calc(var(--puck-orb) + 12px);
+  opacity: calc(0.4 + 0.6 * var(--puck-scale, 1));
+  transform: translate(-50%, -50%) scale(var(--puck-scale, 1));
+}
+/* Each wave grows from under the ball to the edge and fades out there, in the colour and brightness the accuracy
+   circle had; the three start a third of a loop apart. */
+.puck-ground__wave {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--locate-radius);
+  opacity: 0;
+  animation: puck-wave 4.8s ease-out infinite;
+}
+.puck-ground__wave:nth-child(2) {
+  animation-delay: -1.6s;
+}
+.puck-ground__wave:nth-child(3) {
+  animation-delay: -3.2s;
+}
+@keyframes puck-wave {
   from {
-    transform: scale(0.6);
-    opacity: 1;
+    transform: scale(0.35);
+    opacity: var(--locate-radius-fill);
+  }
+  70% {
+    opacity: var(--locate-radius-fill);
   }
   to {
-    transform: scale(1.4);
+    transform: scale(1);
     opacity: 0;
   }
 }
+/* Longer on a phone, so it shows past the bigger ball. */
+.puck-ground__beam {
+  position: absolute;
+  inset: calc((28px - var(--puck-orb)) * 0.9);
+  scale: var(--puck-scale, 1);
+  background: radial-gradient(
+    closest-side,
+    rgb(226 0 26 / 0.5),
+    rgb(255 143 156 / 0.3) 65%,
+    transparent 100%
+  );
+  /* 128 degrees wide: from the middle out to the top corners and down the sides. */
+  clip-path: polygon(50% 50%, 0 25.6%, 0 0, 100% 0, 100% 25.6%);
+  transition: transform 300ms ease;
+}
+.puck-ground--still .puck-ground__beam {
+  visibility: hidden;
+}
 @media (prefers-reduced-motion: reduce) {
-  .puck__pulse {
+  .recenter,
+  .puck-ground__beam {
+    transition: none;
+  }
+  /* One still circle instead of moving waves. */
+  .puck-ground__wave {
     animation: none;
   }
-  .recenter,
-  .puck__arrow {
-    transition: none;
+  .puck-ground__wave:first-child {
+    opacity: var(--locate-radius-fill);
   }
 }
 .mapscreen__top {
@@ -1615,6 +1741,11 @@ ol.stack {
 }
 .admin-card h2 {
   margin: 0;
+}
+.admin-card--warn {
+  grid-column: 1 / -1;
+  border-color: var(--warn);
+  border-left-width: 6px;
 }
 .admin-stack {
   display: grid;

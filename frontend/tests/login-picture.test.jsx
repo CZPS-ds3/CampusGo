@@ -121,10 +121,10 @@ describe('BR01 BR37 which addresses the login page sends', () => {
   it('BR37 the shared admin Gmail address goes to the server instead of being blocked on the page', async () => {
     const user = userEvent.setup();
     renderLogin();
-    await user.type(screen.getByLabelText('School email'), 'dhbw.campus@gmail.com');
+    await user.type(screen.getByLabelText('School email'), 'dhbw.campusgo@gmail.com');
     await user.click(screen.getByRole('button', { name: /Send code/ }));
     expect(await screen.findByLabelText('Digit 1 of 6')).toBeInTheDocument();
-    expect(api.requestOtp).toHaveBeenCalledWith('dhbw.campus@gmail.com');
+    expect(api.requestOtp).toHaveBeenCalledWith('dhbw.campusgo@gmail.com');
   });
 
   it('BR01 a domain the server refuses shows the school-address hint and stays on the e-mail step', async () => {

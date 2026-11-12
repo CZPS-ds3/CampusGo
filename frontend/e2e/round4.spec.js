@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { expectNoHorizontalScroll, login, shot } from './helpers.js';
+import { expectNoHorizontalScroll, login, open, shot } from './helpers.js';
 
 const ADMIN = { first: 'Study', last: 'Office', email: 'sekretariat.dski@heilbronn.dhbw.de' };
 
@@ -24,7 +24,7 @@ test.describe('admin navigation and testing', () => {
     await expect(page.getByRole('columnheader', { name: 'Logins' })).toBeVisible();
     await shot(page, testInfo, '25-admin-dashboard');
 
-    await page.goto('/profile');
+    await open(page, '/profile');
     await expect(page.getByRole('link', { name: /Admin area/ })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Delete my account' })).toHaveCount(0);
   });
@@ -35,7 +35,7 @@ test.describe('admin navigation and testing', () => {
   }, testInfo) => {
     await context.setGeolocation({ latitude: 48.0, longitude: 9.0, accuracy: 10 });
     await login(page, ADMIN);
-    await page.goto('/admin/test-quests');
+    await open(page, '/admin/test-quests');
     await expect(page.getByText(/Test mode: you can start any quiz/)).toBeVisible();
     await shot(page, testInfo, '26-admin-test-quests');
     await page.getByRole('link', { name: 'Test quiz' }).first().click();
@@ -48,12 +48,12 @@ test.describe('player profiles', () => {
     page,
   }, testInfo) => {
     await login(page);
-    await page.goto('/team');
+    await open(page, '/team');
     await page.getByLabel('Team name *').fill('Night Owls');
     await page.getByRole('button', { name: 'Create team' }).click();
     await expect(page.getByRole('heading', { name: 'Night Owls' })).toBeVisible();
 
-    await page.goto('/ranks');
+    await open(page, '/ranks');
     await page.getByRole('link', { name: 'Mia K.' }).first().click();
     await expect(page.getByRole('heading', { name: 'Mia K.' })).toBeVisible();
     await expect(page.getByText('Solo rank')).toBeVisible();
@@ -66,17 +66,17 @@ test.describe('player profiles', () => {
     await page.getByRole('link', { name: /Jonas/ }).click();
     await expect(page.getByRole('heading', { name: 'Jonas' })).toBeVisible();
 
-    await page.goto('/player/104');
+    await open(page, '/player/104');
     await page.getByRole('button', { name: 'Invite to my team' }).click();
     await expect(page.getByText(/If the user exists/)).toBeVisible();
-    await page.goto('/team');
+    await open(page, '/team');
     await expect(page.getByText(/Invite pending/)).toBeVisible();
     await expect(page.getByText('Sara L.')).toBeVisible();
   });
 
   test('BR32 the team shows the address that was invited', async ({ page }) => {
     await login(page);
-    await page.goto('/team');
+    await open(page, '/team');
     await page.getByLabel('Team name *').fill('Night Owls');
     await page.getByRole('button', { name: 'Create team' }).click();
     await page.getByLabel('School email').fill('mia.k@heilbronn.dhbw.de');

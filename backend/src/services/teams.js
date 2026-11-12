@@ -3,7 +3,7 @@ import { at } from '../clock.js';
 import { withTransaction } from '../db/pool.js';
 import { AppError, notFound } from '../middleware/errors.js';
 import { recordEvent } from './audit.js';
-import { displayName, isSchoolEmail, normalizeEmail } from './auth.js';
+import { displayName, mayLogIn, normalizeEmail } from './auth.js';
 import { teamScore } from './scoring.js';
 import { unrankedReason } from './team-ranking.js';
 
@@ -206,7 +206,7 @@ export function createTeamService({ pool, config, clock, nameRules }) {
   /** R-43: always the same outcome for the caller; invitations are only created when everything fits. */
   async function invite(inviterId, rawEmail) {
     const email = normalizeEmail(rawEmail);
-    if (!isSchoolEmail(email, config.allowedEmailDomain)) {
+    if (!mayLogIn(email, config)) {
       throw new AppError(
         400,
         'INVALID_EMAIL',

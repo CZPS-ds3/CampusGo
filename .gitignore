@@ -101,6 +101,8 @@ frontend/dist/
 
 # ---------- User uploads (profile pictures are personal data) ----------
 backend/uploads/
+# Production backups (scripts/backup-prod.sh): database dumps and pictures, personal data
+backups/
 # ---------- Python test tools (tests/) ----------
 *.pyc
 .pytest_cache/

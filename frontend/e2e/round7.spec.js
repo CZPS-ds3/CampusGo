@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { OTP, expectNoHorizontalScroll, login, shot } from './helpers.js';
+import { OTP, expectNoHorizontalScroll, login, open, shot } from './helpers.js';
 
 // 2026-11-10: leaving a team and the team order (BR54), the code preview switch (BR52) and the picture chosen on
 // the sign-up page (BR02). Mock API, every screen size of playwright.config.js.
@@ -17,7 +17,7 @@ test.describe('BR54 leaving a team', () => {
     page,
   }, testInfo) => {
     await login(page);
-    await page.goto('/team');
+    await open(page, '/team');
     await page.getByLabel('Team name *').fill('Night Owls');
     await page.getByRole('button', { name: 'Create team' }).click();
     await expect(page.getByRole('heading', { name: 'Night Owls' })).toBeVisible();
@@ -33,7 +33,7 @@ test.describe('BR54 leaving a team', () => {
 
   test('BR05 a team name needs at least 3 characters', async ({ page }) => {
     await login(page);
-    await page.goto('/team');
+    await open(page, '/team');
     await page.getByLabel('Team name *').fill('AB');
     await page.getByRole('button', { name: 'Create team' }).click();
     await expect(page.getByText('A team name has 3 to 30 characters.')).toBeVisible();
@@ -45,7 +45,7 @@ test.describe('BR54 the admin chooses the leader and the order', () => {
     page,
   }, testInfo) => {
     await login(page, ADMIN);
-    await page.goto('/admin/teams');
+    await open(page, '/admin/teams');
     const order = page.getByRole('list', {
       name: 'Members of Bildungscampus Bandits in team order',
     });
@@ -68,7 +68,7 @@ test.describe('BR52 the code preview switch', () => {
     page,
   }, testInfo) => {
     await login(page, ADMIN);
-    await page.goto('/admin/settings');
+    await open(page, '/admin/settings');
     const toggle = page.getByRole('switch', { name: 'Show login codes on the login page' });
     await expect(toggle).toHaveAttribute('aria-checked', 'true');
     await expect(page.getByText(/Anyone can log in as anyone/)).toBeVisible();
@@ -83,7 +83,7 @@ test.describe('BR52 the code preview switch', () => {
     await page.getByRole('alertdialog').getByRole('button', { name: 'Cancel' }).click();
     await expect(toggle).toHaveAttribute('aria-checked', 'false');
 
-    await page.goto('/profile');
+    await open(page, '/profile');
     await page.getByRole('button', { name: 'Sign out' }).click();
     await page.getByRole('alertdialog').getByRole('button', { name: 'Sign out' }).click();
     // Signing out navigates by itself; going to /login before it settles detached the e-mail field (flaky).
@@ -129,7 +129,7 @@ test.describe('BR02 the sign-up picture', () => {
     await expect(profileLink).toBeVisible();
     // No reload and no waiting for the next session refresh: the uploaded picture is shown right away.
     await expect(profileLink.locator('img')).toHaveAttribute('src', /^data:image\/png/);
-    await page.goto('/profile');
+    await open(page, '/profile');
     await expect(page.locator('img[src^="data:image/png"]').first()).toBeVisible();
   });
 });

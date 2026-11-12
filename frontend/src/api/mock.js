@@ -15,9 +15,8 @@ const GEOFENCE_SLACK_M = 30; // grace zone added to every radius
 const ACCURACY_CREDIT_M = 50; // at most this much of a reading's error margin counts for the student
 const NEARER_MARGIN_M = 20; // another checkpoint must be this much nearer to win
 const MAX_POSITION_AGE_MS = 30_000;
-const ADMIN_EMAIL = `sekretariat.dski@${DOMAIN}`;
-// BR37: the pre-seeded admins, as in the server's ADMIN_EMAIL default; they may log in outside the school domain.
-const ADMIN_EMAILS = [ADMIN_EMAIL, 'dhbw.campus@gmail.com'];
+// The pre-seeded administrators, as on the server (BR26): they may be outside the school domain.
+const ADMIN_EMAILS = [`sekretariat.dski@${DOMAIN}`, 'dhbw.campusgo@gmail.com'];
 const mayLogIn = (email) =>
   (email.endsWith(DOMAIN) && email.split('@').length === 2) || ADMIN_EMAILS.includes(email);
 const PLACE_SLUGS = {
@@ -131,6 +130,26 @@ const BASE_QUESTS = CHECKPOINTS.map((c) => ({
   facts: [1, 2, 3].map((n) => `PLACEHOLDER fact ${n} about ${c.name}.`),
   bank: seedBank(c),
 }));
+
+const isPlaceholder = (text) => String(text ?? '').startsWith('PLACEHOLDER');
+
+/** Like the server (services/placeholders.js): seed texts still live in quests that are not archived. */
+function placeholderCountsOf(quests) {
+  const live = quests.filter((q) => !q.archived);
+  const questions = live.flatMap((q) => q.bank.filter((b) => b.isActive && isPlaceholder(b.text)));
+  const facts = live.flatMap((q) => q.facts.filter(isPlaceholder));
+  const named = live.filter(
+    (q) =>
+      isPlaceholder(q.description) ||
+      q.facts.some(isPlaceholder) ||
+      q.bank.some((b) => b.isActive && isPlaceholder(b.text)),
+  );
+  return {
+    questions: questions.length,
+    facts: facts.length,
+    quests: named.slice(0, 20).map((q) => q.name),
+  };
+}
 
 const TYPES_OF_MODE = { MCQ_ONLY: ['MCQ'], MULTI_ONLY: ['MULTI'], MIXED: ['MCQ', 'MULTI'] };
 const typesOf = (mode) => TYPES_OF_MODE[mode] ?? TYPES_OF_MODE.MCQ_ONLY;
@@ -1491,6 +1510,7 @@ export function createMockApi(ApiError, getUnauthorized) {
           points: o.points,
         })),
         topTeams: [{ rank: 1, name: 'Campus Crew', members: 3, points: 4100 }],
+        placeholders: placeholderCountsOf(state.quests),
         signedIn: [
           {
             displayName: 'Mia K.',

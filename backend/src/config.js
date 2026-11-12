@@ -24,22 +24,25 @@ function trustProxy(value) {
   return Number.isFinite(hops) ? hops : value;
 }
 
-/** BR37: the pre-seeded administrators. The first one is the main admin and takes id 1. */
-export const DEFAULT_ADMIN_EMAILS = 'sekretariat.dski@heilbronn.dhbw.de,dhbw.campus@gmail.com';
+// The pre-seeded administrators (BR26, BR37). They log in with the normal e-mail code, so only whoever reads one of
+// these mailboxes can use the account; that is why they may be outside the school domain.
+export const DEFAULT_ADMIN_EMAILS = 'sekretariat.dski@heilbronn.dhbw.de,dhbw.campusgo@gmail.com';
 
-/** `ADMIN_EMAIL` holds one address or several, separated by commas. */
-function adminEmails(value) {
+/**
+ * The admin addresses from ADMIN_EMAILS (comma-separated, in lower case; default both above). A set but empty
+ * ADMIN_EMAILS also means the default, so a blank line in .env.production never leaves a server without admins.
+ */
+function adminEmails(env) {
   const parse = (text) =>
     String(text)
       .split(',')
       .map((email) => email.trim().toLowerCase())
       .filter(Boolean);
-  const list = parse(value ?? '');
-  return [...new Set(list.length > 0 ? list : parse(DEFAULT_ADMIN_EMAILS))];
+  const listed = parse(env.ADMIN_EMAILS ?? '');
+  return [...new Set(listed.length > 0 ? listed : parse(DEFAULT_ADMIN_EMAILS))];
 }
 
 export function loadConfig(env = process.env) {
-  const admins = adminEmails(env.ADMIN_EMAIL);
   const nodeEnv = env.NODE_ENV ?? 'development';
   const smtpPort = int(env.SMTP_PORT, 587);
   return {
@@ -56,8 +59,7 @@ export function loadConfig(env = process.env) {
         : (env.DATABASE_URL ?? 'mysql://cq:cq_dev_password@127.0.0.1:3307/campusquest'),
     sessionSecret: env.SESSION_SECRET ?? 'dev-session-secret',
     otpSecret: env.OTP_SECRET ?? 'dev-otp-secret',
-    adminEmails: admins,
-    adminEmail: admins[0],
+    adminEmails: adminEmails(env),
     allowedEmailDomain: (env.ALLOWED_EMAIL_DOMAIN ?? 'heilbronn.dhbw.de').toLowerCase(),
     otpTtlMinutes: int(env.OTP_TTL_MINUTES, 10),
     otpMaxFailedAttempts: int(env.OTP_MAX_FAILED_ATTEMPTS, 5),

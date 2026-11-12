@@ -3,7 +3,7 @@
 import pytest
 import pymysql
 
-from conftest import ADMIN_EMAIL, query
+from conftest import ADMIN_EMAILS, MAIN_ADMIN_EMAIL, query
 
 pytestmark = pytest.mark.db
 
@@ -59,17 +59,13 @@ def test_one_e_mail_can_belong_to_one_account_only(db):
     query(db, "DELETE FROM students WHERE email = 'duplicate-check@heilbronn.dhbw.de'")
 
 
-def test_the_administrator_exists_from_the_start_as_id_one(db):
-    """BR37: both pre-seeded admins exist from the first seed on; the main one has id 1."""
-    rows = query(
-        db,
-        "SELECT student_id, email, status FROM students WHERE role = 'admin' ORDER BY student_id",
-    )
-    assert [(row["email"], row["status"]) for row in rows] == [
-        (ADMIN_EMAIL, "active"),
-        ("dhbw.campus@gmail.com", "active"),
-    ]
-    assert rows[0]["student_id"] == 1
+def test_the_administrators_exist_from_the_start_the_main_one_as_id_one(db):
+    """BR37: every pre-seeded admin exists; the study office is id 1."""
+    rows = query(db, "SELECT email, role, status FROM students WHERE role = 'admin'")
+    assert {row["email"] for row in rows} == ADMIN_EMAILS
+    assert all(row["status"] == "active" for row in rows)
+    mail = query(db, "SELECT email FROM students WHERE student_id = 1")[0]["email"]
+    assert mail == MAIN_ADMIN_EMAIL
 
 
 def test_the_eight_pilot_checkpoints_have_sensible_geofences(db):

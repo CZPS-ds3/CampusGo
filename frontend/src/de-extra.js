@@ -29,7 +29,11 @@ export const DE_EXTRA = new Map([
   ['Zoom in', 'Vergrößern'],
   ['Zoom out', 'Verkleinern'],
   ['Point the map north', 'Karte nach Norden ausrichten'],
-  ['Re-centre', 'Zentrieren'],
+  ['Re-center', 'Zentrieren'],
+  [
+    'Your phone only shares an approximate location (about {m} m). For your exact spot, turn on precise location for this browser in the phone settings.',
+    'Dein Handy teilt nur einen ungefähren Standort (etwa {m} m). Für deine genaue Position schalte in den Handy-Einstellungen den genauen Standort für diesen Browser ein.',
+  ],
   [
     'Location is blocked in your browser, so the map cannot follow you.',
     'Der Standort ist in deinem Browser gesperrt, daher kann dir die Karte nicht folgen.',
@@ -759,4 +763,13 @@ export const DE_EXTRA = new Map([
   ],
   ['Stay in team', 'Im Team bleiben'],
   ['Yes, leave', 'Ja, verlassen'],
+  ['Placeholder content is still live', 'Platzhalter-Inhalte sind noch aktiv'],
+  [
+    '{questions} placeholder questions and {facts} placeholder facts in: {quests}.',
+    '{questions} Platzhalter-Fragen und {facts} Platzhalter-Fakten in: {quests}.',
+  ],
+  [
+    'Replace them on the Quests page before the pilot.',
+    'Ersetze sie vor dem Pilotbetrieb auf der Seite Quests.',
+  ],
 ]);

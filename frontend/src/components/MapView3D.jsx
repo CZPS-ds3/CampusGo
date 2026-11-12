@@ -15,7 +15,23 @@ import {
   toGlZoom,
 } from '../map-3d.js';
 import { MAX_ZOOM } from '../map-layers.js';
-import { PIN_ANCHOR, PIN_SIZE, PUCK_SIZE, pinHtml, puckHtml } from '../map-pins.js';
+import {
+  FOLLOW_LOW,
+  GLIDE_SECONDS,
+  GROUND_SIZE,
+  PIN_ANCHOR,
+  PIN_SIZE,
+  PUCK_SIZE,
+  accuracyRingPx,
+  glide,
+  groundHtml,
+  metresPerPixel,
+  pinHtml,
+  puckHtml,
+  rollBall,
+  scalePuck,
+  updateGround,
+} from '../map-pins.js';
 import { useMapStyle } from '../mapStyle.js';
 
 const CAMPUS_CENTER = [9.2165, 49.1485];
@@ -102,6 +118,7 @@ export default function MapView3D({
   onUserMove,
   onCamera,
   onFail,
+  switchTo,
 }) {
   const container = useRef(null);
   const map = useRef(null);
@@ -113,7 +130,17 @@ export default function MapView3D({
   const { theme } = useSettings();
   const dark = isDark(mapStyle, theme);
   const latest = useRef({});
-  latest.current = { onSelect, onReady, onUserMove, onCamera, onFail, mayFitPins, checkpoints };
+  latest.current = {
+    onSelect,
+    onReady,
+    onUserMove,
+    onCamera,
+    onFail,
+    mayFitPins,
+    checkpoints,
+    heading,
+    me,
+  };
 
   useEffect(() => {
     let live = true;
@@ -127,8 +154,8 @@ export default function MapView3D({
   }, [dark]);
 
   const style = useMemo(
-    () => baseStyle && buildStyle(baseStyle, { mapStyle, dark, base, route, me }),
-    [baseStyle, mapStyle, dark, base, route, me],
+    () => baseStyle && buildStyle(baseStyle, { mapStyle, dark, base, route }),
+    [baseStyle, mapStyle, dark, base, route],
   );
 
   // The map is made once, with the first complete style; later changes are applied as a style diff.
@@ -162,14 +189,30 @@ export default function MapView3D({
     }
     map.current = instance;
     closeCreditsOnce(container.current);
+    // Coming from the flat map in its following view, the tilt-in goes straight into the 3D following view in one
+    // move; otherwise it tilts on the spot.
+    const target = switchTo?.current;
     if (fromFlat) {
       instance.once('load', () =>
-        instance.easeTo({ pitch: PITCH, duration: TILT_MS, essential: false }),
+        instance.easeTo({
+          pitch: target ? FOLLOW_PITCH : PITCH,
+          ...(target && {
+            center: [target.point[1], target.point[0]],
+            offset: [0, instance.getContainer().clientHeight * FOLLOW_LOW],
+            zoom: toGlZoom(target.zoom),
+          }),
+          duration: TILT_MS,
+          essential: false,
+        }),
       );
     }
     const report = () =>
       latest.current.onCamera({ bearing: instance.getBearing(), pitch: instance.getPitch() });
     instance.on('rotate', report);
+    // The live position shrinks and fades as the map zooms out.
+    const scale = () => scalePuck(container.current, fromGlZoom(instance.getZoom()));
+    instance.on('zoom', scale);
+    scale();
     instance.on('pitch', report);
     instance.on('moveend', () => {
       const { lat, lng } = instance.getCenter();
@@ -187,22 +230,38 @@ export default function MapView3D({
       zoomIn: () => instance.zoomIn(),
       zoomOut: () => instance.zoomOut(),
       north: () => instance.easeTo({ bearing: 0 }),
-      flyTo: ([lat, lng], zoom) =>
-        instance.flyTo({
+      // While following, the visitor is shown below the middle, so the ball sits low in the middle.
+      flyTo: ([lat, lng], zoom) => {
+        const fly = () =>
+          instance.flyTo({
+            center: [lng, lat],
+            offset: [0, instance.getContainer().clientHeight * FOLLOW_LOW],
+            zoom: toGlZoom(zoom),
+            pitch: FOLLOW_PITCH,
+            speed: 1.1,
+            curve: 1.42,
+            essential: false,
+          });
+        // Right after a switch the map may still be loading its style; it flies once it has.
+        if (instance.isStyleLoaded()) fly();
+        else instance.once('load', fly);
+      },
+      // At the pace of the ball's glide, so a walking visitor stays in the middle.
+      panTo: ([lat, lng]) =>
+        instance.easeTo({
           center: [lng, lat],
-          zoom: toGlZoom(zoom),
-          pitch: FOLLOW_PITCH,
-          speed: 1.1,
-          curve: 1.42,
+          offset: [0, instance.getContainer().clientHeight * FOLLOW_LOW],
+          duration: GLIDE_SECONDS * 1000,
+          easing: (t) => t,
           essential: false,
         }),
-      panTo: ([lat, lng]) =>
-        instance.easeTo({ center: [lng, lat], duration: 800, essential: false }),
       fitPoints: (points) => showAll(instance, points, ROUTE_PADDING, true),
       // The way back to the flat map: the tilt-in in reverse, ending north up like the flat map.
-      flatten: () =>
+      // `to` (the flat map's following view, or null) is where the flattening ends, so the flat map takes over there
+      // without a second move.
+      flatten: (to) =>
         new Promise((resolve) => {
-          if (instance.getPitch() === 0 && instance.getBearing() === 0) {
+          if (!to && instance.getPitch() === 0 && instance.getBearing() === 0) {
             resolve();
             return;
           }
@@ -215,7 +274,17 @@ export default function MapView3D({
           // A running move (a follow pan) ends first, so its end is not taken for the end of the flattening.
           instance.stop();
           instance.once('moveend', done);
-          instance.easeTo({ pitch: 0, bearing: 0, duration: TILT_MS, essential: false });
+          instance.easeTo({
+            pitch: 0,
+            bearing: 0,
+            ...(to && {
+              center: [to.point[1], to.point[0]],
+              offset: [0, instance.getContainer().clientHeight * FOLLOW_LOW],
+              zoom: toGlZoom(to.zoom),
+            }),
+            duration: TILT_MS,
+            essential: false,
+          });
         }),
       fitPins: () =>
         showAll(
@@ -226,11 +295,12 @@ export default function MapView3D({
         ),
     });
     setReady(true);
-  }, [style, camera]);
+  }, [style, camera, switchTo]);
 
   useEffect(() => {
     const markerStore = markers.current;
     return () => {
+      puck.current?.stop();
       map.current?.remove();
       map.current = null;
       puck.current = null;
@@ -269,28 +339,80 @@ export default function MapView3D({
     }
   }, [checkpoints, selectedId, ready, camera]);
 
-  // The live position: a puck lying flat on the map and turned to the walking or compass direction.
+  // The live position as two markers. The ground (accuracy circle and direction wedge) lies on the map and turns
+  // with it, so the wedge keeps pointing the right way. The ball faces the screen, so however the map is turned or
+  // tilted it stays round. Both glide from reading to reading; the ball rolls along.
+  const lat = me?.lat;
+  const lng = me?.lng;
   useEffect(() => {
     if (!ready) return;
-    if (!me) {
-      puck.current?.remove();
+    if (lat === undefined) {
+      puck.current?.stop();
+      puck.current?.ground.remove();
+      puck.current?.ball.remove();
       puck.current = null;
       return;
     }
+    const point = [lat, lng];
     if (!puck.current) {
-      const element = document.createElement('div');
-      element.className = 'puck-wrap';
-      element.style.width = `${PUCK_SIZE}px`;
-      element.style.height = `${PUCK_SIZE}px`;
-      element.innerHTML = puckHtml(null);
-      // MapLibre needs the position before the marker is added.
-      puck.current = new Marker({ element, rotationAlignment: 'map', pitchAlignment: 'map' })
-        .setLngLat([me.lng, me.lat])
-        .addTo(map.current);
+      const box = (width, height, html) => {
+        const element = document.createElement('div');
+        element.className = 'puck-wrap';
+        element.style.width = `${width}px`;
+        element.style.height = `${height}px`;
+        element.innerHTML = html;
+        return element;
+      };
+      const { heading: turn, me: here } = latest.current;
+      const ball = box(PUCK_SIZE[0], PUCK_SIZE[1], puckHtml());
+      ball.style.zIndex = '5'; // above the checkpoint pins, like on the flat map
+      // MapLibre needs the position before a marker is added; the ground goes first, so it lies under the ball.
+      puck.current = {
+        ground: new Marker({
+          element: box(
+            GROUND_SIZE,
+            GROUND_SIZE,
+            groundHtml(turn, accuracyRingPx(here.accuracy, lat)),
+          ),
+          rotationAlignment: 'map',
+          pitchAlignment: 'map',
+        })
+          .setLngLat([lng, lat])
+          .addTo(map.current),
+        ball: new Marker({
+          element: ball,
+          rotationAlignment: 'viewport',
+          pitchAlignment: 'viewport',
+        })
+          .setLngLat([lng, lat])
+          .addTo(map.current),
+        at: point,
+        stop: () => undefined,
+      };
+      return;
     }
-    puck.current.setLngLat([me.lng, me.lat]).setRotation(heading ?? 0);
-    puck.current.getElement().firstElementChild?.classList.toggle('puck--still', heading === null);
-  }, [me, heading, ready]);
+    const live = puck.current;
+    live.stop();
+    live.stop = glide(live.at, point, (at, east, north) => {
+      const instance = map.current;
+      if (!instance) return;
+      live.at = at;
+      live.ground.setLngLat([at[1], at[0]]);
+      live.ball.setLngLat([at[1], at[0]]);
+      const px = metresPerPixel(at[0], fromGlZoom(instance.getZoom()));
+      rollBall(live.ball.getElement(), east / px, north / px, {
+        bearing: instance.getBearing(),
+        pitch: instance.getPitch(),
+      });
+    });
+  }, [lat, lng, ready]);
+
+  // Direction and accuracy change in place, so a compass reading never interrupts the glide.
+  const accuracy = me?.accuracy;
+  useEffect(() => {
+    if (!ready || !puck.current || accuracy === undefined) return;
+    updateGround(puck.current.ground.getElement(), heading, accuracyRingPx(accuracy, lat));
+  }, [heading, accuracy, lat, ready]);
 
   return (
     <div

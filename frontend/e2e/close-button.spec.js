@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { expectNoHorizontalScroll, login } from './helpers.js';
+import { expectNoHorizontalScroll, login, open } from './helpers.js';
 
 const ADMIN = { first: 'Study', last: 'Office', email: 'sekretariat.dski@heilbronn.dhbw.de' };
 const CLOSE = { name: 'Close and go to the map' };
@@ -18,7 +18,7 @@ test.describe('X button on every page except the map', () => {
     await login(page);
     const boxes = [];
     for (const path of ['/quests', '/team', '/ranks', '/profile']) {
-      await page.goto(path);
+      await open(page, path);
       const close = page.getByRole('button', CLOSE);
       await expect(close).toBeVisible();
       boxes.push(await close.boundingBox());
@@ -34,7 +34,7 @@ test.describe('X button on every page except the map', () => {
 
   test('its middle is level with the middle of the page title', async ({ page }) => {
     await login(page);
-    await page.goto('/quests');
+    await open(page, '/quests');
     const title = await page.getByRole('heading', { name: 'Quests', level: 1 }).boundingBox();
     const close = await page.getByRole('button', CLOSE).boundingBox();
     expect(Math.abs(centre(title).y - centre(close).y)).toBeLessThanOrEqual(2);
@@ -42,7 +42,7 @@ test.describe('X button on every page except the map', () => {
 
   test('the refresh button sits left of the X, level with it', async ({ page }) => {
     await login(page);
-    await page.goto('/ranks');
+    await open(page, '/ranks');
     const close = await page.getByRole('button', CLOSE).boundingBox();
     const refresh = await page.getByRole('button', { name: 'Refresh ranks' }).boundingBox();
     expect(refresh.x + refresh.width).toBeLessThanOrEqual(close.x);
@@ -53,7 +53,7 @@ test.describe('X button on every page except the map', () => {
 
   test('the buttons stay on screen while the page scrolls', async ({ page }) => {
     await login(page);
-    await page.goto('/profile');
+    await open(page, '/profile');
     const before = await page.getByRole('button', CLOSE).boundingBox();
     await page.evaluate(() => {
       document.body.style.minHeight = '3000px'; // some pages are shorter than the window
@@ -61,7 +61,7 @@ test.describe('X button on every page except the map', () => {
     });
     await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(50);
     expect(await page.getByRole('button', CLOSE).boundingBox()).toEqual(before);
-    await page.goto('/ranks');
+    await open(page, '/ranks');
     const refresh = await page.getByRole('button', { name: 'Refresh ranks' }).boundingBox();
     await page.evaluate(() => {
       document.body.style.minHeight = '3000px';
@@ -74,13 +74,13 @@ test.describe('X button on every page except the map', () => {
 
   test('the admin pages have it in the same place', async ({ page, browser }) => {
     await login(page);
-    await page.goto('/quests');
+    await open(page, '/quests');
     const reference = await page.getByRole('button', CLOSE).boundingBox();
 
     const context = await browser.newContext({ viewport: page.viewportSize(), locale: 'en-US' });
     const adminPage = await context.newPage();
     await login(adminPage, ADMIN);
-    await adminPage.goto('/admin');
+    await open(adminPage, '/admin');
     await expect(adminPage.getByRole('button', CLOSE)).toBeVisible();
     expect(await adminPage.getByRole('button', CLOSE).boundingBox()).toEqual(reference);
     await context.close();

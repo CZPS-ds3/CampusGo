@@ -28,6 +28,8 @@ RUN npx vite build
 
 FROM nginx:1.27-alpine
 COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
+# Writes /etc/nginx/trusted-proxies.conf from TRUSTED_PROXIES before nginx starts.
+COPY --chmod=755 frontend/docker-trusted-proxies.sh /docker-entrypoint.d/40-trusted-proxies.sh
 COPY --from=build /app/frontend/dist /usr/share/nginx/html
 EXPOSE 80
 HEALTHCHECK --interval=10s --timeout=3s --retries=5 CMD wget -q -O /dev/null http://127.0.0.1/ || exit 1

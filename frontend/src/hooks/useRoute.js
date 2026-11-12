@@ -15,7 +15,8 @@ const currentPosition = () =>
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => resolve([coords.latitude, coords.longitude]),
       (error) => reject(error),
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 15000 },
+      // A fresh, precise fix, so the route starts where the visitor really is.
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
     );
   });
 

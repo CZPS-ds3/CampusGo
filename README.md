@@ -81,19 +81,32 @@ development stack; production uses its own files: `docker-compose.prod.yml`, `ba
 
 1. `git clone` the repository on the server, then `cp .env.production.example .env.production`.
 2. Fill in **every** value of `.env.production`: `PUBLIC_URL` (the `https://` subdomain), `HTTP_PORT` (the port
-   the school's web server forwards to), database passwords (letters and digits), `SESSION_SECRET` and
-   `OTP_SECRET` (`openssl rand -hex 32` each), the SMTP settings (Gmail: app password), `ADMIN_EMAIL`. Never
-   commit this file.
-3. Start: `docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build`
-4. Check: `docker compose --env-file .env.production -f docker-compose.prod.yml ps` (all *healthy*) and
-   `... logs backend` (must show `SMTP ready`).
-5. Update after a merge: `git pull`, then the command of step 3 again. Data (database, pictures) stays in the
+   the school's web server forwards to), `TRUSTED_PROXIES` (the school web server's IP, ask IT), database
+   passwords (letters and digits), `SESSION_SECRET` and `OTP_SECRET` (`openssl rand -hex 32` each), the SMTP
+   settings (Gmail: app password), `ADMIN_EMAILS`. Never commit this file.
+3. Let only the school's web server reach the port. Visitors cannot fake their IP anyway (nginx believes
+   `X-Forwarded-For` only from `TRUSTED_PROXIES`), but plain HTTP on the port would skip HTTPS:
+   - school web server on **this** machine: set `HTTP_BIND=127.0.0.1` in `.env.production`.
+   - school web server on **another** machine: ask IT to allow `HTTP_PORT` only from that server in the network
+     firewall. `ufw` alone is not enough: ports that Docker publishes skip ufw's rules.
+4. Start: `docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build`
+5. Check: `docker compose --env-file .env.production -f docker-compose.prod.yml ps` (all *healthy*) and
+   `... logs backend` (must show `SMTP ready`; a `[content] warning` lists quests that still have placeholder
+   questions).
+6. Backups: `bash scripts/backup-prod.sh` writes a database dump and the pictures to `backups/` (owner-only, kept
+   14 days). Run it nightly with cron (the exact line is at the top of the script) and copy `backups/` to a second
+   machine now and then. Restore a dump into the running stack:
+   `gunzip -c backups/campusquest-db-<time>.sql.gz | docker compose --env-file .env.production -f docker-compose.prod.yml exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot'`
+   and the pictures with
+   `docker compose --env-file .env.production -f docker-compose.prod.yml exec -T backend tar -C /app/backend/uploads -xzf - < backups/campusquest-uploads-<time>.tar.gz`.
+7. Update after a merge: `git pull`, then the command of step 4 again. Data (database, pictures) stays in the
    Docker volumes; `down -v` would delete it.
 
 What production does differently: the API refuses to start with development secrets, without SMTP or without an
 `https://` `PUBLIC_URL`; the code preview is off; no demo players; only the web container publishes a port
-(MySQL and the API are internal). The quiz questions and texts are still the **placeholder** seed: replace them in
-the admin area before students use the app. Without HTTPS in front, browsers block location, so check-ins need the
+(MySQL and the API are internal); the visitor IP for rate limits is believed only from `TRUSTED_PROXIES`. The quiz
+questions and texts are still the **placeholder** seed: replace them in the admin area before students use the app
+(the admin dashboard shows a warning while any are left). Without HTTPS in front, browsers block location, so check-ins need the
 school's HTTPS address.
 
 ---
@@ -167,7 +180,7 @@ The table shows the pilot seed. Admins can change every value and add quests (se
 ### Demo data, admin area, photos and route
 
 - `npm run dev` also loads **fictional demo data** (24 players, 6 teams, quests over several days, a pending invitation, a blocked, an archived and a reported account) so the ranks and the admin pages have something to show. It is never loaded in production (`npm run db:seed:demo` runs it alone; `npm run db:reset` starts from an empty database).
-- **Admin area** (`/admin`): sign in with `sekretariat.dski@heilbronn.dhbw.de` or the team's shared mailbox `dhbw.campus@gmail.com` (the same e-mail code login; both are pre-seeded and protected admins, set as a comma-separated list in `ADMIN_EMAIL`; they are the only addresses allowed outside `heilbronn.dhbw.de`). Users (create, edit, block, archive, report, delete, sessions, quests and activity log), teams, and name rules. The code arrives by e-mail (with `npm run dev:mock`, use *Open mock inbox* on the code screen).
+- **Admin area** (`/admin`): sign in with `sekretariat.dski@heilbronn.dhbw.de` or `dhbw.campusgo@gmail.com` (the same e-mail code login; the addresses are set in `ADMIN_EMAILS`). Users (create, edit, block, archive, report, delete, sessions, quests and activity log), teams, and name rules. The code arrives by e-mail (with `npm run dev:mock`, use *Open mock inbox* on the code screen).
 - **Quests (admin → Quests):** create, edit and delete quests: title, description, photos, information, number of questions, pass mark, time limit, hard question, question types (multiple choice, multi-select or both) and the questions with their four options. The location comes from a **Google Maps link** pasted into a box; an invalid link is explained and the place must lie inside the map students can see. A quest goes live only when it has enough questions.
 - **Teams:** the person who creates a team is its **leader** and can remove members; any member can cancel an invitation or **leave the team** (if the leader leaves, the next member in the team order becomes the leader; the last one leaving deletes the team). An admin can add a student to any team (pop-up with search by e-mail), remove members, **choose the leader** and **change the team order** (BR54). **Deleted accounts:** an admin delete (after a confirmation pop-up) and a student's own delete remove the account for good, with its data; it appears nowhere afterwards. **Roles:** an admin can make any account an admin or a student on the user page (BR53); it applies at once.
 - **Name rules:** German and English banned words, whole-word matching so "Cass" is fine. List: [docs/banned-terms.md](docs/banned-terms.md).

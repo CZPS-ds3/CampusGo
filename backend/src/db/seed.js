@@ -247,10 +247,16 @@ export async function seedImages(conn, { checkpointIds } = {}) {
 }
 
 /**
- * The administrator account exists from the first seed on (no sign-up step). It takes id 1 when that id is
- * free, otherwise the next id. An existing account with the address is promoted instead of duplicated.
+ * One pre-seeded administrator (BR37), there from the first seed on (no sign-up step). The main one (`main`, the
+ * first listed) takes id 1 when that id is free; an existing account with the address is promoted instead of
+ * duplicated.
  */
-export async function seedAdmin(conn, email, name = { first: 'Study', last: 'Office' }) {
+export async function seedAdmin(
+  conn,
+  email,
+  [firstName, lastName] = ['Study', 'Office'],
+  { main = true } = {},
+) {
   const [[existing]] = await conn.query('SELECT student_id FROM students WHERE email = ?', [email]);
   if (existing) {
     await conn.query("UPDATE students SET role = 'admin', status = 'active' WHERE student_id = ?", [
@@ -264,22 +270,17 @@ export async function seedAdmin(conn, email, name = { first: 'Study', last: 'Off
     `INSERT INTO students (student_id, email, role, first_name, last_name, nickname, total_points, points_exact_x100,
        points_updated_at, created_at)
      VALUES (?, ?, 'admin', ?, ?, 'Admin', 0, 0, ?, ?)`,
-    [idOne ? null : 1, email, name.first, name.last, now, now],
+    [idOne || !main ? null : 1, email, firstName, lastName, now, now],
   );
   return inserted.insertId;
 }
 
-/**
- * BR37: every address in `ADMIN_EMAIL` gets a pre-seeded administrator account. The first one is the main admin
- * (id 1 when free); the others, such as the team's shared mailbox, are named "Campus Admin".
- */
+/** Every pre-seeded administrator (BR37): the first listed (the study office) as the main one, id 1 when free. */
 export async function seedAdmins(conn, emails) {
-  const ids = [];
   for (const [index, email] of emails.entries()) {
-    const name = index === 0 ? undefined : { first: 'Campus', last: 'Admin' };
-    ids.push(await seedAdmin(conn, email, name));
+    const main = index === 0;
+    await seedAdmin(conn, email, main ? ['Study', 'Office'] : ['Campus', 'GO'], { main });
   }
-  return ids;
 }
 
 /** Three placeholder "read first" facts per checkpoint (replace with verified texts before the pilot). */
