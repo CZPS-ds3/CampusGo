@@ -136,7 +136,7 @@ describe('3D map style', () => {
     expect(STYLE_URLS.light).not.toBe(STYLE_URLS.dark);
   });
 
-  it('leaves the live position and its accuracy circle to markers, so they can glide', () => {
+  it('leaves the live position and its accuracy circle to markers, so they can move fluidly', () => {
     const style = buildStyle(BASE, options());
     expect(style.sources['ccq-me']).toBeUndefined();
     expect(layer(style, 'ccq-accuracy')).toBeUndefined();

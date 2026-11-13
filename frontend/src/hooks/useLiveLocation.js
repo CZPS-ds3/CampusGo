@@ -4,10 +4,12 @@ import { bearingDeg, distanceM } from '../geo.js';
 // The live position for the map: watched in the browser and never sent to our server (only the walking route asks
 // the OpenStreetMap router, as before). The arrow shows the walking direction from the GPS while moving, otherwise
 // the device's compass or gyroscope when the browser offers one (phones, tablets and PCs with orientation sensors).
-const MOVING_MPS = 0.8;
-const STEP_M = 8;
+// Sensitive on purpose, so the arrow turns soon after the visitor does: a slow walk counts as moving, a few metres
+// give a direction, and the compass arrow follows turns of a couple of degrees.
+const MOVING_MPS = 0.5;
+const STEP_M = 4;
 const GPS_HEADING_WINS_MS = 3000;
-const COMPASS_STEP_DEG = 4;
+const COMPASS_STEP_DEG = 2;
 
 /** Smallest difference between two directions in degrees (0 to 180). */
 const turn = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
@@ -44,8 +46,9 @@ export const REARM_GRACE_MS = 6000;
 const REFRESH_CHECK_MS = 250;
 
 // How far the true position can drift from the prediction per second, as a variance (m²/s): a person changing pace
-// or turning. Smaller smooths more, larger follows quicker.
-const DRIFT_M2_PER_S = 9;
+// or turning. Smaller smooths more, larger follows quicker. Set to follow quickly, so even a small real move shows
+// within a reading or two (a 5 m fix every second still moves the ball about two thirds of the way at once).
+const DRIFT_M2_PER_S = 30;
 const M_PER_DEG = 111320;
 
 /** A position moved `east` and `north` metres. */
@@ -145,7 +148,7 @@ export function compassFrom(event, screenTurn = 0) {
 
 /**
  * Live location. `status`: off (not asked yet), waiting, on, denied or unavailable. `position` is
- * { lat, lng, accuracy } and `heading` 0-360 or null. Watching starts by itself only when the browser already
+ * { lat, lng, accuracy, velocity ([east, north] m/s) } and `heading` 0-360 or null. Watching starts by itself only when the browser already
  * allows location for this site; otherwise `start()` (from a tap) asks first.
  */
 export function useLiveLocation() {
@@ -247,7 +250,13 @@ export function useLiveLocation() {
       setState((now) => ({
         ...now,
         status: 'on',
-        position: { lat: fused.lat, lng: fused.lng, accuracy: fused.accuracy },
+        // The walking velocity [east, north] in m/s lets the map walk the ball on between two readings.
+        position: {
+          lat: fused.lat,
+          lng: fused.lng,
+          accuracy: fused.accuracy,
+          velocity: fused.velocity,
+        },
         heading: next.heading ?? now.heading,
       }));
     };

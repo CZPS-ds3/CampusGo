@@ -695,7 +695,8 @@ ol.stack {
   );
   /* 128 degrees wide: from the middle out to the top corners and down the sides. */
   clip-path: polygon(50% 50%, 0 25.6%, 0 0, 100% 0, 100% 25.6%);
-  transition: transform 300ms ease;
+  /* Quick and soft, so small compass turns read as one fluid movement (map-pins.js turns it the short way round). */
+  transition: transform 180ms ease-out;
 }
 .puck-ground--still .puck-ground__beam {
   visibility: hidden;

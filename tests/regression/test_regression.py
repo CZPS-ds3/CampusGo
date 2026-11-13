@@ -615,3 +615,22 @@ def test_r66_the_countdown_does_not_eat_quiz_time_br13():
         "console.log(JSON.stringify(loadConfig({}).quizCountdownSeconds));"
     )
     assert config == 3
+
+
+def test_bug_the_ball_stopped_between_readings_and_missed_small_moves_br12():
+    """The ball hopped for 350 ms after each reading, then stood still; now it follows every frame and walks on."""
+    pins = (ROOT / "frontend" / "src" / "map-pins.js").read_text(encoding="utf-8")
+    assert "export function createFollower" in pins
+    assert "export function glide" not in pins
+    for name in ("MapView.jsx", "MapView3D.jsx"):
+        view = (ROOT / "frontend" / "src" / "components" / name).read_text(encoding="utf-8")
+        assert "follower.moveTo(point, latest.current.me?.velocity)" in view, name
+    values = run_node(
+        "import { fuseFix } from './frontend/src/hooks/useLiveLocation.js';"
+        "const fix = (n, s) => ({ lat: 49.148 + n / 111320, lng: 9.216, accuracy: 5,"
+        " time: s * 1000, speed: null, heading: null });"
+        "let shown = null; for (let s = 0; s <= 10; s += 1) shown = fuseFix(shown, fix(0, s));"
+        "shown = fuseFix(shown, fix(1, 11));"
+        "console.log(JSON.stringify((shown.lat - 49.148) * 111320));"
+    )
+    assert values > 0.6, "a 1 m step must show at least 60 % after one reading"

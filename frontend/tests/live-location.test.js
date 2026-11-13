@@ -249,3 +249,30 @@ describe('the live position is fused from the readings, like a phone does', () =
     expect(northOfA(shown)).toBeCloseTo(300, 0);
   });
 });
+
+describe('BR12 small real moves show quickly on the ball', () => {
+  const fix = (north, accuracy, seconds) => ({
+    lat: A[0] + north / 111_320,
+    lng: A[1],
+    accuracy,
+    time: seconds * 1000,
+    speed: null,
+    heading: null,
+  });
+  const northOfA = (p) => distanceM(A, [p.lat, A[1]]) * Math.sign(p.lat - A[0]);
+
+  it('BR12 after settling, a 1 m step with 5 m fixes moves the ball at least 60 % of the way at once', () => {
+    let shown = null;
+    for (let s = 0; s <= 10; s += 1) shown = fuseFix(shown, fix(0, 5, s));
+    shown = fuseFix(shown, fix(1, 5, 11));
+    expect(northOfA(shown)).toBeGreaterThan(0.6);
+    expect(northOfA(shown)).toBeLessThan(1.01);
+  });
+
+  it('BR12 the walking direction is known after about 4 m', () => {
+    const start = reading(...A);
+    const { anchor } = headingFrom(start, null);
+    const step = reading(A[0] + 4.2 / 111_320, A[1]);
+    expect(headingFrom(step, anchor).heading).toBeCloseTo(0, 0);
+  });
+});

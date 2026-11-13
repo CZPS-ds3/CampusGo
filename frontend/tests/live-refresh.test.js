@@ -77,6 +77,8 @@ describe('BR12 the live position is refreshed at least every 3 seconds', () => {
     act(() => latestWatch()[0](reading(0)));
     expect(result.current.status).toBe('on');
     expect(result.current.position.lat).toBeCloseTo(49.1, 6);
+    // The walking velocity goes to the map, so the ball can walk on between readings.
+    expect(result.current.position.velocity).toEqual([0, 0]);
   });
 
   it('BR12 restarts nothing while the watch keeps reporting', () => {

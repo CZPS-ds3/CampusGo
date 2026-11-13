@@ -101,6 +101,13 @@ What the phone sends and how the server measures were made as precise as a brows
   while the tab is hidden. A one-off reading (`getCurrentPosition`) is not used: it cannot be cancelled when the map
   closes, and with a simulated position (DevTools, browser tests) it never answers while a watch runs and then holds
   back the location check's own reading. The readings stay in the browser, as before.
+- **Fluid, sensitive ball** (2026-11-13). The ball no longer hops for 350 ms after a reading and then stands still:
+  it follows the position every frame (`createFollower` in `frontend/src/map-pins.js`), easing towards the newest
+  reading, and while the visitor walks (0.3 m/s or more) it walks on at the measured pace between readings, at most
+  2 s ahead. A move of a few centimetres shows; the animation sleeps when the ball is still. The filter follows
+  fixes faster (drift 30 m²/s instead of 9: a 1 m step with 5 m fixes shows about two thirds at once), the walking
+  direction comes after 4 m instead of 8 m and from 0.5 m/s, the compass arrow follows 2° turns, and the wedge turns
+  the short way round. Readings still come at least every 3 s (above).
 - **Privacy is unchanged.** The readings stay in the browser; only the one combined position goes to the server
   for that request and is not stored. Only the accuracy in metres is shown on screen.
 

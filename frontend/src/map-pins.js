@@ -88,8 +88,17 @@ export function groundHtml(heading, ringPx) {
   const known = Number.isFinite(heading);
   return `<span class="puck-ground${known ? '' : ' puck-ground--still'}" aria-hidden="true">
     <span class="puck-ground__waves" style="width: ${ringPx * 2}px; height: ${ringPx * 2}px">${WAVES}</span>
-    <span class="puck-ground__beam" style="transform: rotate(${Math.round(heading ?? 0)}deg)"></span>
+    <span class="puck-ground__beam" data-turn="${Math.round(heading ?? 0)}" style="transform: rotate(${Math.round(heading ?? 0)}deg)"></span>
   </span>`;
+}
+
+/**
+ * The angle (degrees, any number of turns) equal to `heading` that is nearest to `current`, so the wedge turns the short
+ * way round: from 359 to 1 degree it moves 2 degrees forward instead of spinning back 358.
+ */
+export function nearestTurn(current, heading) {
+  const delta = ((((heading - current) % 360) + 540) % 360) - 180;
+  return Math.round((current + delta) * 10) / 10;
 }
 
 /** Updates the ground in place: the wedge turned to `heading` (hidden if null) and how far the waves go. */
@@ -97,8 +106,10 @@ export function updateGround(element, heading, ringPx) {
   const ground = element?.querySelector('.puck-ground');
   if (!ground) return;
   ground.classList.toggle('puck-ground--still', !Number.isFinite(heading));
-  ground.querySelector('.puck-ground__beam').style.transform =
-    `rotate(${Math.round(heading ?? 0)}deg)`;
+  const beam = ground.querySelector('.puck-ground__beam');
+  const angle = nearestTurn(Number(beam.dataset.turn ?? 0), heading ?? 0);
+  beam.dataset.turn = String(angle);
+  beam.style.transform = `rotate(${angle}deg)`;
   const waves = ground.querySelector('.puck-ground__waves').style;
   waves.width = `${ringPx * 2}px`;
   waves.height = `${ringPx * 2}px`;
@@ -298,7 +309,15 @@ export function rollBall(element, east, north, { bearing = 0, pitch = 0 } = {}) 
   }
 }
 
-const GLIDE_MS = 350; // short, so the ball shows a new reading almost at once, without a jump
+// The ball follows the live position every frame instead of hopping from reading to reading: it eases towards the
+// newest position (half the way in about FOLLOW_TAU_MS x 0.7) and, while the visitor walks, keeps walking on at the
+// measured pace between two readings (for at most PREDICT_MAX_MS), so it moves as fluidly as the visitor does and
+// even a step of a few centimetres shows. Slower than MOVING_SPEED_MPS counts as standing (GPS jitter, no walking on).
+const FOLLOW_TAU_MS = 200;
+const PREDICT_MAX_MS = 2000;
+const MOVING_SPEED_MPS = 0.3;
+const SETTLED_M = 0.01;
+const LONGEST_FRAME_MS = 100; // a frame after a pause (hidden tab) is counted as this long, so the ball never leaps
 const JUMP_M = 150; // further than a walk between two readings: jump instead of sliding across the map
 const reducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 const nextFrame = (step) =>
@@ -306,30 +325,76 @@ const nextFrame = (step) =>
 const cancelFrame = (frame) =>
   window.cancelAnimationFrame ? window.cancelAnimationFrame(frame) : clearTimeout(frame);
 
+/** The step from `a` to `b` ([lat, lng]) on the ground in metres, [east, north]. */
+const stepMetres = (a, b) => [
+  (b[1] - a[1]) * M_PER_DEG * Math.cos((a[0] * Math.PI) / 180),
+  (b[0] - a[0]) * M_PER_DEG,
+];
+
+/** A [lat, lng] moved `east` and `north` metres. */
+const shifted = ([lat, lng], east, north) => [
+  lat + north / M_PER_DEG,
+  lng + east / (M_PER_DEG * Math.cos((lat * Math.PI) / 180)),
+];
+
 /**
- * Moves the live position smoothly from `from` to `to` ([lat, lng]) instead of jumping. `draw(at, east, north)`
- * gets every step, with its length on the ground in metres, so the ball can roll along. Returns a stop function.
+ * Draws the live position fluidly. `draw(at, east, north)` gets every frame's position with its step on the ground in
+ * metres, so the ball can roll along. `moveTo(point, velocity)` hands over a new reading ([lat, lng]) and the walking
+ * velocity [east, north] in m/s (or none); `stop()` ends the animation. The animation sleeps while the ball is still.
  */
-export function glide(from, to, draw) {
-  const metres = (a, b) => [
-    (b[1] - a[1]) * M_PER_DEG * Math.cos((a[0] * Math.PI) / 180),
-    (b[0] - a[0]) * M_PER_DEG,
-  ];
-  if (reducedMotion() || Math.hypot(...metres(from, to)) > JUMP_M) {
-    draw(to, 0, 0);
-    return () => undefined;
+export function createFollower(start, draw) {
+  let at = start;
+  let target = { point: start, velocity: [0, 0], since: 0 };
+  let frame = null;
+  let last = null;
+
+  const goalAt = (now) => {
+    const [east, north] = target.velocity;
+    if (Math.hypot(east, north) < MOVING_SPEED_MPS) return { goal: target.point, done: true };
+    const ahead = Math.min(now - target.since, PREDICT_MAX_MS);
+    return {
+      goal: shifted(target.point, (east * ahead) / 1000, (north * ahead) / 1000),
+      done: ahead >= PREDICT_MAX_MS,
+    };
+  };
+
+  function step() {
+    const now = performance.now();
+    const elapsed = last === null ? 16 : Math.min(LONGEST_FRAME_MS, now - last);
+    last = now;
+    const { goal, done } = goalAt(now);
+    const share = 1 - Math.exp(-elapsed / FOLLOW_TAU_MS);
+    let next = [at[0] + (goal[0] - at[0]) * share, at[1] + (goal[1] - at[1]) * share];
+    const settled = done && Math.hypot(...stepMetres(next, goal)) < SETTLED_M;
+    if (settled) next = goal;
+    const [east, north] = stepMetres(at, next);
+    at = next;
+    draw(at, east, north);
+    frame = settled ? null : nextFrame(step);
+    if (settled) last = null;
   }
-  const start = performance.now();
-  let last = from;
-  let frame = nextFrame(function step() {
-    const t = Math.min(1, (performance.now() - start) / GLIDE_MS);
-    const at = [from[0] + (to[0] - from[0]) * t, from[1] + (to[1] - from[1]) * t];
-    draw(at, ...metres(last, at));
-    last = at;
-    if (t < 1) frame = nextFrame(step);
-  });
-  return () => cancelFrame(frame);
+
+  return {
+    moveTo(point, velocity = [0, 0]) {
+      target = { point, velocity: velocity ?? [0, 0], since: performance.now() };
+      if (reducedMotion() || Math.hypot(...stepMetres(at, point)) > JUMP_M) {
+        if (frame !== null) cancelFrame(frame);
+        frame = null;
+        last = null;
+        target.velocity = [0, 0];
+        at = point;
+        draw(point, 0, 0);
+        return;
+      }
+      if (frame === null) frame = nextFrame(step);
+    },
+    stop() {
+      if (frame !== null) cancelFrame(frame);
+      frame = null;
+      last = null;
+    },
+  };
 }
 
-/** How long a glide takes, for the map to follow at the same pace. */
-export const GLIDE_SECONDS = GLIDE_MS / 1000;
+/** How long the map takes to pan to a new reading while following: about as long as the ball takes to get there. */
+export const GLIDE_SECONDS = (FOLLOW_TAU_MS * 3) / 1000;
