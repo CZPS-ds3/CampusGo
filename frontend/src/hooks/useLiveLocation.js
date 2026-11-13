@@ -46,9 +46,12 @@ export const REARM_GRACE_MS = 6000;
 const REFRESH_CHECK_MS = 250;
 
 // How far the true position can drift from the prediction per second, as a variance (m²/s): a person changing pace
-// or turning. Smaller smooths more, larger follows quicker. Set to follow quickly, so even a small real move shows
-// within a reading or two (a 5 m fix every second still moves the ball about two thirds of the way at once).
-const DRIFT_M2_PER_S = 30;
+// or turning. Smaller smooths more, larger follows quicker. Set to stay close to the device: a 5 m fix every second
+// moves the ball about three quarters of the way at once, so the ball sits where the phone says it is.
+const DRIFT_M2_PER_S = 60;
+// A precise fix always counts at least this much, so a long still stretch (where the estimate grows very sure of
+// itself) never leaves the ball hanging a metre off the device.
+const MIN_TRUSTED_GAIN = 0.5;
 const M_PER_DEG = 111320;
 
 /** A position moved `east` and `north` metres. */
@@ -65,9 +68,13 @@ const SPEED_GAIN = 0.35;
 const MAX_SPEED_MPS = 3;
 const TRUSTED_FIX_M = 15;
 
-/** The walking velocity [east, north] in m/s the GPS reported with a fix, or null without one. */
+/**
+ * The walking velocity [east, north] in m/s the GPS reported with a fix, or null without one. Below a slow walk the
+ * reported speed is GPS noise (a phone lying on a table says 0.2 m/s in a random direction), so it counts as standing.
+ */
 function gpsVelocity({ speed, heading }) {
   if (!Number.isFinite(speed) || !Number.isFinite(heading)) return null;
+  if (speed <= MOVING_MPS) return [0, 0];
   const angle = (heading * Math.PI) / 180;
   return [speed * Math.sin(angle), speed * Math.cos(angle)];
 }
@@ -99,7 +106,8 @@ export function fuseFix(shown, fix) {
   const off = distanceM([ahead.lat, ahead.lng], [fix.lat, fix.lng]);
   // Further off than 2.5 times the combined uncertainty of the estimate and the fix: a real move, taken as it is.
   if (off > 2.5 * Math.sqrt(variance + fix.accuracy ** 2)) return fresh;
-  const gain = variance / (variance + fix.accuracy ** 2);
+  const kalman = variance / (variance + fix.accuracy ** 2);
+  const gain = fix.accuracy <= TRUSTED_FIX_M ? Math.max(kalman, MIN_TRUSTED_GAIN) : kalman;
   const lat = ahead.lat + gain * (fix.lat - ahead.lat);
   const lng = ahead.lng + gain * (fix.lng - ahead.lng);
   return {

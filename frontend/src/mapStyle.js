@@ -5,6 +5,10 @@ import { normalizeColor, readableOn } from './colors.js';
 // at once, and applied to the page as CSS variables that the map styles use.
 const KEY = 'ccq-map-style-v1';
 
+/** How often a sonar wave goes out from the ball and what it looks like (BR48). */
+export const SONAR_SPEEDS = ['slow', 'normal', 'fast'];
+export const SONAR_LOOKS = ['sova', 'soft'];
+
 export const DEFAULT_MAP_STYLE = {
   preset: 'classic',
   base: 'follow',
@@ -14,6 +18,7 @@ export const DEFAULT_MAP_STYLE = {
   route: '#e2001a',
   buildings: '#dcd9d4',
   ball: { body: '#ffffff', lines: '#e2001a' },
+  sonar: { show: true, color: '#e2001a', speed: 'normal', look: 'sova', ping: true },
 };
 
 export const PRESETS = {
@@ -27,6 +32,7 @@ export const PRESETS = {
     route: '#0b5cad',
     buildings: '#c5dcef',
     ball: { body: '#ffffff', lines: '#0b5cad' },
+    sonar: { show: true, color: '#0b5cad', speed: 'normal', look: 'sova', ping: true },
   },
   forest: {
     preset: 'forest',
@@ -37,6 +43,7 @@ export const PRESETS = {
     route: '#2f5d34',
     buildings: '#cfe0c4',
     ball: { body: '#f4f9ef', lines: '#2f5d34' },
+    sonar: { show: true, color: '#2f5d34', speed: 'normal', look: 'sova', ping: true },
   },
   sunset: {
     preset: 'sunset',
@@ -47,6 +54,7 @@ export const PRESETS = {
     route: '#d6246e',
     buildings: '#f0d2bd',
     ball: { body: '#fff3e6', lines: '#d6246e' },
+    sonar: { show: true, color: '#d6246e', speed: 'normal', look: 'sova', ping: true },
   },
   mono: {
     preset: 'mono',
@@ -57,6 +65,7 @@ export const PRESETS = {
     route: '#000000',
     buildings: '#cccccc',
     ball: { body: '#ffffff', lines: '#000000' },
+    sonar: { show: true, color: '#000000', speed: 'normal', look: 'sova', ping: true },
   },
 };
 
@@ -81,6 +90,12 @@ export function cleanStyle(input) {
   for (const key of ['body', 'lines']) {
     base.ball[key] = colour(input.ball?.[key], base.ball[key]);
   }
+  const sonar = input.sonar ?? {};
+  base.sonar.color = colour(sonar.color, base.sonar.color);
+  if (typeof sonar.show === 'boolean') base.sonar.show = sonar.show;
+  if (typeof sonar.ping === 'boolean') base.sonar.ping = sonar.ping;
+  if (SONAR_SPEEDS.includes(sonar.speed)) base.sonar.speed = sonar.speed;
+  if (SONAR_LOOKS.includes(sonar.look)) base.sonar.look = sonar.look;
   return base;
 }
 
@@ -128,12 +143,25 @@ export function styleVariables(value, { keepDefaults = false } = {}) {
     '--puck-body': custom(value.ball.body, d.ball.body),
     '--puck-lines': custom(value.ball.lines, d.ball.lines),
     '--puck-beam': beam(custom(value.ball.lines, d.ball.lines)),
+    '--sonar': custom(value.sonar.color, d.sonar.color),
   };
 }
+
+/**
+ * The sonar settings as data attributes (data-sonar, data-sonar-look, data-sonar-speed, data-sonar-ping): screens.css
+ * picks the look and speed from them, and the maps read whether to flash the quests in range.
+ */
+export const sonarData = ({ sonar }) => ({
+  sonar: sonar.show ? 'on' : 'off',
+  sonarLook: sonar.look,
+  sonarSpeed: sonar.speed,
+  sonarPing: sonar.show && sonar.ping ? 'on' : 'off',
+});
 
 function apply() {
   const root = document.documentElement;
   root.dataset.mapBase = style.base;
+  Object.assign(root.dataset, sonarData(style));
   for (const [name, value] of Object.entries(styleVariables(style))) {
     if (value === undefined) root.style.removeProperty(name);
     else root.style.setProperty(name, value);

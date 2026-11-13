@@ -646,3 +646,31 @@ def test_bug_the_pipeline_docker_check_missed_required_production_settings_br52(
     dummy = next(line for line in pipeline.splitlines() if "> .env.production" in line)
     given = set(re.findall(r"(?:'|\\n)([A-Z_]+)=", dummy))
     assert required <= given, f"missing in the CI dummy .env.production: {sorted(required - given)}"
+
+
+def test_bug_gps_speed_noise_made_the_standing_ball_drift_br12():
+    """A phone lying still reports a small speed in random directions; the ball must not walk off with it."""
+    values = run_node(
+        "import { fuseFix } from './frontend/src/hooks/useLiveLocation.js';"
+        "const fix = (s) => ({ lat: 49.148, lng: 9.216, accuracy: 5, time: s * 1000,"
+        " speed: 0.3, heading: (s * 97) % 360 });"
+        "let shown = null; for (let s = 0; s <= 10; s += 1) shown = fuseFix(shown, fix(s));"
+        "console.log(JSON.stringify({ v: shown.velocity, off: Math.abs(shown.lat - 49.148) * 111320 }));"
+    )
+    assert values["v"] == [0, 0]
+    assert values["off"] < 0.1
+
+
+def test_bug_the_pin_flash_was_lost_when_the_pin_was_not_drawn_yet_br12():
+    """The sonar flash ran before the map drew the pins and marked the quest as seen, so it never flashed."""
+    values = run_node(
+        "import { createRangeWatch } from './frontend/src/map-pins.js';"
+        "const q = { id: 1, latitude: 49.148, longitude: 9.216, radius: 60, reachM: 90, isActive: true };"
+        "const me = { lat: 49.148, lng: 9.216 }; const watch = createRangeWatch();"
+        "const before = watch.update(me, [q], () => false).length;"
+        "const after = watch.update(me, [q], () => true).length;"
+        "console.log(JSON.stringify([before, after]));"
+    )
+    assert values == [0, 1]
+    hook = (ROOT / "frontend" / "src" / "hooks" / "useSonar.js").read_text(encoding="utf-8")
+    assert "requestAnimationFrame" in hook

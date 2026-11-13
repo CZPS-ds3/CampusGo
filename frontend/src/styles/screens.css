@@ -714,6 +714,120 @@ ol.stack {
     opacity: var(--locate-radius-fill);
   }
 }
+/* The sonar range ring (BR48, display only; the server decides on unlocking, BR12): waves run from the ball out to the
+   real unlock range, to scale (--sonar-r from map-pins.js), and a faint dashed edge marks the range. Look, speed and
+   on/off come from the map style (data-sonar-* on the page). Default look "sova": a thin bright line with a glow,
+   like a recon dart's scan; "soft": a filled pulse fading at the edge. */
+.puck-sonar {
+  --sonar-wave: 3s;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: calc(var(--sonar-r, 0px) * 2);
+  height: calc(var(--sonar-r, 0px) * 2);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+/* On the map the saved style decides (on the page); the settings preview shows the draft (on the preview). */
+:root[data-sonar='off'] .puck-ground .puck-sonar,
+.mapstyle__preview[data-sonar='off'] .puck-sonar {
+  display: none;
+}
+:root[data-sonar-speed='slow'] .puck-ground .puck-sonar,
+.mapstyle__preview[data-sonar-speed='slow'] .puck-sonar {
+  --sonar-wave: 4.5s;
+}
+:root[data-sonar-speed='fast'] .puck-ground .puck-sonar,
+.mapstyle__preview[data-sonar-speed='fast'] .puck-sonar {
+  --sonar-wave: 1.8s;
+}
+.puck-sonar__wave,
+.puck-sonar__edge {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+}
+.puck-sonar__wave {
+  opacity: 0;
+  border: 2px solid var(--sonar, #e2001a);
+  box-shadow:
+    0 0 14px 2px color-mix(in srgb, var(--sonar, #e2001a) 55%, transparent),
+    inset 0 0 28px 6px color-mix(in srgb, var(--sonar, #e2001a) 28%, transparent);
+  animation: sonar-sova var(--sonar-wave) cubic-bezier(0.15, 0.55, 0.3, 1) infinite;
+  will-change: transform, opacity;
+}
+.puck-sonar__wave:nth-child(2) {
+  animation-delay: calc(var(--sonar-wave) / -3);
+}
+.puck-sonar__wave:nth-child(3) {
+  animation-delay: calc(var(--sonar-wave) / -1.5);
+}
+:root[data-sonar-look='soft'] .puck-ground .puck-sonar__wave,
+.mapstyle__preview[data-sonar-look='soft'] .puck-sonar__wave {
+  border: 0;
+  box-shadow: none;
+  background: radial-gradient(
+    circle,
+    transparent 45%,
+    color-mix(in srgb, var(--sonar, #e2001a) 32%, transparent) 100%
+  );
+  animation-name: sonar-soft;
+  animation-timing-function: ease-out;
+}
+.puck-sonar__edge {
+  border: 1.5px dashed color-mix(in srgb, var(--sonar, #e2001a) 60%, transparent);
+  background: color-mix(in srgb, var(--sonar, #e2001a) 5%, transparent);
+}
+@keyframes sonar-sova {
+  from {
+    transform: scale(0.03);
+    opacity: 1;
+  }
+  75% {
+    opacity: 0.75;
+  }
+  to {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+@keyframes sonar-soft {
+  from {
+    transform: scale(0.03);
+    opacity: 0.8;
+  }
+  to {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+/* A quest that comes into range flashes once, when the wave reaches it (map-pins.js pingPin). */
+.pin--ping .pin__shape {
+  animation: pin-ping 900ms ease-out var(--ping-delay, 0ms) 1 both;
+}
+@keyframes pin-ping {
+  from {
+    transform: none;
+    filter: none;
+  }
+  25% {
+    transform: scale(1.3);
+    filter: drop-shadow(0 0 10px var(--sonar, #e2001a)) drop-shadow(0 0 4px var(--sonar, #e2001a));
+  }
+  to {
+    transform: none;
+    filter: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Only the still dashed edge shows the range. */
+  .puck-sonar__wave {
+    display: none;
+  }
+  .pin--ping .pin__shape {
+    animation: none;
+  }
+}
 .mapscreen__top {
   position: absolute;
   z-index: var(--z-map-ui);

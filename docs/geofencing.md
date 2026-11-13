@@ -108,6 +108,15 @@ What the phone sends and how the server measures were made as precise as a brows
   fixes faster (drift 30 m²/s instead of 9: a 1 m step with 5 m fixes shows about two thirds at once), the walking
   direction comes after 4 m instead of 8 m and from 0.5 m/s, the compass arrow follows 2° turns, and the wedge turns
   the short way round. Readings still come at least every 3 s (above).
+- **Closer to the device** (2026-11-13, second change). Drift 60 m²/s (a 5 m fix moves the ball about three quarters
+  of the way at once), a precise fix (15 m or better) always counts at least half, and a GPS speed of 0.5 m/s or less
+  counts as standing, so speed noise of a phone lying still no longer makes the ball drift.
+- **Sonar range ring** (2026-11-13). Waves run from the ball out to the real unlock range, drawn to scale: the
+  smallest `reachM` (radius + grace zone, from `GET /checkpoints`) of the open quests, so every quest inside the
+  ring can be unlocked. The accuracy credit is left out, so the ring never promises more than the server gives. A quest
+  that comes into its own reach flashes once when the wave reaches it, again only after leaving and coming back.
+  Display only: the server still decides when the attempt starts (BR12). Look, speed, colour, on/off and the flash
+  are part of the map style (BR48).
 - **Privacy is unchanged.** The readings stay in the browser; only the one combined position goes to the server
   for that request and is not stored. Only the accuracy in metres is shown on screen.
 

@@ -970,6 +970,27 @@ a.card:active {
   width: 26px;
   height: 26px;
 }
+/* A small sonar round the preview ball (its look, speed and on/off from the preview's data-sonar-*). */
+.mapstyle__sonar {
+  --sonar-r: 44px;
+}
+.mapstyle__sonar-settings {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.mapstyle__sonar-settings legend {
+  padding: 0 4px;
+}
+.mapstyle__switch {
+  gap: 12px;
+}
+.mapstyle__hint {
+  display: block;
+}
 .mapstyle__puck-ball {
   position: absolute;
   inset: 0;

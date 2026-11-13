@@ -786,4 +786,21 @@ export const DE_EXTRA = new Map([
     '{n} questions · {time} on the clock once it starts',
     '{n} Fragen · {time} auf der Uhr, sobald es losgeht',
   ],
+  ['Sonar range ring', 'Sonar-Reichweitenring'],
+  ['Show the sonar', 'Sonar anzeigen'],
+  [
+    'Waves run from your ball out to how far away you can unlock a quest.',
+    'Wellen laufen von deiner Kugel bis dorthin, wo du eine Quest freischalten kannst.',
+  ],
+  ['Flash quests in range', 'Quests in Reichweite aufblinken lassen'],
+  [
+    'A quest flashes once each time you come close enough to unlock it.',
+    'Eine Quest blinkt jedes Mal einmal auf, wenn du nah genug zum Freischalten bist.',
+  ],
+  ['Pulse speed', 'Pulsgeschwindigkeit'],
+  ['Slow', 'Langsam'],
+  ['Fast', 'Schnell'],
+  ['Look', 'Aussehen'],
+  ['Scan line', 'Scanlinie'],
+  ['Soft pulse', 'Weicher Puls'],
 ]);

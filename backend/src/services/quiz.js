@@ -56,6 +56,9 @@ export function createQuizService({ pool, config, clock }) {
     latitude: Number(c.latitude),
     longitude: Number(c.longitude),
     radius: c.radius,
+    // How far away the quest can be unlocked: its radius plus the grace zone (BR12). The map draws the sonar range
+    // ring with it. The reading's accuracy credit is left out, so the map never promises more than the server gives.
+    reachM: c.radius + config.geofenceSlackM,
     isActive: Boolean(c.is_active),
     description: c.description ?? '',
     questionCount: c.question_count,

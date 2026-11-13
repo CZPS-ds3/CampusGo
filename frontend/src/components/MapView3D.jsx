@@ -1,6 +1,7 @@
 import { LngLatBounds, Map as MapLibreMap, Marker } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSonar } from '../hooks/useSonar.js';
 import { t, useSettings } from '../i18n.js';
 import {
   BEARING,
@@ -129,6 +130,14 @@ export default function MapView3D({
   const mapStyle = useMapStyle();
   const { theme } = useSettings();
   const dark = isDark(mapStyle, theme);
+  const resizeSonar = useSonar({
+    container,
+    zoomNow: () => (map.current ? fromGlZoom(map.current.getZoom()) : null),
+    me,
+    checkpoints,
+    pinElement: (id) => markers.current.get(id)?.getElement(),
+    pinsReady: ready,
+  });
   const latest = useRef({});
   latest.current = {
     onSelect,
@@ -140,6 +149,7 @@ export default function MapView3D({
     checkpoints,
     heading,
     me,
+    resizeSonar,
   };
 
   useEffect(() => {
@@ -209,8 +219,11 @@ export default function MapView3D({
     const report = () =>
       latest.current.onCamera({ bearing: instance.getBearing(), pitch: instance.getPitch() });
     instance.on('rotate', report);
-    // The live position shrinks and fades as the map zooms out.
-    const scale = () => scalePuck(container.current, fromGlZoom(instance.getZoom()));
+    // The live position shrinks and fades as the map zooms out; the sonar ring keeps the real unlock range.
+    const scale = () => {
+      scalePuck(container.current, fromGlZoom(instance.getZoom()));
+      latest.current.resizeSonar();
+    };
     instance.on('zoom', scale);
     scale();
     instance.on('pitch', report);

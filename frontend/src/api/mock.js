@@ -628,6 +628,7 @@ export function createMockApi(ApiError, getUnauthorized) {
               latitude: c.latitude,
               longitude: c.longitude,
               radius: c.radius,
+              reachM: c.radius + GEOFENCE_SLACK_M,
               isActive: c.isActive,
               questionCount: c.questionCount,
               passThreshold: c.passThreshold,

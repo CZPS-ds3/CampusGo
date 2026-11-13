@@ -1,6 +1,7 @@
 import L from 'leaflet';
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import { insideMapArea } from '../geo.js';
+import { useSonar } from '../hooks/useSonar.js';
 import { useToast } from '../hooks/useToast.jsx';
 import { getMapBase, getMapView, t } from '../i18n.js';
 import { MAX_ZOOM, createBaseLayers } from '../map-layers.js';
@@ -92,8 +93,24 @@ function MapView2D({
   const leadLine = useRef(null);
   const puck = useRef(null);
   const style = useMapStyle();
+  const resizeSonar = useSonar({
+    container,
+    zoomNow: () => map.current?.getZoom() ?? null,
+    me,
+    checkpoints,
+    pinElement: (id) => markers.current.get(id)?.getElement(),
+  });
   const latest = useRef({});
-  latest.current = { onSelect, onReady, onUserMove, mayFitPins, checkpoints, heading, me };
+  latest.current = {
+    onSelect,
+    onReady,
+    onUserMove,
+    mayFitPins,
+    checkpoints,
+    heading,
+    me,
+    resizeSonar,
+  };
 
   useEffect(() => {
     const saved = camera.current;
@@ -117,8 +134,11 @@ function MapView2D({
       camera.current = { center: [lat, lng], zoom: instance.getZoom(), bearing: 0, pitch: 0 };
     };
     instance.on('moveend', save);
-    // The live position shrinks and fades as the map zooms out.
-    const scale = () => scalePuck(container.current, instance.getZoom());
+    // The live position shrinks and fades as the map zooms out; the sonar ring keeps the real unlock range.
+    const scale = () => {
+      scalePuck(container.current, instance.getZoom());
+      latest.current.resizeSonar();
+    };
     instance.on('zoom', scale);
     scale();
     save();

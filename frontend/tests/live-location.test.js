@@ -269,6 +269,29 @@ describe('BR12 small real moves show quickly on the ball', () => {
     expect(northOfA(shown)).toBeLessThan(1.01);
   });
 
+  it('BR12 after settling, a 1 m step with 5 m fixes moves the ball about three quarters of the way', () => {
+    let shown = null;
+    for (let s = 0; s <= 10; s += 1) shown = fuseFix(shown, fix(0, 5, s));
+    shown = fuseFix(shown, fix(1, 5, 11));
+    expect(northOfA(shown)).toBeGreaterThan(0.7);
+  });
+
+  it('BR12 after a long still stretch a precise fix still moves the ball at least half way', () => {
+    let shown = null;
+    for (let s = 0; s <= 120; s += 0.2) shown = fuseFix(shown, fix(0, 3, s));
+    shown = fuseFix(shown, fix(1, 3, 120.2));
+    expect(northOfA(shown)).toBeGreaterThanOrEqual(0.5);
+  });
+
+  it('BR12 GPS speed noise of a phone lying still never makes the ball drift', () => {
+    let shown = null;
+    for (let s = 0; s <= 10; s += 1) {
+      shown = fuseFix(shown, { ...fix(0, 5, s), speed: 0.3, heading: (s * 97) % 360 });
+    }
+    expect(shown.velocity).toEqual([0, 0]);
+    expect(Math.abs(northOfA(shown))).toBeLessThan(0.1);
+  });
+
   it('BR12 the walking direction is known after about 4 m', () => {
     const start = reading(...A);
     const { anchor } = headingFrom(start, null);
