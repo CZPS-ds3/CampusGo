@@ -764,6 +764,11 @@ export const DE_EXTRA = new Map([
   ['Stay in team', 'Im Team bleiben'],
   ['Yes, leave', 'Ja, verlassen'],
   ['Placeholder content is still live', 'Platzhalter-Inhalte sind noch aktiv'],
+  ['Photos for this question', 'Fotos zu dieser Frage'],
+  ['Where to find it', 'Hier findest du es'],
+  ['Photos of this question', 'Fotos dieser Frage'],
+  ['With the question', 'Mit der Frage'],
+  ['After answering', 'Nach der Antwort'],
   [
     '{questions} placeholder questions and {facts} placeholder facts in: {quests}.',
     '{questions} Platzhalter-Fragen und {facts} Platzhalter-Fakten in: {quests}.',
@@ -771,5 +776,14 @@ export const DE_EXTRA = new Map([
   [
     'Replace them on the Quests page before the pilot.',
     'Ersetze sie vor dem Pilotbetrieb auf der Seite Quests.',
+  ],
+  ['Accuracy so far: ±{metres} m', 'Genauigkeit bisher: ±{metres} m'],
+  ['Your position: ball', 'Dein Standort: Kugel'],
+  ['Your position: lines and direction', 'Dein Standort: Linien und Richtung'],
+  ['Get ready. Your quiz starts in', 'Mach dich bereit. Dein Quiz startet in'],
+  ['Go!', 'Los!'],
+  [
+    '{n} questions · {time} on the clock once it starts',
+    '{n} Fragen · {time} auf der Uhr, sobald es losgeht',
   ],
 ]);

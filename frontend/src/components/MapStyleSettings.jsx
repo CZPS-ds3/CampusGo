@@ -142,6 +142,10 @@ function Preview({ style, theme }) {
         <span className="mapstyle__pin mapstyle__pin--locked" />
         <span className="mapstyle__pin mapstyle__pin--selected" />
       </span>
+      <span className="mapstyle__puck" data-testid="preview-ball" aria-hidden="true">
+        <span className="mapstyle__puck-beam" />
+        <span className="mapstyle__puck-ball" />
+      </span>
     </div>
   );
 }
@@ -211,6 +215,18 @@ export function MapStyleSettings() {
       value: buildingColour(draft, isDark(draft, theme)),
       set: (hex) => ({ buildings: hex }),
     },
+    {
+      id: 'ball',
+      label: t('Your position: ball'),
+      value: draft.ball.body,
+      set: (hex) => ({ ball: { ...draft.ball, body: hex } }),
+    },
+    {
+      id: 'ball-lines',
+      label: t('Your position: lines and direction'),
+      value: draft.ball.lines,
+      set: (hex) => ({ ball: { ...draft.ball, lines: hex } }),
+    },
   ];
   const current = colours.find((c) => c.id === picked);
 
@@ -268,9 +284,11 @@ export function MapStyleSettings() {
                 onClick={() => setDraft(cleanStyle({ ...preset, base: draft.base }))}
               >
                 <span className="mapstyle__swatches" aria-hidden="true">
-                  {[preset.pins.open, preset.pins.done, preset.highlight].map((colour, i) => (
-                    <span key={i} className="mapstyle__swatch" style={{ background: colour }} />
-                  ))}
+                  {[preset.pins.open, preset.pins.done, preset.highlight, preset.ball.lines].map(
+                    (colour, i) => (
+                      <span key={i} className="mapstyle__swatch" style={{ background: colour }} />
+                    ),
+                  )}
                 </span>
                 <span className="small strong">{t(PRESET_NAMES[name])}</span>
               </button>

@@ -227,6 +227,12 @@ export function createCheckpointAdminService({ pool, config, clock, uploadDir, f
        ORDER BY o.question_id, o.option_position`,
       [id],
     );
+    const [questionImages] = await pool.query(
+      `SELECT i.question_id, i.position, i.url, i.alt_text, i.shown FROM question_images i
+       JOIN questions q ON q.question_id = i.question_id WHERE q.checkpoint_id = ?
+       ORDER BY i.question_id, i.position`,
+      [id],
+    );
     return {
       quest,
       facts: facts.map((f) => f.fact_text),
@@ -250,6 +256,9 @@ export function createCheckpointAdminService({ pool, config, clock, uploadDir, f
             text: o.option_text,
             isCorrect: Boolean(o.is_correct),
           })),
+        images: questionImages
+          .filter((i) => i.question_id === q.question_id)
+          .map((i) => ({ position: i.position, url: i.url, alt: i.alt_text, shown: i.shown })),
       })),
     };
   }

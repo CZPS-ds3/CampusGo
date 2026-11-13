@@ -53,6 +53,8 @@ export function apiEnv(dbUrl) {
     OTP_PREVIEW_DEFAULT: 'false',
     OTP_RESEND_COOLDOWN_SECONDS: '0',
     OTP_RESEND_MAX_PER_HOUR: '1000',
+    // No 3-2-1 countdown (R-66): the tests answer right after the unlock. The backend tests cover the countdown.
+    QUIZ_COUNTDOWN_SECONDS: '0',
     UPLOAD_DIR: join(REPORTS, 'uploads'),
   };
 }

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { login, open } from '../../frontend/e2e/helpers.js';
+import { answerRight, login, open } from '../../frontend/e2e/helpers.js';
 
 test('the app starts, a player signs in and sees the map with the checkpoints', async ({
   page,
@@ -30,9 +30,9 @@ test('a quiz can be played to the end and shows the result', async ({ page }) =>
   await page.getByRole('button', { name: 'I agree' }).click();
   await expect(page.getByRole('timer')).toBeVisible();
   for (let i = 0; i < 3; i += 1) {
-    await page.getByRole('button', { name: /placeholder answer/ }).click();
+    await answerRight(page);
     await expect(page.getByText('Correct!')).toBeVisible();
-    await page.getByRole('button', { name: i === 2 ? 'Finish' : 'Next' }).click();
+    await page.getByRole('button', { name: i === 2 ? 'Finish' : 'Next', exact: true }).click();
   }
   await expect(page.getByText('Checkpoint cleared')).toBeVisible();
 });

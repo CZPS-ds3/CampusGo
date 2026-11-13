@@ -78,6 +78,8 @@ export function loadConfig(env = process.env) {
     nearerMarginM: int(env.NEARER_MARGIN_M, 20), // another checkpoint must be this much nearer to win
     maxPositionAgeMs: int(env.MAX_POSITION_AGE_MS, 30_000),
     secondsPerQuestion: int(env.SECONDS_PER_QUESTION, 60), // BR13
+    // R-66: a 3-2-1 countdown after the unlock; the questions and the quiz time start when it ends.
+    quizCountdownSeconds: int(env.QUIZ_COUNTDOWN_SECONDS, 3),
     verifyLimitPerMin: int(env.VERIFY_LIMIT_PER_MIN, 10),
     locationRetentionDays: int(env.LOCATION_RETENTION_DAYS, 7),
     maxProfilePictureBytes: int(env.MAX_PROFILE_PICTURE_MB, 2) * 1024 * 1024,

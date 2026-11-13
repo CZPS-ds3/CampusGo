@@ -4,6 +4,7 @@ Each name starts with the bug and names the business rule it protects. If one of
 bug is back.
 """
 
+import json
 import os
 import shutil
 import struct
@@ -317,6 +318,14 @@ def test_bug_the_seed_undid_admin_quest_changes_and_stopped_the_api_br49(admin, 
             {"questionCount": 1, "passThreshold": 1, "timeLimitSeconds": 20},
         )
         assert changed.status_code == 200, changed.text
+        # The test database keeps the placeholder questions the other suites rely on: mark the team's question bank
+        # as already seeded, so this run checks only that the seed leaves the admin's quest values alone.
+        query(
+            db,
+            "INSERT INTO app_settings (setting_key, setting_value, updated_at) "
+            "VALUES ('question_bank_v1', 'true', UTC_TIMESTAMP(3)) "
+            "ON DUPLICATE KEY UPDATE setting_value = 'true'",
+        )
         env = {**os.environ, "NODE_ENV": "development", "DATABASE_URL": DB_URL}
         seed = subprocess.run(
             [shutil.which("node") or "node", str(ROOT / "backend" / "src" / "db" / "seed.js")],
@@ -411,3 +420,198 @@ def test_bug_the_first_location_check_timed_out_on_the_small_phone_br12():
     for name in ("helpers.js", "flow.spec.js"):
         text = (ROOT / "frontend" / "e2e" / name).read_text(encoding="utf-8")
         assert "getByText('Locked on!')).toBeVisible();" not in text, name
+
+
+def test_bug_the_real_seed_still_filled_the_quests_with_placeholder_questions_br11():
+    """The CLI seed put PLACEHOLDER questions into every pilot quest; now it loads the team's question bank."""
+    seed = (ROOT / "backend" / "src" / "db" / "seed.js").read_text(encoding="utf-8")
+    main = seed.split("if (process.argv[1] === fileURLToPath(import.meta.url))", 1)[1]
+    assert "seedQuestionBank(pool)" in main
+    assert "seedPlaceholderQuestions" not in main
+    bank = (ROOT / "backend" / "src" / "db" / "question-bank.js").read_text(encoding="utf-8")
+    assert "PLACEHOLDER" not in bank
+    assert bank.count("q(") >= 69
+
+
+def test_bug_a_question_photo_must_not_give_the_answer_away_before_answering_br14(player, db):
+    """Photos that show the answer (a room sign, a price tag) may only appear after the question is answered."""
+    student = player("photos")
+    checkpoint = student.checkpoint("Campus Garden")
+    questions = query(
+        db,
+        "SELECT question_id FROM questions WHERE checkpoint_id = %s AND is_active = 1",
+        (checkpoint["id"],),
+    )
+    try:
+        for row in questions:
+            query(
+                db,
+                "INSERT INTO question_images (question_id, position, url, alt_text, credit, shown) "
+                "VALUES (%s, 1, '/quests/t/needed.jpg', 'needed', 'team', 'question'), "
+                "(%s, 2, '/quests/t/answer.jpg', 'answer', 'team', 'answer')",
+                (row["question_id"], row["question_id"]),
+            )
+        reply = student.start_quiz("Campus Garden")
+        assert reply.status_code == 200, reply.text
+        attempt = reply.json()["attempt"]
+        assert "answer.jpg" not in str(attempt)
+        assert attempt["questions"][0]["images"][0]["url"] == "/quests/t/needed.jpg"
+        body = student.answer_all(attempt, correct=False)
+        assert all(
+            q["answerImages"][0]["url"] == "/quests/t/answer.jpg"
+            for q in body["attempt"]["questions"]
+        )
+    finally:
+        for row in questions:
+            query(db, "DELETE FROM question_images WHERE question_id = %s", (row["question_id"],))
+
+
+def run_node(script):
+    """Runs an ES module snippet with Node from the repository root and returns its printed JSON."""
+    node = shutil.which("node")
+    assert node, "Node.js is needed for this test"
+    done = subprocess.run(
+        [node, "--input-type=module", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert done.returncode == 0, done.stderr
+    return json.loads(done.stdout)
+
+
+def test_bug_distances_were_measured_on_a_sphere_instead_of_the_gps_ellipsoid_br12():
+    """A sphere is 0.3 % short east-west at Heilbronn: a reading 120.2 m east of a 120 m edge was let in."""
+    values = run_node(
+        "import { distanceMeters } from './backend/src/services/geo.js';"
+        "import { distanceM } from './frontend/src/geo.js';"
+        "console.log(JSON.stringify([distanceMeters(0, 0, 0, 1), distanceMeters(0, 0, 1, 0),"
+        " distanceM([0, 0], [0, 1]), distanceM([0, 0], [1, 0])]));"
+    )
+    assert abs(values[0] - 111319.491) < 0.001 and abs(values[2] - 111319.491) < 0.001
+    assert abs(values[1] - 110574.389) < 0.001 and abs(values[3] - 110574.389) < 0.001
+    mock = (ROOT / "frontend" / "src" / "api" / "mock.js").read_text(encoding="utf-8")
+    assert "6371008.8" not in mock, "the mock API must measure like the server"
+
+
+def test_bug_the_location_check_sent_one_jittery_reading_instead_of_an_average_br12():
+    """Only the single most precise reading was sent; now precise readings are averaged and outliers dropped."""
+    sample = run_node(
+        "import { combineReadings } from './frontend/src/hooks/useGeolocation.js';"
+        "const m = 1 / 111250;"
+        "const r = (north, accuracy) => ({ latitude: 49.1 + north * m, longitude: 9.2, accuracy, takenAt: 0 });"
+        "const s = combineReadings([r(6, 10), r(-6, 10), r(5, 10), r(-5, 10), r(80, 12)], 0, 0);"
+        "console.log(JSON.stringify({ north: (s.latitude - 49.1) / m, accuracy: s.accuracy }));"
+    )
+    assert abs(sample["north"]) < 1, sample
+    assert (
+        sample["accuracy"] == 10
+    ), "the accuracy sent is never better than the best single reading"
+
+
+def test_bug_a_gps_fix_delivered_twice_made_the_live_position_look_more_precise_br12():
+    """The live map counted a repeated or older fix again, so its accuracy ring shrank without new evidence."""
+    same = run_node(
+        "import { fuseFix } from './frontend/src/hooks/useLiveLocation.js';"
+        "const fix = (north, time) => ({ lat: 49.1 + north / 111250, lng: 9.2, accuracy: 5, time,"
+        " speed: null, heading: null });"
+        "const shown = fuseFix(fuseFix(null, fix(0, 0)), fix(2, 1000));"
+        "console.log(JSON.stringify([fuseFix(shown, fix(2, 1000)) === shown,"
+        " fuseFix(shown, fix(30, 500)) === shown]));"
+    )
+    assert same == [True, True]
+
+
+def test_bug_the_weak_signal_answer_came_after_the_browser_test_stopped_waiting_br12():
+    """A coarse reading waits out the 8 s measuring window; the browser test gave up at 10 s on a busy machine."""
+    hook = (ROOT / "frontend" / "src" / "hooks" / "useGeolocation.js").read_text(encoding="utf-8")
+    assert "const GPS_WINDOW_MS = 8000;" in hook
+    flow = (ROOT / "frontend" / "e2e" / "flow.spec.js").read_text(encoding="utf-8")
+    assert "getByText('Weak signal')).toBeVisible({ timeout: LOCK_ON_TIMEOUT });" in flow
+
+
+def test_bug_a_browser_test_page_was_overwritten_by_the_login_redirect_br01():
+    """open() pushed its page before the app landed on the map or the login page, so it was replaced."""
+    helpers = (ROOT / "frontend" / "e2e" / "helpers.js").read_text(encoding="utf-8")
+    body = helpers.split("export async function open(page, path) {", 1)[1].split("\n}\n", 1)[0]
+    goto = body.index("page.goto('/map')")
+    assert body.index('[aria-busy="true"]\')).toHaveCount(0)', goto) < body.index("pushState")
+
+
+def test_bug_the_carousel_browser_test_used_a_gallery_that_now_has_one_photo_br07():
+    """The Mensa gallery became one team photo, so a browser test that stepped through two of them failed; the
+    page clock also ran on by itself, so the 5 s timer could fire once too often on a busy machine.
+    """
+    places = json.loads(
+        (ROOT / "frontend" / "src" / "api" / "places.json").read_text(encoding="utf-8")
+    )
+    spec = (ROOT / "frontend" / "e2e" / "round3.spec.js").read_text(encoding="utf-8")
+    test = spec.split("test.describe('place photos'", 1)[1].split("test.describe(", 1)[0]
+    assert "/Photos of Library/" in test and "of 9`" in test
+    assert test.index("document.activeElement?.blur()") < test.index("page.clock.fastForward(")
+    assert len(places["library"]) == 9
+
+
+def test_bug_the_live_ball_stayed_still_while_the_phone_sent_no_new_reading_br12():
+    """The browser's watch can stay quiet for a long time; the ball must get a reading at least every 3 seconds."""
+    values = run_node(
+        "import { ASK_AHEAD_MS, REFRESH_MS } from './frontend/src/hooks/useLiveLocation.js';"
+        "console.log(JSON.stringify([REFRESH_MS, ASK_AHEAD_MS]));"
+    )
+    assert values[0] == 3000 and 0 < values[1] < values[0]
+    hook = (ROOT / "frontend" / "src" / "hooks" / "useLiveLocation.js").read_text(encoding="utf-8")
+    assert "document.hidden" in hook
+    # A one-off reading cannot be cancelled and, with a simulated position, blocked the next location check.
+    assert "getCurrentPosition(" not in hook
+
+
+def test_bug_the_ball_colour_could_not_be_changed_br48(player):
+    """The live-position ball was always white and red, whatever map style the student chose."""
+    student = player("ball-colour")
+    reply = student.request("PUT", "/me/map-style", json={"ball": {"body": "#222222"}})
+    assert reply.status_code == 200, reply.text
+    css = (ROOT / "frontend" / "src" / "styles" / "screens.css").read_text(encoding="utf-8")
+    assert "fill: var(--puck-body, #fff);" in css
+    assert "stroke: var(--puck-lines, var(--signal));" in css
+
+
+def test_bug_the_read_first_page_showed_placeholder_facts_instead_of_answers_br09():
+    """Students read "PLACEHOLDER fact 1"; now every pilot quest has facts that answer its normal questions."""
+    info = run_node(
+        "import { QUEST_INFO } from './backend/src/db/question-bank.js';"
+        "console.log(JSON.stringify(QUEST_INFO));"
+    )
+    assert len(info) == 8
+    for name, quest in info.items():
+        assert 1 <= len(quest["facts"]) <= 5, name
+        assert all(len(fact) <= 300 for fact in quest["facts"]), name
+        assert "PLACEHOLDER" not in quest["description"] + " ".join(quest["facts"]), name
+    seed = (ROOT / "backend" / "src" / "db" / "seed.js").read_text(encoding="utf-8")
+    main = seed.split("if (process.argv[1] === fileURLToPath(import.meta.url))", 1)[1]
+    assert "seedQuestContent(pool)" in main
+    assert "seedPlaceholderFacts" not in main
+    mock = (ROOT / "frontend" / "src" / "api" / "mock.js").read_text(encoding="utf-8")
+    assert "PLACEHOLDER fact" not in mock and "placeholder answer" not in mock
+
+
+def test_bug_the_two_multi_select_questions_of_the_bank_were_never_drawn_br50():
+    """Library and Building B were single choice only, so their multi-select questions never came up."""
+    seed = (ROOT / "backend" / "src" / "db" / "seed.js").read_text(encoding="utf-8")
+    assert "SET type_mode = 'MIXED'" in seed
+    assert "q.question_type = 'MULTI'" in seed
+    mock = (ROOT / "frontend" / "src" / "api" / "mock.js").read_text(encoding="utf-8")
+    assert "q.type === 'MULTI' && q.difficulty === 'NORMAL'" in mock
+
+
+def test_r66_the_countdown_does_not_eat_quiz_time_br13():
+    """R-66 (new, no bug): the countdown runs before the quiz; the deadline moves back by it, no second lost."""
+    quiz = (ROOT / "backend" / "src" / "services" / "quiz.js").read_text(encoding="utf-8")
+    assert "const expires = start + seconds * 1000;" in quiz
+    assert "QUIZ_NOT_STARTED" in quiz
+    config = run_node(
+        "import { loadConfig } from './backend/src/config.js';"
+        "console.log(JSON.stringify(loadConfig({}).quizCountdownSeconds));"
+    )
+    assert config == 3

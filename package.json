@@ -25,6 +25,7 @@
     "db:migrate": "npm run migrate --prefix backend",
     "db:seed": "npm run seed --prefix backend",
     "db:seed:demo": "npm run seed:demo --prefix backend",
+    "questions:sync": "node scripts/sync-question-bank.mjs && prettier --write frontend/src/api/question-bank.json",
     "docker:up": "docker compose up --build",
     "docker:down": "docker compose down",
     "pretest": "node scripts/ensure-db.mjs --test",

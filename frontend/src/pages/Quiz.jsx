@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { errorText } from '../api/errorText.js';
 import { Button } from '../components/Button.jsx';
+import { Carousel } from '../components/Carousel.jsx';
 import { Icon, IconButton } from '../components/icons.jsx';
 import { OfflineBanner, useOnline } from '../components/OfflineBanner.jsx';
 import { Modal } from '../components/Sheet.jsx';
@@ -14,6 +15,33 @@ const LETTERS = ['A', 'B', 'C', 'D'];
 const URGENT_SECONDS = 30;
 const PULSE_SECONDS = 10;
 const MAX_RETRIES = 3;
+const COUNTDOWN_RELOAD_MS = 150;
+
+/** R-66: the 3-2-1 screen between the location check and the first question. The quiz time has not started. */
+function Countdown({ attempt, seconds }) {
+  return (
+    <main className="page page--narrow countdown" data-testid="quiz-countdown">
+      <Chip tone="ok" icon="check">
+        {t('Locked on!')}
+      </Chip>
+      <Display as="h1" size="h2" className="mt block">
+        {attempt.checkpointName}
+      </Display>
+      <p className="muted mt-s">{t('Get ready. Your quiz starts in')}</p>
+      <p className="countdown__number display accent" role="status" aria-live="assertive">
+        <span key={seconds} className="anim-pop">
+          {seconds > 0 ? seconds : t('Go!')}
+        </span>
+      </p>
+      <p className="caption muted">
+        {t('{n} questions · {time} on the clock once it starts', {
+          n: attempt.questionCount,
+          time: formatClock(attempt.timeLimitSeconds),
+        })}
+      </p>
+    </main>
+  );
+}
 
 function Timer({ seconds }) {
   const urgent = seconds < URGENT_SECONDS;
@@ -84,6 +112,11 @@ export default function Quiz() {
   const expiredButton = useRef(null);
 
   const { seconds, remainingMs } = useServerTimer(attempt?.expiresAt, attempt?.serverNow);
+  // R-66: 3-2-1 before the first question. The server sends the questions only from startTime on.
+  const countdown = useServerTimer(attempt?.startTime, attempt?.serverNow);
+  const counting = Boolean(attempt) && countdown.remainingMs > 0;
+  const waitingForQuestions =
+    Boolean(attempt) && attempt.status === 'active' && attempt.questions.length === 0;
 
   const load = useCallback(async () => {
     try {
@@ -114,6 +147,13 @@ export default function Quiz() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // When the countdown is over, fetch the questions (again a moment later if the server's clock is not there yet).
+  useEffect(() => {
+    if (counting || !waitingForQuestions || layer) return undefined;
+    const timer = setTimeout(load, COUNTDOWN_RELOAD_MS);
+    return () => clearTimeout(timer);
+  }, [counting, waitingForQuestions, layer, load]);
 
   // The server decides when time is up; the client only notices that its clock reached the deadline.
   const expired = attempt && attempt.status === 'active' && remainingMs === 0 && seconds === 0;
@@ -221,6 +261,23 @@ export default function Quiz() {
             {t('Loading your question…')}
           </p>
         )}
+      </main>
+    );
+  }
+
+  if ((counting || waitingForQuestions) && layer?.kind !== 'error') {
+    return <Countdown attempt={attempt} seconds={countdown.seconds} />;
+  }
+  if (waitingForQuestions) {
+    return (
+      <main className="page page--narrow">
+        <div className="card stack" role="alert">
+          <Display as="h1" size="h2">
+            {t('Something went wrong')}
+          </Display>
+          <p>{layer.message}</p>
+          <Button onClick={load}>{t('Try again')}</Button>
+        </div>
       </main>
     );
   }
@@ -367,6 +424,11 @@ export default function Quiz() {
               <p className="caption muted">
                 {multi ? t('Choose all that apply') : t('Choose one answer')}
               </p>
+              {question.images?.length > 0 && (
+                <div className="quiz__photos">
+                  <Carousel whole images={question.images} label={t('Photos for this question')} />
+                </div>
+              )}
             </section>
             <ul className="options">
               {question.options.map((option, index) => (
@@ -399,6 +461,12 @@ export default function Quiz() {
                 </p>
               )}
             </div>
+            {feedback && question.answerImages?.length > 0 && (
+              <section className="card card--flat anim-pop" aria-label={t('Where to find it')}>
+                <p className="caption muted">{t('Where to find it')}</p>
+                <Carousel whole images={question.answerImages} label={t('Where to find it')} />
+              </section>
+            )}
             {feedback && (
               <Button ref={nextButton} variant="sub" className="anim-pop" onClick={next}>
                 {lastQuestion ? t('Finish') : t('Next')} <Icon name="arrow" />

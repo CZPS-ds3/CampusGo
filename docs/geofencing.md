@@ -3,8 +3,8 @@
 Implementation notes for the "Geofencing Architecture" section of the Main Project Document (check-on-tap geofencing). Business rules BR07, BR08, BR12, BR13, BR22, BR23, BR25. Work packages: WP5 (design), WP7 (build), WP9 (coordinates), WP11/WP12 (security), WP13 (on-site tests).
 
 ## Principle
-- **Check on tap.** The student taps "I'm ready"; the phone takes **one** fresh, high-accuracy reading and sends it to the server. No live tracking, no background location.
-- **The server decides.** The phone only reports a position. Freshness, accuracy and distance (Haversine) are checked on the server; the client's opinion about "inside" is never trusted.
+- **Check on tap.** The student taps "I'm ready"; the phone watches its position for a few seconds and sends **one** position to the server: the accuracy-weighted average of the precise readings (see *Precise position* below). No live tracking on the server, no background location.
+- **The server decides.** The phone only reports a position. Freshness, accuracy and distance (on the WGS84 ellipsoid) are checked on the server; the client's opinion about "inside" is never trusted.
 - **Verification is the unlock.** When the reading is inside the circle, the server creates the attempt, draws the questions and starts the timer (`expires_at = now + question_count × 60 s`, BR13) in one transaction.
 - **Leaving the circle afterwards changes nothing** (BR12). Location plays no part once the attempt exists.
 - **Privacy.** Coordinates are used for one request and never stored or logged. The server keeps only "inside radius yes/no + time" (`location_checks`, deleted after 7 days).
@@ -12,7 +12,7 @@ Implementation notes for the "Geofencing Architecture" section of the Main Proje
 ## Flow
 
 1. Map → checkpoint sheet → **read-first page** (facts, no timer, no location yet) → "I'm ready".
-2. Location notice (consent, once) → `navigator.geolocation.getCurrentPosition` (high accuracy, 10 s timeout, `maximumAge: 0`).
+2. Location notice (consent, once) → `navigator.geolocation.watchPosition` (high accuracy, `maximumAge: 0`, at most 8 s; then the network position for at most 6 s). The screen shows the accuracy reached so far ("±12 m").
 3. Permission denied / no position / timeout: message + "Try again". No request, no attempt, no timer.
 4. `POST /api/checkpoints/:id/verify` with `{ lat, lng, accuracy, ageMs }` (`ageMs` = phone clock − phone clock, so a wrong phone clock does not block anyone).
 5. The server answers in the order of Figure 3:
@@ -28,7 +28,7 @@ Implementation notes for the "Geofencing Architecture" section of the Main Proje
 | 6 | Location notice accepted | `403 CONSENT_REQUIRED` | no | no |
 | 7 | Reading fresh: `0 ≤ ageMs ≤ 30 000` | `422 STALE_POSITION` | no | no |
 | 8 | Accuracy ≤ 200 m (`MAX_ACCURACY_M`) | `422 ACCURACY_TOO_LOW` | no | no |
-| 9 | Haversine distance ≤ radius + 30 m grace zone + the reading's accuracy (credit capped at 50 m) | `200 { status: 'OUTSIDE', distanceM, elsewhere: null, message }` (distance rounded to 10 m) | no | no |
+| 9 | WGS84 distance ≤ radius + 30 m grace zone + the reading's accuracy (credit capped at 50 m) | `200 { status: 'OUTSIDE', distanceM, elsewhere: null, message }` (distance rounded to 10 m) | no | no |
 | 9b | **Nearest centre wins.** No other active checkpoint whose circle also contains the reading has a closer centre | `200 { status: 'OUTSIDE', distanceM, elsewhere: '<name>', message }` ("You are at Building C, not at Sensoricum") | no | no |
 | 10 | All good: **unlock** | `200 { status: 'OK', resumed: false, attempt }` | yes | starts |
 
@@ -73,12 +73,48 @@ Open points for WP9/WP13:
 - **Campus Garden**: the Main Project Document calls it an open space; OpenStreetMap names a café/restaurant "Campus Garden" at this point. Confirm.
 - Other neighbouring circles overlap too (e.g. Building B and C are 48 m apart with 60 m radii). The nearest-centre rule above keeps them exclusive; shrink radii after WP13 if the dividing lines feel wrong.
 
+## Precise position (2026-11-12)
+
+What the phone sends and how the server measures were made as precise as a browser allows; the rules and limits
+(BR12: 200 m accuracy, 30 m grace zone, accuracy credit up to 50 m) are unchanged.
+
+- **Several readings, averaged** (`frontend/src/hooks/useGeolocation.js`). A single GPS fix jitters by a few metres.
+  The phone now watches its position: a reading of 5 m or better ends the wait at once; after the first reading of
+  20 m or better it collects for 2.5 s more (or until 5 such readings), otherwise until the 8 s window ends. The
+  readings are averaged, each weighted by 1/accuracy². Left out: readings the browser kept from before the check
+  (more than 2 s older than its start, while fresh ones exist), readings much coarser than the best one, and
+  readings further from the best one than both accuracies together (a reflection off a building).
+- **Honest figures.** The accuracy sent is that of the best single reading, never the smaller figure of the average
+  (GPS errors are partly shared between readings, so that would claim more than is known); the age sent is that of
+  the oldest reading used.
+- **WGS84 distance** (`backend/src/services/geo.js`, same formula in `frontend/src/geo.js` for the map and the mock
+  API). GPS positions are given on the WGS84 ellipsoid; the old sphere (Haversine) was 0.3 % short east-west at
+  Heilbronn, so a reading 120.2 m east of a 120 m edge was let in. Vincenty's formula is exact to the millimetre;
+  nearly opposite points of the Earth, where it does not converge, fall back to the sphere.
+- **Live map** (`frontend/src/hooks/useLiveLocation.js`). A fix the browser delivers twice, or an older one, is no
+  longer counted again, so the accuracy ring does not shrink without new evidence.
+- **Live map at least every 3 s** (2026-11-13). The browser's watch reports only when the device decides to and can
+  stay quiet while standing still or saving power. When it has been quiet for 2 s, the map restarts it: a new watch
+  (`maximumAge: 0`) starts with a fresh, high-accuracy fix, so the ball gets a reading at least every 3 s
+  (`REFRESH_MS` 3000, restarted `ASK_AHEAD_MS` 1000 early). A restarted watch still waiting gets 6 s
+  (`REARM_GRACE_MS`) before the next restart, so a slow fix is not cut off again and again; nothing is restarted
+  while the tab is hidden. A one-off reading (`getCurrentPosition`) is not used: it cannot be cancelled when the map
+  closes, and with a simulated position (DevTools, browser tests) it never answers while a watch runs and then holds
+  back the location check's own reading. The readings stay in the browser, as before.
+- **Privacy is unchanged.** The readings stay in the browser; only the one combined position goes to the server
+  for that request and is not stored. Only the accuracy in metres is shown on screen.
+
+What cannot be made more precise in code: the phone's own GPS quality (indoors, between buildings) and the
+checkpoint centres, which are still OpenStreetMap points until the on-site test (WP13) measures them.
+
 ## Known limits
 A browser cannot stop a determined student with a fake-GPS app or developer tools. The controls (server-side decision, freshness and accuracy gates, per-student rate limit, timer, random questions, single pass) are a deterrent for a one-day pilot, not a guarantee (Main Project Document, section 8).
 
 ## Tests
 - **Step-by-step guide with test coordinates for every checkpoint (Chrome DevTools, accuracy 10):** [testing/location-testing-guide.md](../testing/location-testing-guide.md), data in [testing/checkpoint-coordinates.json](../testing/checkpoint-coordinates.json).
-- `backend/tests/geofence.test.js` (no database): Haversine (0 m, 55.6 m, 222.4 m), Figure 3 order, edge of the circle, seeded checkpoints within 500 m of DHBW Heilbronn.
+- `backend/tests/geofence.test.js` (no database): distances (0 m, 55.6 m, 222.4 m), Figure 3 order, edge of the circle, seeded checkpoints within 500 m of DHBW Heilbronn.
+- `backend/tests/geodesy.test.js`: WGS84 distances against published geodesic values (1° on the equator, Vincenty's Flinders Peak example) and the 120.2 m edge case the sphere let in.
+- `frontend/tests/geolocation.test.js`: averaging, weighting, outliers, cached readings, age, early end, progress.
 - `backend/tests/quiz.test.js` (MySQL): section 9 tests 2–5 and 7–10 against the real endpoint.
 - `frontend/e2e/flow.spec.js`: full journey, poor accuracy, far away (mock API).
 - Tests and fixtures use invented positions or public map points only, never real student locations.

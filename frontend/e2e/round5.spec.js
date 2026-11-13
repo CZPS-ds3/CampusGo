@@ -4,7 +4,7 @@ import {
   login,
   open,
   openCheckpoint,
-  rightOption,
+  answerRight,
   shot,
 } from './helpers.js';
 
@@ -59,9 +59,9 @@ test.describe('admin points', () => {
     await page.getByRole('button', { name: 'I agree' }).click();
     await expect(page.getByRole('timer')).toBeVisible();
     for (let i = 0; i < 3; i += 1) {
-      await rightOption(page).click();
+      await answerRight(page);
       await expect(page.getByText('Correct!')).toBeVisible();
-      await page.getByRole('button', { name: i === 2 ? 'Finish' : 'Next' }).click();
+      await page.getByRole('button', { name: i === 2 ? 'Finish' : 'Next', exact: true }).click();
     }
     await expect(page.getByText('Checkpoint cleared')).toBeVisible();
     await expect(page.getByText(/^Team rank · Campus Crew/)).toBeVisible();

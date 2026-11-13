@@ -1,5 +1,6 @@
 // One map style per student account (BR48): base (light, dark or follow the app theme), a colour tint over the
-// map, the colours of the checkpoint pins, the highlight, the walking route and the buildings of the 3D map. Colours are validated and stored
+// map, the colours of the checkpoint pins, the highlight, the walking route, the buildings of the 3D map and the
+// live-position ball (its body and its lines). Colours are validated and stored
 // as #RRGGBB, so the page can use them in CSS without any further checking.
 import { AppError } from '../middleware/errors.js';
 
@@ -14,6 +15,7 @@ export const DEFAULT_MAP_STYLE = {
   highlight: '#e2001a',
   route: '#e2001a',
   buildings: '#dcd9d4',
+  ball: { body: '#ffffff', lines: '#e2001a' },
 };
 
 const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
@@ -81,6 +83,10 @@ export function validateMapStyle(input) {
   ) {
     for (const key of Object.keys(input.pins))
       style.pins[key] = colour(input.pins[key], `pins.${key}`);
+  }
+  if (input.ball !== undefined && exactKeys(input.ball, ['body', 'lines'], 'ball', problems)) {
+    for (const key of Object.keys(input.ball))
+      style.ball[key] = colour(input.ball[key], `ball.${key}`);
   }
   for (const key of ['highlight', 'route', 'buildings']) {
     if (input[key] !== undefined) style[key] = colour(input[key], key);

@@ -5,7 +5,8 @@ import {
   login,
   open,
   openCheckpoint,
-  rightOption,
+  answerRight,
+  answerWrong,
   shot,
   startQuiz,
 } from './helpers.js';
@@ -54,10 +55,10 @@ test.describe('full player journey (mock API)', () => {
     await shot(page, testInfo, '07-quiz');
 
     for (let i = 0; i < 3; i += 1) {
-      await rightOption(page).click();
+      await answerRight(page);
       await expect(page.getByText('Correct!')).toBeVisible();
       if (i === 0) await shot(page, testInfo, '08-correct');
-      await page.getByRole('button', { name: i === 2 ? 'Finish' : 'Next' }).click();
+      await page.getByRole('button', { name: i === 2 ? 'Finish' : 'Next', exact: true }).click();
     }
 
     await expect(page.getByText('Checkpoint cleared')).toBeVisible();
@@ -79,7 +80,7 @@ test.describe('full player journey (mock API)', () => {
     await openCheckpoint(page, 'Library');
     await startQuiz(page);
 
-    await page.locator('.opt').filter({ hasNotText: 'placeholder answer' }).first().click();
+    await answerWrong(page);
     await expect(page.getByText(/Not quite/)).toBeVisible();
     await expect(page.locator('.opt.is-correct')).toHaveCount(1);
     await expect(page.locator('.opt.is-wrong')).toHaveCount(1);
@@ -92,8 +93,8 @@ test.describe('full player journey (mock API)', () => {
     await openCheckpoint(page, 'Library');
     await startQuiz(page);
     const question = await page.locator('.quiz__question').innerText();
-    await rightOption(page).click();
-    await page.getByRole('button', { name: 'Next' }).click();
+    await answerRight(page);
+    await page.getByRole('button', { name: 'Next', exact: true }).click();
     await page.reload();
     await expect(page.getByLabel('Question 2 of 5')).toBeVisible();
     expect(await page.locator('.quiz__question').innerText()).not.toBe(question);
@@ -108,7 +109,8 @@ test.describe('location problems never use an attempt', () => {
     await page.getByRole('link', { name: 'Start quest' }).click();
     await page.getByRole('button', { name: "I'm ready" }).click();
     await page.getByRole('button', { name: 'I agree' }).click();
-    await expect(page.getByText('Weak signal')).toBeVisible();
+    // A coarse reading waits out the whole measuring window (8 s) before the answer.
+    await expect(page.getByText('Weak signal')).toBeVisible({ timeout: LOCK_ON_TIMEOUT });
     await expect(page.getByText(/No attempt used/)).toBeVisible();
     await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible();
   });

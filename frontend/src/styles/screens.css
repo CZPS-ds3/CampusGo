@@ -613,15 +613,17 @@ ol.stack {
   height: 100%;
   overflow: visible;
 }
-/* White facets (shaded grey towards the far edge in map-pins.js) on a white backing, no animation. */
+/* Facets (shaded towards the far edge in map-pins.js) on a backing of the same colour, no animation: white, or
+   the ball colour of the student's map style (--puck-body, BR48). */
 .puck__hull,
 .puck__facet {
-  fill: #fff;
+  fill: var(--puck-body, #fff);
 }
-/* Red lines between the facets, in the GO button's red; none round the outline (map-pins.js). */
+/* Lines between the facets, in the GO button's red or the student's line colour (--puck-lines); none round the
+   outline (map-pins.js). */
 .puck__edges {
   fill: none;
-  stroke: var(--signal);
+  stroke: var(--puck-lines, var(--signal));
   stroke-width: 0.3;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -629,7 +631,7 @@ ol.stack {
 /* The thin red outline round the whole ball, so its edge always shows, even against a light map. */
 .puck__outline {
   fill: none;
-  stroke: var(--signal);
+  stroke: var(--puck-lines, var(--signal));
   stroke-width: 0.4;
   stroke-linejoin: round;
 }
@@ -687,11 +689,9 @@ ol.stack {
   position: absolute;
   inset: calc((28px - var(--puck-orb)) * 0.9);
   scale: var(--puck-scale, 1);
-  background: radial-gradient(
-    closest-side,
-    rgb(226 0 26 / 0.5),
-    rgb(255 143 156 / 0.3) 65%,
-    transparent 100%
+  background: var(
+    --puck-beam,
+    radial-gradient(closest-side, rgb(226 0 26 / 0.5), rgb(255 143 156 / 0.3) 65%, transparent 100%)
   );
   /* 128 degrees wide: from the middle out to the top corners and down the sides. */
   clip-path: polygon(50% 50%, 0 25.6%, 0 0, 100% 0, 100% 25.6%);
@@ -1515,6 +1515,36 @@ ol.stack {
 .carousel__img.is-current {
   opacity: 1;
 }
+/* Quiz photos: the whole photo on a calm background, never cropped. */
+.carousel--whole .carousel__stage {
+  aspect-ratio: 4 / 3;
+}
+.carousel--whole .carousel__img {
+  object-fit: contain;
+}
+.quiz__photos {
+  margin-top: 12px;
+}
+.admin-qphotos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.admin-qphotos li {
+  display: grid;
+  gap: 2px;
+  width: 96px;
+}
+.admin-qphotos img {
+  width: 96px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: var(--r-1);
+  background: var(--surface2);
+}
 .carousel__nav {
   position: absolute;
   top: 50%;
@@ -2046,4 +2076,24 @@ ol.stack {
   .team-order__row > .grow {
     flex-basis: calc(100% - 2.5rem);
   }
+}
+
+/* R-66: the 3-2-1 countdown between the location check and the first question. */
+.countdown {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 70dvh;
+  text-align: center;
+}
+
+.countdown__number {
+  margin: 16px 0;
+  font-size: clamp(6rem, 32vw, 10rem);
+  line-height: 1;
+}
+
+.countdown__number > span {
+  display: inline-block;
 }

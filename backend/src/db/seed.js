@@ -1,15 +1,27 @@
-// Loads reference data (BR11), the 8 pilot checkpoints and PLACEHOLDER questions. Idempotent. Usage: node seed.js
+// Loads reference data (BR11), the 8 pilot checkpoints and the team's question bank (question-bank.js, with
+// photos). Idempotent. Usage: node seed.js
 // The pilot checkpoints are created ONCE (marker `pilot_checkpoints_seeded` in app_settings). After that, quests
 // belong to the admins (BR49): a later seed never brings back an erased quest, never resets the question count,
 // pass mark or time limit an admin chose, and never replaces uploaded photos. Doing so used to break `npm run dev`
 // (a reset question count against an admin's time limit fails the ck_checkpoint CHECK, so the API never started).
-// WARNING: questions and facts are placeholders. Before the pilot, check the coordinates and radii on site
-// (WBS 4.1, WP13) and replace the questions with verified ones (docs/question-bank.md).
+// The question bank is also put in once (marker `question_bank_v1`); in an older database it switches off the
+// PLACEHOLDER questions nobody edited. The quest descriptions and "read first" facts of the bank (QUEST_INFO) replace
+// the placeholder ones once (marker `quest_content_v1`), which also lets the bank's multi-select questions be drawn.
+// Only the test databases keep placeholder questions and facts (seedPlaceholderQuestions, seedPlaceholderFacts):
+// the tests rely on their known answers.
+// Before the pilot, check the coordinates and radii on site (WBS 4.1, WP13).
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { loadConfig } from '../config.js';
-import { PILOT_SEEDED, readSetting, writeSetting } from '../services/settings.js';
+import {
+  PILOT_SEEDED,
+  QUEST_CONTENT_SEEDED,
+  QUESTION_BANK_SEEDED,
+  readSetting,
+  writeSetting,
+} from '../services/settings.js';
 import { createPool } from './pool.js';
+import { QUEST_INFO, QUESTION_BANK, QUESTION_PHOTO_CREDIT } from './question-bank.js';
 
 export const DIFFICULTY = [
   ['NORMAL', 1000],
@@ -167,7 +179,10 @@ async function seedTargets(conn, checkpointIds) {
   return rows;
 }
 
-/** Placeholder question bank: 10 normal + 3 hard for large checkpoints, 6 normal for small ones (R-16). */
+/**
+ * Tests only: placeholder questions with known answers, 10 normal + 3 hard for large checkpoints, 6 normal for small
+ * ones (R-16). Real databases get the team's bank (seedQuestionBank).
+ */
 export async function seedPlaceholderQuestions(conn, { checkpointIds } = {}) {
   const checkpoints = await seedTargets(conn, checkpointIds);
   for (const checkpoint of checkpoints) {
@@ -204,6 +219,104 @@ export async function seedPlaceholderQuestions(conn, { checkpointIds } = {}) {
       }
     }
   }
+}
+
+/** Inserts one question of the bank with its options and photos. */
+async function insertBankQuestion(conn, checkpointId, question) {
+  const [inserted] = await conn.query(
+    'INSERT INTO questions (checkpoint_id, difficulty, question_text, question_type, is_active) VALUES (?, ?, ?, ?, 1)',
+    [checkpointId, question.difficulty, question.text, question.type],
+  );
+  const id = inserted.insertId;
+  for (const [index, text] of question.options.entries()) {
+    await conn.query(
+      'INSERT INTO options (question_id, option_position, option_text, is_correct) VALUES (?, ?, ?, ?)',
+      [id, index + 1, text, question.right.includes(index) ? 1 : 0],
+    );
+  }
+  for (const [index, image] of question.photos.entries()) {
+    await conn.query(
+      'INSERT INTO question_images (question_id, position, url, alt_text, credit, shown) VALUES (?, ?, ?, ?, ?, ?)',
+      [id, index + 1, image.url, image.alt, QUESTION_PHOTO_CREDIT, image.shown],
+    );
+  }
+}
+
+/**
+ * The team's question bank (question-bank.js) for the pilot quests, once per database (BR11). A question whose text
+ * a quest already has is not added again, so a seed that stopped half-way can simply run again. In each filled
+ * quest the PLACEHOLDER questions are switched off (kept, because old attempts point at them); questions an admin
+ * wrote or edited stay as they are. Returns the number of questions added.
+ */
+export async function seedQuestionBank(conn, { checkpointIds, bank = QUESTION_BANK } = {}) {
+  if ((await readSetting(conn, QUESTION_BANK_SEEDED)) === 'true') return 0;
+  let added = 0;
+  for (const checkpoint of await seedTargets(conn, checkpointIds)) {
+    const questions = bank[checkpoint.checkpoint_name];
+    if (!questions) continue;
+    const [rows] = await conn.query('SELECT question_text FROM questions WHERE checkpoint_id = ?', [
+      checkpoint.checkpoint_id,
+    ]);
+    const existing = new Set(rows.map((r) => r.question_text));
+    for (const question of questions) {
+      if (existing.has(question.text)) continue;
+      await insertBankQuestion(conn, checkpoint.checkpoint_id, question);
+      added += 1;
+    }
+    await conn.query(
+      "UPDATE questions SET is_active = 0 WHERE checkpoint_id = ? AND is_active = 1 AND question_text LIKE 'PLACEHOLDER%'",
+      [checkpoint.checkpoint_id],
+    );
+  }
+  await writeSetting(conn, QUESTION_BANK_SEEDED, 'true');
+  return added;
+}
+
+/**
+ * Once per database (marker `quest_content_v1`), for the pilot quests: the description and "read first" facts of
+ * the bank (QUEST_INFO) take the place of missing or PLACEHOLDER ones, and a quest that is single choice only but
+ * holds an active multi-select question of the bank is set to mixed, so every question of the bank can be drawn
+ * (BR50). Descriptions, facts and question types an admin chose are left as they are (BR55). Returns
+ * { described, facts, mixed }: how many quests got a description, facts and the mixed type.
+ */
+export async function seedQuestContent(conn, { checkpointIds, info = QUEST_INFO } = {}) {
+  const done = { described: 0, facts: 0, mixed: 0 };
+  if ((await readSetting(conn, QUEST_CONTENT_SEEDED)) === 'true') return done;
+  for (const checkpoint of await seedTargets(conn, checkpointIds)) {
+    const content = info[checkpoint.checkpoint_name];
+    if (!content) continue;
+    const [described] = await conn.query(
+      "UPDATE checkpoints SET description = ? WHERE checkpoint_id = ? AND (description IS NULL OR description LIKE 'PLACEHOLDER%')",
+      [content.description, checkpoint.checkpoint_id],
+    );
+    done.described += described.affectedRows;
+    const [facts] = await conn.query(
+      'SELECT fact_text FROM checkpoint_facts WHERE checkpoint_id = ?',
+      [checkpoint.checkpoint_id],
+    );
+    if (facts.every((f) => f.fact_text.startsWith('PLACEHOLDER'))) {
+      await conn.query('DELETE FROM checkpoint_facts WHERE checkpoint_id = ?', [
+        checkpoint.checkpoint_id,
+      ]);
+      for (const [index, text] of content.facts.entries()) {
+        await conn.query(
+          'INSERT INTO checkpoint_facts (checkpoint_id, position, fact_text) VALUES (?, ?, ?)',
+          [checkpoint.checkpoint_id, index + 1, text],
+        );
+      }
+      done.facts += 1;
+    }
+    const [mixed] = await conn.query(
+      `UPDATE checkpoints SET type_mode = 'MIXED' WHERE checkpoint_id = ? AND type_mode = 'MCQ_ONLY'
+         AND question_count >= 3 AND EXISTS (
+           SELECT 1 FROM questions q WHERE q.checkpoint_id = ? AND q.is_active = 1 AND q.difficulty = 'NORMAL'
+             AND q.question_type = 'MULTI')`,
+      [checkpoint.checkpoint_id, checkpoint.checkpoint_id],
+    );
+    done.mixed += mixed.affectedRows;
+  }
+  await writeSetting(conn, QUEST_CONTENT_SEEDED, 'true');
+  return done;
 }
 
 const PLACE_SLUGS = {
@@ -246,6 +359,48 @@ export async function seedImages(conn, { checkpointIds } = {}) {
   }
 }
 
+// The general Wikimedia photos that stood in for these places before the team took its own (frontend/public/places).
+const STAND_IN_PHOTOS = {
+  mensa: ['/places/mensa-1.jpg', '/places/mensa-2.jpg'],
+  library: ['/places/library-1.jpg', '/places/library-2.jpg'],
+  'carebox-shopbox': ['/places/carebox-shopbox-1.jpg', '/places/carebox-shopbox-2.jpg'],
+};
+
+/**
+ * Swaps the stand-in photos of an older database for the team's own photos of the place. Only a quest that still
+ * shows exactly the seeded stand-ins is changed, so photos an admin uploaded or reordered are kept (BR55).
+ */
+export async function replaceStandInPhotos(conn) {
+  let places;
+  try {
+    places = JSON.parse(readFileSync(PLACES_JSON, 'utf8'));
+  } catch {
+    return 0;
+  }
+  let replaced = 0;
+  for (const checkpoint of await seedTargets(conn)) {
+    const slug = PLACE_SLUGS[checkpoint.checkpoint_name];
+    const standIns = STAND_IN_PHOTOS[slug];
+    if (!standIns) continue;
+    const [rows] = await conn.query(
+      'SELECT url FROM checkpoint_images WHERE checkpoint_id = ? ORDER BY position',
+      [checkpoint.checkpoint_id],
+    );
+    if (rows.map((r) => r.url).join('|') !== standIns.join('|')) continue;
+    await conn.query('DELETE FROM checkpoint_images WHERE checkpoint_id = ?', [
+      checkpoint.checkpoint_id,
+    ]);
+    for (const [index, image] of (places[slug] ?? []).entries()) {
+      await conn.query(
+        'INSERT INTO checkpoint_images (checkpoint_id, position, url, alt_text, credit) VALUES (?, ?, ?, ?, ?)',
+        [checkpoint.checkpoint_id, index + 1, `/places/${image.file}`, image.alt, image.credit],
+      );
+    }
+    replaced += 1;
+  }
+  return replaced;
+}
+
 /**
  * One pre-seeded administrator (BR37), there from the first seed on (no sign-up step). The main one (`main`, the
  * first listed) takes id 1 when that id is free; an existing account with the address is promoted instead of
@@ -283,7 +438,7 @@ export async function seedAdmins(conn, emails) {
   }
 }
 
-/** Three placeholder "read first" facts per checkpoint (replace with verified texts before the pilot). */
+/** Tests only: three placeholder "read first" facts per checkpoint (the real ones come from seedQuestContent). */
 export async function seedPlaceholderFacts(conn, { checkpointIds } = {}) {
   const checkpoints = await seedTargets(conn, checkpointIds);
   for (const checkpoint of checkpoints) {
@@ -310,15 +465,29 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const pool = createPool(config.databaseUrl);
   try {
     const created = await seedReference(pool);
-    await seedPlaceholderQuestions(pool, { checkpointIds: created });
-    await seedPlaceholderFacts(pool, { checkpointIds: created });
+    const added = await seedQuestionBank(pool);
+    const content = await seedQuestContent(pool);
     await seedImages(pool, { checkpointIds: created });
+    const photos = await replaceStandInPhotos(pool);
     await seedAdmins(pool, config.adminEmails);
     console.log(
       created.length > 0
-        ? `[seed] reference data and ${created.length} pilot checkpoints with placeholder content are in place`
+        ? `[seed] reference data and ${created.length} pilot checkpoints with the team's question bank are in place`
         : '[seed] reference data is up to date (quests are managed in the admin area and left as they are)',
     );
+    if (created.length === 0 && added > 0) {
+      console.log(
+        `[seed] ${added} questions of the team's question bank added to the pilot quests`,
+      );
+    }
+    if (photos > 0)
+      console.log(`[seed] the team's photos replaced the stand-ins of ${photos} quest(s)`);
+    if (created.length === 0 && content.described + content.facts + content.mixed > 0) {
+      console.log(
+        `[seed] quest texts of the question bank: ${content.described} description(s), facts for ${content.facts} ` +
+          `quest(s), multi-select questions switched on in ${content.mixed} quest(s)`,
+      );
+    }
   } catch (error) {
     console.error(`[seed] failed: ${error.message}`);
     process.exitCode = 1;

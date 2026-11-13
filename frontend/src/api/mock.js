@@ -2,12 +2,16 @@
 // kept deliberately small: the real rules live in backend/. State survives a page refresh (sessionStorage).
 
 import places from './places.json';
+import questionBank from './question-bank.json';
 import { DEFAULT_MAP_STYLE, cleanStyle } from '../mapStyle.js';
 import { normalizeColor } from '../colors.js';
 import { parseMapLink } from './mapLink.js';
+import { distanceM } from '../geo.js';
 
-const STORAGE_KEY = 'cq-mock-v2';
+const STORAGE_KEY = 'cq-mock-v3';
 const SECOND = 1000;
+// R-66: the 3-2-1 countdown after the unlock, like the server's QUIZ_COUNTDOWN_SECONDS.
+const COUNTDOWN_MS = 3 * SECOND;
 const OTP = '123456';
 const DOMAIN = 'heilbronn.dhbw.de';
 const MAX_ACCURACY_M = 200;
@@ -79,57 +83,45 @@ const CHECKPOINTS = [
   })),
 }));
 
-const mockQuestion = (id, difficulty, type, text, correctPositions) => ({
+/** One question of the team's bank (question-bank.json, a copy of backend/src/db/question-bank.js). */
+const bankQuestion = (id, question) => ({
   id,
-  difficulty,
-  type,
-  text,
+  difficulty: question.difficulty,
+  type: question.type,
+  text: question.text,
   isActive: true,
-  options: [0, 1, 2, 3].map((p) => ({
+  options: question.options.map((text, p) => ({
     id: id * 10 + p,
     position: p + 1,
-    text: `Option ${'ABCD'[p]}${correctPositions.includes(p) ? ' (placeholder answer)' : ''}`,
-    isCorrect: correctPositions.includes(p),
+    text,
+    isCorrect: question.right.includes(p),
   })),
+  photos: question.photos,
 });
 
-const seedBank = (c) => {
-  const bank = Array.from({ length: 10 }, (_, n) =>
-    mockQuestion(
-      c.id * 100 + n + 1,
-      'NORMAL',
-      'MCQ',
-      `Practice question ${n + 1} about ${c.name}?`,
-      [(c.id + n) % 4],
-    ),
+const seedBank = (c) =>
+  (questionBank.bank[c.name] ?? []).map((question, n) =>
+    bankQuestion(c.id * 100 + n + 1, question),
   );
-  if (c.hardQuestionEnabled) {
-    for (const n of [0, 1]) {
-      bank.push(
-        mockQuestion(
-          c.id * 100 + 90 + n,
-          'HARD',
-          'MCQ',
-          `Hard practice question ${n + 1} about ${c.name}?`,
-          [(c.id + n) % 4],
-        ),
-      );
-    }
-  }
-  return bank;
-};
 
-// The quests an admin can change live in the state (like the database on the server).
-const BASE_QUESTS = CHECKPOINTS.map((c) => ({
-  ...c,
-  description: `PLACEHOLDER description for ${c.name}.`,
-  mapUrl: null,
-  timeLimitSeconds: null,
-  typeMode: 'MCQ_ONLY',
-  archived: false,
-  facts: [1, 2, 3].map((n) => `PLACEHOLDER fact ${n} about ${c.name}.`),
-  bank: seedBank(c),
-}));
+// The quests an admin can change live in the state (like the database on the server). As after the seed: the bank's
+// description and facts, and mixed where the bank has a multi-select question (so every question can be drawn).
+const BASE_QUESTS = CHECKPOINTS.map((c) => {
+  const bank = seedBank(c);
+  const info = questionBank.info[c.name] ?? { description: null, facts: [] };
+  return {
+    ...c,
+    description: info.description,
+    mapUrl: null,
+    timeLimitSeconds: null,
+    typeMode: bank.some((q) => q.type === 'MULTI' && q.difficulty === 'NORMAL')
+      ? 'MIXED'
+      : 'MCQ_ONLY',
+    archived: false,
+    facts: [...info.facts],
+    bank,
+  };
+});
 
 const isPlaceholder = (text) => String(text ?? '').startsWith('PLACEHOLDER');
 
@@ -233,13 +225,8 @@ const fresh = () => ({
   },
 });
 
-const distance = (la1, lo1, la2, lo2) => {
-  const rad = (d) => (d * Math.PI) / 180;
-  const a =
-    Math.sin(rad(la2 - la1) / 2) ** 2 +
-    Math.cos(rad(la1)) * Math.cos(rad(la2)) * Math.sin(rad(lo2 - lo1) / 2) ** 2;
-  return 2 * 6371008.8 * Math.asin(Math.min(1, Math.sqrt(a)));
-};
+// The same WGS84 distance as the server, so the mock unlocks exactly where the real API does.
+const distance = (la1, lo1, la2, lo2) => distanceM([la1, lo1], [la2, lo2]);
 
 export function createMockApi(ApiError, getUnauthorized) {
   let state = fresh();
@@ -289,6 +276,12 @@ export function createMockApi(ApiError, getUnauthorized) {
       position,
       text,
       correct: isCorrect,
+    })),
+    photos: (q.photos ?? []).map(({ url, alt, shown }) => ({
+      url,
+      alt,
+      credit: questionBank.credit,
+      shown,
     })),
     number,
     selected: null,
@@ -382,8 +375,13 @@ export function createMockApi(ApiError, getUnauthorized) {
       hardUnlocked: a.hardUnlocked,
       hardAccepted: Boolean(a.slots[a.slots.length - 1]?.replaced),
       currentQuestion: a.status === 'active' && next ? next.number : null,
-      questions: a.slots.map((s) => {
+      // R-66: no questions during the countdown, like the server.
+      questions: (Date.now() < a.startMs ? [] : a.slots).map((s) => {
         const wrong = s.selected !== null && !isRight(s);
+        const photosShown = (shown) =>
+          (s.photos ?? [])
+            .filter((p) => p.shown === shown)
+            .map(({ url, alt, credit }) => ({ url, alt, credit }));
         const q = {
           number: s.number,
           id: s.id,
@@ -394,6 +392,8 @@ export function createMockApi(ApiError, getUnauthorized) {
           selectedOptionId: s.selected?.[0] ?? null,
           selectedOptionIds: s.selected ?? [],
           answered: s.selected !== null,
+          images: photosShown('question'),
+          answerImages: s.selected !== null ? photosShown('answer') : [],
         };
         if (wrong) {
           q.correctOptionIds = s.options.filter((o) => o.correct).map((o) => o.id);
@@ -486,15 +486,17 @@ export function createMockApi(ApiError, getUnauthorized) {
   const startAttempt = (cp) => {
     const used = state.attempts.filter((a) => a.checkpointId === cp.id).length;
     const now = Date.now();
+    // R-66: the quiz and its time start after the countdown.
+    const startMs = now + COUNTDOWN_MS;
     const attempt = {
       id: state.nextId,
       checkpointId: cp.id,
       attemptNumber: used + 1,
-      startMs: now,
+      startMs,
       // The attempt keeps the count and pass mark it started with (BR21).
       questionCount: cp.questionCount,
       passThreshold: cp.passThreshold,
-      expiresMs: now + (cp.timeLimitSeconds ?? cp.questionCount * 60) * SECOND,
+      expiresMs: startMs + (cp.timeLimitSeconds ?? cp.questionCount * 60) * SECOND,
       status: 'active',
       hardUnlocked: false,
       slots: slotsFor(cp, now % 10),
@@ -724,6 +726,8 @@ export function createMockApi(ApiError, getUnauthorized) {
           'This attempt is finished.',
         );
       }
+      if (Date.now() < a.startMs)
+        throw fail(409, 'QUIZ_NOT_STARTED', 'The quiz starts in a moment.');
       const slot = a.slots.find((s) => s.selected === null);
       const chosen = [...new Set(Array.isArray(optionIds) ? optionIds : [optionIds])];
       if (!chosen.length || chosen.some((x) => !slot.options.some((o) => o.id === x)))

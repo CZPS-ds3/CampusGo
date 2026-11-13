@@ -4,6 +4,13 @@ import { recordEvent } from './audit.js';
 
 export const OTP_PREVIEW = 'otp_preview';
 export const PILOT_SEEDED = 'pilot_checkpoints_seeded';
+/** The team's question bank (backend/src/db/question-bank.js) was put into the pilot quests once. */
+export const QUESTION_BANK_SEEDED = 'question_bank_v1';
+/**
+ * The quest descriptions and "read first" facts of the bank replaced the placeholders, and the quests with a
+ * multi-select question of the bank were set to mixed, once (seed.js: seedQuestContent).
+ */
+export const QUEST_CONTENT_SEEDED = 'quest_content_v1';
 
 /** Reads one setting; `fallback` when the row does not exist yet. */
 export async function readSetting(conn, key, fallback = null) {

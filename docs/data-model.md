@@ -223,7 +223,7 @@ erDiagram
 ### 3.x Additions made while building (2026-10-27)
 
 - `Student.avatar_preset` (0 to 5, nullable): the drawn avatar picked at sign-up; an uploaded picture wins over it.
-- `Checkpoint_Fact (checkpoint_id, position 1-5, fact_text)`: the "read these first" facts of the info page (Should item). Seeded with PLACEHOLDER texts.
+- `Checkpoint_Fact (checkpoint_id, position 1-5, fact_text)`: the "read these first" facts of the info page (Should item). Seeded once from `QUEST_INFO` (backend/src/db/question-bank.js); only test databases keep PLACEHOLDER texts.
 - `Location_Check` (see R-62 and R-63) holds only inside yes/no and a time.
 - `Student.role` (student/admin), `Student.status` (active/blocked/archived) with `status_reason`, `reported_at`, `report_reason` (BR26, BR28, BR30; the `deleted` value and `deleted_at` were removed by migration 011, BR47); table `Audit_Event` (BR29); table `Banned_Term` (admin additions to the built-in list, BR27); table `Checkpoint_Image` (photo url, alt text, credit). Migration `005_admin_and_media.sql`. `Team_Invitation.invited_email` (nullable): the address the inviter typed (BR40), migration `006_invitation_email.sql`. Migration `007_recompute_team_scores.sql` recalculates `Team.team_score` as the rounded-up average of the active students (BR43). Yuri's migrations `003_bildungscampus_checkpoints.sql` and `004_sensoricum.sql` come before ours.
 
@@ -244,6 +244,15 @@ erDiagram
   - New table `App_Setting (setting_key PK, setting_value, updated_at, updated_by FK Student ON DELETE SET NULL)`: settings an admin changes at run time. Keys: `otp_preview` (`true`/`false`, the code preview switch, BR52) and `pilot_checkpoints_seeded` (the 8 pilot checkpoints were seeded once; the seed never re-creates or edits quests after that, BR55). Existing databases get the marker at once.
   - `Student.team_position` (1 to 5, nullable, null without a team): the team order (BR54). Backfilled by `team_joined_at`, then `student_id`. The leader hand-over (`ensureLeader`) and every member list order by `team_position, team_joined_at, student_id`. Gaps are closed when someone leaves.
 - The login code of the code preview is kept **in the API's memory only** (at most 500 addresses, until the code expires or is used); the database keeps storing only code hashes (BR01).
+
+### 3.w Additions of 2026-11-12 (migration 013)
+
+- `013_question_images.sql`: new table `Question_Image (question_id FK Question ON DELETE CASCADE, position 1-10,
+  url, alt_text, credit, shown ENUM('question','answer'))`, PK `(question_id, position)`. `shown = 'question'`
+  photos come with the question; `shown = 'answer'` photos are sent to the student only once the question is
+  answered (BR14), so they never give the answer away. Photos are files of the web app (`frontend/public/quests`),
+  with their metadata (location, phone, time) removed.
+- New `App_Setting` key `question_bank_v1`: the team's question bank was put into the pilot quests once.
 
 ## 4. Seed data for BR11 (no admin UI)
 

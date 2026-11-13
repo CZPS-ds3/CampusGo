@@ -962,6 +962,36 @@ a.card:active {
 .mapstyle__building--tall {
   height: 30px;
 }
+/* The live-position ball in the preview: its body, its lines (border) and the direction wedge above it. */
+.mapstyle__puck {
+  position: absolute;
+  right: 10%;
+  bottom: 14%;
+  width: 26px;
+  height: 26px;
+}
+.mapstyle__puck-ball {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--puck-body, #fff);
+  border: 2px solid var(--puck-lines, var(--signal));
+  box-shadow:
+    inset -5px -5px 0 rgb(0 0 0 / 0.12),
+    0 1px 3px rgb(0 0 0 / 0.3);
+}
+.mapstyle__puck-beam {
+  position: absolute;
+  left: -9px;
+  right: -9px;
+  bottom: 50%;
+  height: 30px;
+  background: var(
+    --puck-beam,
+    radial-gradient(closest-side, rgb(226 0 26 / 0.5), rgb(255 143 156 / 0.3) 65%, transparent 100%)
+  );
+  clip-path: polygon(50% 100%, 0 0, 100% 0);
+}
 .mapstyle__route {
   position: absolute;
   left: 12%;

@@ -63,7 +63,7 @@ class ApiError extends Error {
 describe('BR11 mock API parity', () => {
   beforeEach(() => sessionStorage.clear());
 
-  it('BR11 the mock dashboard reports its placeholder facts like the server', async () => {
+  it("BR11 the mock holds the team's bank and texts, so its dashboard reports no placeholder content", async () => {
     const mock = createMockApi(ApiError, () => () => {});
     await mock.verify({
       email: 'sekretariat.dski@heilbronn.dhbw.de',
@@ -72,8 +72,6 @@ describe('BR11 mock API parity', () => {
       lastName: 'Office',
     });
     const { placeholders } = await mock.admin.stats();
-    expect(placeholders.quests).toHaveLength(8);
-    expect(placeholders.facts).toBe(24);
-    expect(placeholders.questions).toBe(0); // the mock's questions say "Practice question", not PLACEHOLDER
+    expect(placeholders).toEqual({ questions: 0, facts: 0, quests: [] });
   });
 });

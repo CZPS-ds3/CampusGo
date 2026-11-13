@@ -234,6 +234,16 @@ describe('the live position is fused from the readings, like a phone does', () =
     expect(shown.velocity[1]).toBeGreaterThan(1);
   });
 
+  it('BR12 counts a fix delivered twice only once, so the accuracy is not overstated', () => {
+    const first = fuseFix(fix(0, 5, 0), fix(2, 5, 1));
+    expect(fuseFix(first, fix(2, 5, 1))).toBe(first);
+  });
+
+  it('BR12 ignores a fix older than the one already shown', () => {
+    const shown = fuseFix(fix(0, 5, 0), fix(1, 5, 2));
+    expect(fuseFix(shown, fix(30, 5, 1))).toBe(shown);
+  });
+
   it('takes a fix far outside both accuracies as a real jump', () => {
     const shown = fuseFix(fix(0, 5, 0), fix(300, 10, 1));
     expect(northOfA(shown)).toBeCloseTo(300, 0);

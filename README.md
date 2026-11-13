@@ -38,7 +38,7 @@ docker compose down              # stop (add -v to also delete the database and 
 4. Read the three facts on the info page (no timer yet), press *I'm ready*, answer the quiz, see the result and your rank change.
 5. The red hexagon at the bottom opens the menu: Map, Quests, Team, Ranks, Profile. In the profile you can switch dark mode, font size (S to XL) and the language (Deutsch / English), and design your **map style** (light, dark or follow the app; presets; your own RGB colours for the pins, the highlight and the route). One map style is saved on your account.
 
-The questions in the seed data are **placeholders** (marked "PLACEHOLDER"); the real ones are added before the pilot (see [docs/question-bank.md](docs/question-bank.md)). The checkpoint centres are on the Bildungscampus Heilbronn (from OpenStreetMap) and still need the on-site check; the "Sensoricum" centre is an estimate next to Building C and must be confirmed on site (see [docs/geofencing.md](docs/geofencing.md); how to test the location check at a PC: [testing/location-testing-guide.md](testing/location-testing-guide.md)).
+The questions in the seed are the team's question bank from the Main Project Document (69 questions, with on-site photos; see [docs/question-bank.md](docs/question-bank.md)); the "read first" facts and quest descriptions are still **placeholders** (marked "PLACEHOLDER"). The checkpoint centres are on the Bildungscampus Heilbronn (from OpenStreetMap) and still need the on-site check; the "Sensoricum" centre is an estimate next to Building C and must be confirmed on site (see [docs/geofencing.md](docs/geofencing.md); how to test the location check at a PC: [testing/location-testing-guide.md](testing/location-testing-guide.md)).
 
 | I want to… | Command |
 |---|---|
@@ -92,7 +92,7 @@ development stack; production uses its own files: `docker-compose.prod.yml`, `ba
 4. Start: `docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build`
 5. Check: `docker compose --env-file .env.production -f docker-compose.prod.yml ps` (all *healthy*) and
    `... logs backend` (must show `SMTP ready`; a `[content] warning` lists quests that still have placeholder
-   questions).
+   texts).
 6. Backups: `bash scripts/backup-prod.sh` writes a database dump and the pictures to `backups/` (owner-only, kept
    14 days). Run it nightly with cron (the exact line is at the top of the script) and copy `backups/` to a second
    machine now and then. Restore a dump into the running stack:
@@ -105,8 +105,8 @@ development stack; production uses its own files: `docker-compose.prod.yml`, `ba
 What production does differently: the API refuses to start with development secrets, without SMTP or without an
 `https://` `PUBLIC_URL`; the code preview is off; no demo players; only the web container publishes a port
 (MySQL and the API are internal); the visitor IP for rate limits is believed only from `TRUSTED_PROXIES`. The quiz
-questions and texts are still the **placeholder** seed: replace them in the admin area before students use the app
-(the admin dashboard shows a warning while any are left). Without HTTPS in front, browsers block location, so check-ins need the
+questions are the team's question bank; the "read first" facts and quest descriptions are still **placeholders**:
+replace them in the admin area before students use the app (the admin dashboard shows a warning while any are left). Without HTTPS in front, browsers block location, so check-ins need the
 school's HTTPS address.
 
 ---
@@ -514,7 +514,7 @@ campus-city-quest/
 ├── backend/                Express API
 │   ├── index.js            starts the server
 │   ├── src/routes|services|db|middleware
-│   ├── src/db/migrations   SQL schema; seed.js = scoring tables, checkpoints, placeholder questions
+│   ├── src/db/migrations   SQL schema; seed.js = scoring tables, checkpoints, question bank (question-bank.js)
 │   ├── tests/              Vitest + Supertest against a test database
 │   ├── Dockerfile.dev      development image of the API (docker compose)
 │   └── .env.example

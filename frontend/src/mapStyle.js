@@ -13,6 +13,7 @@ export const DEFAULT_MAP_STYLE = {
   highlight: '#e2001a',
   route: '#e2001a',
   buildings: '#dcd9d4',
+  ball: { body: '#ffffff', lines: '#e2001a' },
 };
 
 export const PRESETS = {
@@ -25,6 +26,7 @@ export const PRESETS = {
     highlight: '#ff7a00',
     route: '#0b5cad',
     buildings: '#c5dcef',
+    ball: { body: '#ffffff', lines: '#0b5cad' },
   },
   forest: {
     preset: 'forest',
@@ -34,6 +36,7 @@ export const PRESETS = {
     highlight: '#c2185b',
     route: '#2f5d34',
     buildings: '#cfe0c4',
+    ball: { body: '#f4f9ef', lines: '#2f5d34' },
   },
   sunset: {
     preset: 'sunset',
@@ -43,6 +46,7 @@ export const PRESETS = {
     highlight: '#d6246e',
     route: '#d6246e',
     buildings: '#f0d2bd',
+    ball: { body: '#fff3e6', lines: '#d6246e' },
   },
   mono: {
     preset: 'mono',
@@ -52,6 +56,7 @@ export const PRESETS = {
     highlight: '#000000',
     route: '#000000',
     buildings: '#cccccc',
+    ball: { body: '#ffffff', lines: '#000000' },
   },
 };
 
@@ -73,6 +78,9 @@ export function cleanStyle(input) {
   base.highlight = colour(input.highlight, base.highlight);
   base.route = colour(input.route, base.route);
   base.buildings = colour(input.buildings, base.buildings);
+  for (const key of ['body', 'lines']) {
+    base.ball[key] = colour(input.ball?.[key], base.ball[key]);
+  }
   return base;
 }
 
@@ -86,6 +94,12 @@ function readCache() {
 
 let style = readCache();
 const subscribers = new Set();
+
+/** The direction wedge under the ball in the colour of its lines (undefined keeps the red of screens.css). */
+const beam = (color) =>
+  color === undefined
+    ? undefined
+    : `radial-gradient(closest-side, ${color}80, ${color}4d 65%, transparent 100%)`;
 
 /**
  * CSS variables for a style. A colour that is still the default is left out, so the colours of the light and dark
@@ -111,6 +125,9 @@ export function styleVariables(value, { keepDefaults = false } = {}) {
     ...pin('highlight', value.highlight, d.highlight),
     '--route': custom(value.route, d.route),
     '--buildings': custom(value.buildings, d.buildings),
+    '--puck-body': custom(value.ball.body, d.ball.body),
+    '--puck-lines': custom(value.ball.lines, d.ball.lines),
+    '--puck-beam': beam(custom(value.ball.lines, d.ball.lines)),
   };
 }
 

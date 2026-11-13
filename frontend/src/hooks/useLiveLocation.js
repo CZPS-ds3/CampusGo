@@ -30,6 +30,19 @@ export function headingFrom({ coords }, anchor) {
   return { heading: null, anchor: anchor ?? here, fromGps: false };
 }
 
+// The browser's watch reports only when the device decides to; standing still, or in a browser that saves power,
+// it can stay quiet for a long time. So the ball gets a new reading at least every REFRESH_MS: when the watch has
+// been quiet for REFRESH_MS - ASK_AHEAD_MS, it is restarted, and a new watch (maximumAge 0) starts with a fresh fix
+// (a warm GPS answers within about a second). A restarted watch that is still waiting is given REARM_GRACE_MS before
+// the next restart, so a slow fix is not cut off again and again. Nothing is restarted while the tab is hidden (no
+// battery spent for an unseen map). A watch is restarted rather than a one-off reading asked for: a one-off reading
+// cannot be cancelled when the map closes, and a browser with a simulated position (DevTools, browser tests) never
+// answers it while a watch runs and then holds back the next page's location check as well.
+export const REFRESH_MS = 3000;
+export const ASK_AHEAD_MS = 1000;
+export const REARM_GRACE_MS = 6000;
+const REFRESH_CHECK_MS = 250;
+
 // How far the true position can drift from the prediction per second, as a variance (m²/s): a person changing pace
 // or turning. Smaller smooths more, larger follows quicker.
 const DRIFT_M2_PER_S = 9;
@@ -62,11 +75,20 @@ function gpsVelocity({ speed, heading }) {
  * then each new fix is weighed by its accuracy against it: GPS jitter is smoothed out, a coarse Wi-Fi fix hardly
  * moves a precise one, and the ball keeps up with a walking visitor instead of trailing behind. A fix far outside
  * both accuracies is a real jump and is taken as it is. A fix is { lat, lng, accuracy (m), time (ms), speed (m/s)
- * and heading (degrees) or null }; the result also carries `velocity`.
+ * and heading (degrees) or null }; the result also carries `velocity` and `raw` (the last fix as it came).
+ * A fix older than the last one, or the same fix delivered again, is not new evidence: `shown` is returned as it
+ * is, so the shown accuracy never shrinks from counting one reading twice.
  */
 export function fuseFix(shown, fix) {
-  const fresh = { ...fix, velocity: gpsVelocity(fix) ?? [0, 0] };
+  const raw = { lat: fix.lat, lng: fix.lng, accuracy: fix.accuracy, time: fix.time };
+  const fresh = { ...fix, raw, velocity: gpsVelocity(fix) ?? [0, 0] };
   if (!shown) return fresh;
+  const again =
+    fix.time === shown.raw?.time &&
+    fix.lat === shown.raw.lat &&
+    fix.lng === shown.raw.lng &&
+    fix.accuracy === shown.raw.accuracy;
+  if (fix.time < shown.time || again || !Number.isFinite(fix.accuracy)) return shown;
   const seconds = Math.max(0, (fix.time - shown.time) / 1000);
   const [east, north] = shown.velocity ?? [0, 0];
   const ahead = moved(shown, east * seconds, north * seconds);
@@ -77,7 +99,14 @@ export function fuseFix(shown, fix) {
   const gain = variance / (variance + fix.accuracy ** 2);
   const lat = ahead.lat + gain * (fix.lat - ahead.lat);
   const lng = ahead.lng + gain * (fix.lng - ahead.lng);
-  return { ...fix, lat, lng, accuracy: Math.sqrt((1 - gain) * variance), velocity: learn() };
+  return {
+    ...fix,
+    lat,
+    lng,
+    accuracy: Math.sqrt((1 - gain) * variance),
+    raw,
+    velocity: learn(),
+  };
 
   /** The velocity for the next step: the GPS's own, else nudged by how far this fix was from the prediction. */
   function learn() {
@@ -130,6 +159,9 @@ export function useLiveLocation() {
   const hasCompass = useRef(false);
   // The last gyroscope-only reading and how far to turn such readings to north (from the walking direction).
   const gyro = useRef({ last: null, offset: 0 });
+  // When the last reading came and when the watch was last restarted (browser clock, REFRESH_MS).
+  const lastReadingAt = useRef(0);
+  const refresh = useRef({ timer: null, rearmedAt: 0 });
 
   const onCompass = useCallback((event) => {
     const reading = compassFrom(event, screenAngle());
@@ -177,45 +209,70 @@ export function useLiveLocation() {
       return;
     }
     setState((now) => ({ ...now, status: now.position ? 'on' : 'waiting' }));
-    watch.current = navigator.geolocation.watchPosition(
-      (reading) => {
-        const fix = {
-          lat: reading.coords.latitude,
-          lng: reading.coords.longitude,
-          accuracy: reading.coords.accuracy,
-          time: reading.timestamp ?? Date.now(),
-          speed: reading.coords.speed,
-          heading: reading.coords.heading,
-        };
-        const fused = fuseFix(shown.current, fix);
-        shown.current = fused;
-        const next = headingFrom(reading, anchor.current);
-        anchor.current = next.anchor;
-        if (next.fromGps) {
-          gpsHeadingAt.current = Date.now();
-          // While walking, the gyroscope learns where north is, so it can turn the arrow when the visitor stops.
-          if (gyro.current.last !== null)
-            gyro.current.offset = wrap(next.heading - gyro.current.last);
-        }
-        setState((now) => ({
-          ...now,
-          status: 'on',
-          position: { lat: fused.lat, lng: fused.lng, accuracy: fused.accuracy },
-          heading: next.heading ?? now.heading,
-        }));
-      },
-      (error) => {
-        if (error.code === 1) {
-          navigator.geolocation.clearWatch(watch.current);
-          watch.current = null;
-          setState({ status: 'denied', position: null, heading: null });
-        } else {
-          setState((now) => (now.position ? now : { ...now, status: 'unavailable' }));
-        }
-      },
-      // Always a fresh fix from the GPS (never a cached one), as precise as the device can give.
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 },
-    );
+    const stopRefresh = () => {
+      clearInterval(refresh.current.timer);
+      refresh.current = { timer: null, rearmedAt: 0 };
+    };
+    const onFailure = (error) => {
+      if (error.code === 1) {
+        navigator.geolocation.clearWatch(watch.current);
+        watch.current = null;
+        stopRefresh();
+        setState({ status: 'denied', position: null, heading: null });
+      } else {
+        setState((now) => (now.position ? now : { ...now, status: 'unavailable' }));
+      }
+    };
+    const onReading = (reading) => {
+      lastReadingAt.current = Date.now();
+      const fix = {
+        lat: reading.coords.latitude,
+        lng: reading.coords.longitude,
+        accuracy: reading.coords.accuracy,
+        time: reading.timestamp ?? Date.now(),
+        speed: reading.coords.speed,
+        heading: reading.coords.heading,
+      };
+      const fused = fuseFix(shown.current, fix);
+      if (fused === shown.current) return;
+      shown.current = fused;
+      const next = headingFrom(reading, anchor.current);
+      anchor.current = next.anchor;
+      if (next.fromGps) {
+        gpsHeadingAt.current = Date.now();
+        // While walking, the gyroscope learns where north is, so it can turn the arrow when the visitor stops.
+        if (gyro.current.last !== null)
+          gyro.current.offset = wrap(next.heading - gyro.current.last);
+      }
+      setState((now) => ({
+        ...now,
+        status: 'on',
+        position: { lat: fused.lat, lng: fused.lng, accuracy: fused.accuracy },
+        heading: next.heading ?? now.heading,
+      }));
+    };
+    // Always a fresh fix from the GPS (never a cached one), as precise as the device can give.
+    const watchNow = () =>
+      navigator.geolocation.watchPosition(onReading, onFailure, {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: 20000,
+      });
+    lastReadingAt.current = Date.now();
+    watch.current = watchNow();
+    stopRefresh();
+    refresh.current.timer = setInterval(() => {
+      const now = Date.now();
+      const quiet = now - lastReadingAt.current >= REFRESH_MS - ASK_AHEAD_MS;
+      // A restart that has not answered yet keeps its grace time.
+      const waiting =
+        refresh.current.rearmedAt > lastReadingAt.current &&
+        now - refresh.current.rearmedAt < REARM_GRACE_MS;
+      if (!quiet || waiting || document.hidden || watch.current === null) return;
+      navigator.geolocation.clearWatch(watch.current);
+      refresh.current.rearmedAt = now;
+      watch.current = watchNow();
+    }, REFRESH_CHECK_MS);
   }, [listenToCompass]);
 
   // Only a site that is already allowed starts at once, so the map never asks for location without a tap.
@@ -235,6 +292,8 @@ export function useLiveLocation() {
     () => () => {
       if (watch.current !== null) navigator.geolocation.clearWatch(watch.current);
       watch.current = null;
+      clearInterval(refresh.current.timer);
+      refresh.current = { timer: null, rearmedAt: 0 };
       window.removeEventListener('deviceorientationabsolute', onCompass);
       window.removeEventListener('deviceorientation', onCompass);
       compassOn.current = false;

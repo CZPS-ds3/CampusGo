@@ -5,13 +5,64 @@ import { MAP_AREA } from './api/mapLink.js';
 const EARTH_M = 6371008.8;
 const rad = (degrees) => (degrees * Math.PI) / 180;
 
-/** Great-circle distance in metres. */
-export function distanceM([lat1, lng1], [lat2, lng2]) {
+// WGS84, the ellipsoid GPS positions are given on (the same formula as the server's backend/src/services/geo.js).
+const WGS84_A = 6378137;
+const WGS84_F = 1 / 298.257223563;
+const WGS84_B = WGS84_A * (1 - WGS84_F);
+
+/** Great-circle distance on a sphere; used only where the ellipsoid formula does not converge. */
+function sphereDistance([lat1, lng1], [lat2, lng2]) {
   const dLat = rad(lat2 - lat1);
   const dLng = rad(lng2 - lng1);
   const a =
     Math.sin(dLat / 2) ** 2 + Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(dLng / 2) ** 2;
   return 2 * EARTH_M * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+/** Distance in metres on the WGS84 ellipsoid (Vincenty's inverse formula, millimetre-exact). */
+export function distanceM(from, to) {
+  const [lat1, lng1] = from;
+  const [lat2, lng2] = to;
+  if (lat1 === lat2 && lng1 === lng2) return 0;
+  const f = WGS84_F;
+  const L = rad(lng2 - lng1);
+  const U1 = Math.atan((1 - f) * Math.tan(rad(lat1)));
+  const U2 = Math.atan((1 - f) * Math.tan(rad(lat2)));
+  const [sinU1, cosU1, sinU2, cosU2] = [Math.sin(U1), Math.cos(U1), Math.sin(U2), Math.cos(U2)];
+  let lambda = L;
+  for (let i = 0; i < 200; i += 1) {
+    const sinLambda = Math.sin(lambda);
+    const cosLambda = Math.cos(lambda);
+    const sinSigma = Math.hypot(cosU2 * sinLambda, cosU1 * sinU2 - sinU1 * cosU2 * cosLambda);
+    if (sinSigma === 0) return 0;
+    const cosSigma = sinU1 * sinU2 + cosU1 * cosU2 * cosLambda;
+    const sigma = Math.atan2(sinSigma, cosSigma);
+    const sinAlpha = (cosU1 * cosU2 * sinLambda) / sinSigma;
+    const cos2Alpha = 1 - sinAlpha ** 2;
+    const cos2SigmaM = cos2Alpha === 0 ? 0 : cosSigma - (2 * sinU1 * sinU2) / cos2Alpha;
+    const C = (f / 16) * cos2Alpha * (4 + f * (4 - 3 * cos2Alpha));
+    const previous = lambda;
+    lambda =
+      L +
+      (1 - C) *
+        f *
+        sinAlpha *
+        (sigma + C * sinSigma * (cos2SigmaM + C * cosSigma * (-1 + 2 * cos2SigmaM ** 2)));
+    if (Math.abs(lambda - previous) < 1e-12) {
+      const u2 = (cos2Alpha * (WGS84_A ** 2 - WGS84_B ** 2)) / WGS84_B ** 2;
+      const A = 1 + (u2 / 16384) * (4096 + u2 * (-768 + u2 * (320 - 175 * u2)));
+      const B = (u2 / 1024) * (256 + u2 * (-128 + u2 * (74 - 47 * u2)));
+      const deltaSigma =
+        B *
+        sinSigma *
+        (cos2SigmaM +
+          (B / 4) *
+            (cosSigma * (-1 + 2 * cos2SigmaM ** 2) -
+              (B / 6) * cos2SigmaM * (-3 + 4 * sinSigma ** 2) * (-3 + 4 * cos2SigmaM ** 2)));
+      return WGS84_B * A * (sigma - deltaSigma);
+    }
+  }
+  return sphereDistance(from, to);
 }
 
 /** Compass direction from one position to another: 0 = north, 90 = east, always 0 to <360. */
