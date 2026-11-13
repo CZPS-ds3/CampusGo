@@ -1,26 +1,56 @@
 {
   "mensa": [
     {
-      "file": "mensa-1.jpg",
-      "alt": "Campus street between brick and glass buildings (general view)",
-      "credit": "Kiliansmännle, CC BY-SA 4.0, Wikimedia Commons"
-    },
-    {
-      "file": "mensa-2.jpg",
-      "alt": "Glass building and trees in a round planter on the campus (general view)",
-      "credit": "Kiliansmännle, CC BY-SA 4.0, Wikimedia Commons"
+      "file": "mensa-photo-1.jpg",
+      "alt": "Mensa dining hall with long tables and a glass front",
+      "credit": "DHBW campusGO team"
     }
   ],
   "library": [
     {
-      "file": "library-1.jpg",
-      "alt": "Bright glass-walled interior of a Bildungscampus building (general view)",
-      "credit": "Presse hhn, CC BY-SA 4.0, Wikimedia Commons"
+      "file": "library-photo-1.jpg",
+      "alt": "Library aisle between tall white bookshelves",
+      "credit": "DHBW campusGO team"
     },
     {
-      "file": "library-2.jpg",
-      "alt": "Campus buildings and a grassy slope (general view)",
-      "credit": "Kiliansmännle, CC BY-SA 4.0, Wikimedia Commons"
+      "file": "library-photo-2.jpg",
+      "alt": "Library aisle between tall white bookshelves, seen from the other end",
+      "credit": "DHBW campusGO team"
+    },
+    {
+      "file": "library-photo-3.jpg",
+      "alt": "Open library floor with orange seats and a red information desk",
+      "credit": "DHBW campusGO team"
+    },
+    {
+      "file": "library-photo-4.jpg",
+      "alt": "Open library floor with orange seats and the red information desk",
+      "credit": "DHBW campusGO team"
+    },
+    {
+      "file": "library-photo-5.jpg",
+      "alt": "LIV library building lit up in the evening",
+      "credit": "DHBW campusGO team"
+    },
+    {
+      "file": "library-photo-6.jpg",
+      "alt": "LIV library building lit up in the evening, seen from the corner",
+      "credit": "DHBW campusGO team"
+    },
+    {
+      "file": "library-photo-7.jpg",
+      "alt": "LIV library building at dusk, seen across the square",
+      "credit": "DHBW campusGO team"
+    },
+    {
+      "file": "library-photo-8.jpg",
+      "alt": "LIV library building at dusk with autumn trees",
+      "credit": "DHBW campusGO team"
+    },
+    {
+      "file": "library-photo-9.jpg",
+      "alt": "LIV library building at dusk, front view",
+      "credit": "DHBW campusGO team"
     }
   ],
   "cas-cafe": [
@@ -49,14 +79,14 @@
   ],
   "carebox-shopbox": [
     {
-      "file": "carebox-shopbox-1.jpg",
-      "alt": "Row of Campusrad rental bikes on the Bildungscampus",
-      "credit": "Rosenzweig, CC BY-SA 4.0, Wikimedia Commons"
+      "file": "carebox-shopbox-photo-1.jpg",
+      "alt": "The care.box: a silver building with the care.box lettering",
+      "credit": "DHBW campusGO team"
     },
     {
-      "file": "carebox-shopbox-2.jpg",
-      "alt": "Close-up of a Campusrad rental bike on the Bildungscampus",
-      "credit": "Rosenzweig, CC BY-SA 4.0, Wikimedia Commons"
+      "file": "carebox-shopbox-photo-2.jpg",
+      "alt": "The shop.box: a silver building with glass doors",
+      "credit": "DHBW campusGO team"
     }
   ],
   "building-b": [

@@ -212,10 +212,10 @@ test.describe('admin: quests', () => {
 
     // A student sees the question types before the quiz and answers a multi-select question.
     await page.evaluate(() => {
-      const saved = JSON.parse(sessionStorage.getItem('cq-mock-v2'));
+      const saved = JSON.parse(sessionStorage.getItem('cq-mock-v3'));
       saved.student.role = 'student';
       saved.student.email = 'ada@heilbronn.dhbw.de';
-      sessionStorage.setItem('cq-mock-v2', JSON.stringify(saved));
+      sessionStorage.setItem('cq-mock-v3', JSON.stringify(saved));
     });
     await context.setGeolocation(CAMPUS);
     await page.reload(); // the mock app reads the changed account again (and starts on the map)
@@ -243,7 +243,7 @@ test.describe('admin: quests', () => {
         await page.getByRole('button', { name: /Tennis|Volleyball/ }).click();
         await expect(page.getByText('Correct!')).toBeVisible();
       }
-      await page.getByRole('button', { name: i === 2 ? 'Finish' : 'Next' }).click();
+      await page.getByRole('button', { name: i === 2 ? 'Finish' : 'Next', exact: true }).click();
     }
     expect(sawMulti).toBe(true);
   });

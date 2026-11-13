@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { api, USE_MOCKS } from '../api/client.js';
 import { errorText } from '../api/errorText.js';
@@ -10,13 +10,11 @@ import { Sheet } from '../components/Sheet.jsx';
 import { Chip, Display, Input, LangSwitch, Logo } from '../components/ui.jsx';
 import { useSession } from '../hooks/useSession.jsx';
 import { formatClock } from '../hooks/useServerTimer.js';
+import { useToast } from '../hooks/useToast.jsx';
 import { t } from '../i18n.js';
 
 const RESEND_SECONDS = USE_MOCKS ? 0 : 30;
 const CODE_LIFETIME_SECONDS = 600;
-// Only the in-browser mock API (no backend) shows its fake inbox; the real API sends real e-mails.
-const SHOW_INBOX = USE_MOCKS;
-
 /**
  * A school address, or at least a well-formed one: the server decides about other domains (the pre-seeded admin
  * addresses may be outside the school domain, BR26), and the page does not know which they are.
@@ -28,6 +26,7 @@ const looksLikeEmail = (value) => {
 
 export default function Login() {
   const { student, ready, setStudent } = useSession();
+  const toast = useToast();
   const navigate = useNavigate();
   const [step, setStep] = useState('email');
   const [email, setEmail] = useState('');
@@ -42,8 +41,25 @@ export default function Login() {
   const [expires, setExpires] = useState(CODE_LIFETIME_SECONDS);
   const [inbox, setInbox] = useState(null);
   const [welcome, setWelcome] = useState(false);
+  // BR52: the admin switch "code preview". While it is on, the test inbox shows the code that was e-mailed.
+  const [previewOn, setPreviewOn] = useState(USE_MOCKS);
   const heading = useRef(null);
   const fileInput = useRef(null);
+  // One preview address per chosen file (a new one on every render would flicker and leak memory).
+  const photoUrl = useMemo(() => (photo ? URL.createObjectURL(photo) : undefined), [photo]);
+  useEffect(() => () => photoUrl && URL.revokeObjectURL(photoUrl), [photoUrl]);
+
+  useEffect(() => {
+    let alive = true;
+    api
+      .authConfig()
+      .then((config) => alive && setPreviewOn(Boolean(config?.otpPreview)))
+      // Without the setting the page simply has no test inbox; logging in by e-mail still works.
+      .catch(() => alive && setPreviewOn(false));
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     heading.current?.focus({ preventScroll: true });
@@ -80,13 +96,23 @@ export default function Login() {
       setShake((n) => n + 1);
       return undefined;
     }
-    if (!looksLikeEmail(email)) {
+    const wrongAddress = () => {
       setError(t('Use your @heilbronn.dhbw.de school email'));
       setShake((n) => n + 1);
+    };
+    if (!looksLikeEmail(email)) {
+      wrongAddress();
       return undefined;
     }
     return run(async () => {
-      await api.requestOtp(email.trim());
+      try {
+        await api.requestOtp(email.trim());
+      } catch (failure) {
+        // The server refused the domain: show the same translated hint as for a typo.
+        if (failure?.code !== 'INVALID_EMAIL') throw failure;
+        wrongAddress();
+        return;
+      }
       setCode('');
       setCooldown(RESEND_SECONDS);
       setExpires(CODE_LIFETIME_SECONDS);
@@ -96,14 +122,23 @@ export default function Login() {
 
   const finish = async (result) => {
     setWelcome(true); // before the session appears, so the guard above does not redirect early
-    setStudent(result.student);
+    let me = result.student;
+    // The picture is saved first and the session gets the new address, so the map header, the profile and the
+    // team page show it at once (it used to appear only after the next refresh of the session).
     if (photo) {
       try {
-        await api.uploadPicture(photo);
-      } catch {
-        // The picture is optional; a failed upload must not block the first login.
+        const { pictureUrl } = await api.uploadPicture(photo);
+        me = { ...me, pictureUrl };
+      } catch (failure) {
+        // The picture is optional: the account exists, so the login goes on and the person is told.
+        toast.error(
+          t('Your account is ready, but the picture was not saved: {reason}', {
+            reason: errorText(failure),
+          }),
+        );
       }
     }
+    setStudent(me);
     setTimeout(() => navigate('/map', { replace: true }), 700);
   };
 
@@ -142,7 +177,7 @@ export default function Login() {
 
   const openInbox = () =>
     run(async () => {
-      const { otp } = await api.devLastOtp(email.trim());
+      const { otp } = await api.otpPreview(email.trim());
       setInbox(otp);
     });
 
@@ -265,10 +300,15 @@ export default function Login() {
               <Icon name="refresh" />
               {cooldown > 0 && !expired ? t('Resend in {n}s', { n: cooldown }) : t('Resend code')}
             </Button>
-            {SHOW_INBOX && (
-              <Button variant="ghost" onClick={openInbox}>
-                <Icon name="mail" /> {t('Open mock inbox')}
-              </Button>
+            {previewOn && (
+              <>
+                <Button variant="ghost" onClick={openInbox}>
+                  <Icon name="mail" /> {t('Open mock inbox')}
+                </Button>
+                <p className="small muted">
+                  {t('Test mode: the code that was e-mailed is also shown here.')}
+                </p>
+              </>
             )}
           </>
         )}
@@ -289,7 +329,7 @@ export default function Login() {
               <Avatar
                 size={96}
                 avatar={{
-                  url: photo ? URL.createObjectURL(photo) : undefined,
+                  url: photoUrl,
                   preset: avatarPreset,
                 }}
                 label={t('Profile picture preview')}
@@ -379,7 +419,7 @@ export default function Login() {
           </div>
           <div className="card card--flat stack stack--tight">
             <p className="caption muted">{t('From')}</p>
-            <p className="strong">Campus &amp; City Quest</p>
+            <p className="strong">DHBW campusGO</p>
             <p className="caption muted">{t('Subject')}</p>
             <p className="strong">{t('Your login code')}</p>
             <hr className="rule" />

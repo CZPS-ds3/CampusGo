@@ -91,8 +91,9 @@ export async function seedDemo(conn, now = Date.now()) {
   ]);
   if (existing) return false;
   const rules = await loadRules(conn);
+  // Only quests students can play now: an archived or closed quest gets no invented history.
   const [checkpoints] = await conn.query(
-    'SELECT checkpoint_id, question_count, pass_threshold FROM checkpoints ORDER BY checkpoint_id',
+    'SELECT checkpoint_id, question_count, pass_threshold FROM checkpoints WHERE archived_at IS NULL AND is_active = 1 ORDER BY checkpoint_id',
   );
   const random = rng(20261027);
   const pick = (min, max) => min + Math.floor(random() * (max - min + 1));
@@ -213,16 +214,27 @@ export async function seedDemo(conn, now = Date.now()) {
   for (const [name, members] of TEAMS) {
     const created = Math.min(...members.map((m) => people[m].joined)) + 3600 * 1000;
     const score = teamScore(members.map((m) => people[m].totalPoints));
+    // The first member created the team, so they lead it (BR44); the others follow in team order (BR54).
     const [team] = await conn.query(
-      'INSERT INTO teams (team_name, created_at, team_score, score_updated_at) VALUES (?, ?, ?, ?)',
-      [name, new Date(created), score, new Date(now - pick(1, 40) * 3600 * 1000)],
+      'INSERT INTO teams (team_name, leader_id, created_at, team_score, score_updated_at) VALUES (?, ?, ?, ?, ?)',
+      [
+        name,
+        people[members[0]].id,
+        new Date(created),
+        score,
+        new Date(now - pick(1, 40) * 3600 * 1000),
+      ],
     );
     for (const [position, member] of members.entries()) {
-      await conn.query('UPDATE students SET team_id = ?, team_joined_at = ? WHERE student_id = ?', [
-        team.insertId,
-        new Date(created + position * 1800 * 1000),
-        people[member].id,
-      ]);
+      await conn.query(
+        'UPDATE students SET team_id = ?, team_joined_at = ?, team_position = ? WHERE student_id = ?',
+        [
+          team.insertId,
+          new Date(created + position * 1800 * 1000),
+          position + 1,
+          people[member].id,
+        ],
+      );
     }
     if (TEAMS[PENDING_INVITE.team][0] === name) {
       await conn.query(

@@ -18,8 +18,9 @@ import { createLeaderboardService } from './services/leaderboards.js';
 import { createNameRules } from './services/name-rules.js';
 import { createMapStyleService } from './services/map-style.js';
 import { createPlayerService } from './services/players.js';
-import { storeProfilePicture } from './services/pictures.js';
+import { deleteUpload, storeProfilePicture } from './services/pictures.js';
 import { createQuizService } from './services/quiz.js';
+import { createSettingsService } from './services/settings.js';
 import { GENERIC_INVITE_MESSAGE, createTeamService } from './services/teams.js';
 
 const name = z.string().trim().min(1).max(50);
@@ -55,7 +56,8 @@ const schemas = {
     .refine((body) => body.optionId !== undefined || body.optionIds !== undefined, {
       message: 'Choose at least one option.',
     }),
-  team: z.object({ name: z.string().trim().min(2).max(30) }),
+  // A team name has 3 to 30 characters (business rules, section 4.1).
+  team: z.object({ name: z.string().trim().min(3).max(30) }),
   invite: z
     .object({ email: email.optional(), playerId: id.optional() })
     .refine((body) => Boolean(body.email) !== Boolean(body.playerId)),
@@ -91,6 +93,9 @@ const schemas = {
     mode: z.enum(['substring', 'token']),
   }),
   adminTest: z.object({ text: z.string().max(200) }),
+  adminLeader: z.object({ studentId: id }),
+  adminOrder: z.object({ studentIds: z.array(id).min(1).max(5) }),
+  adminSettings: z.object({ otpPreview: z.boolean() }),
 };
 
 /**
@@ -100,7 +105,8 @@ const schemas = {
 export function createApp({ pool, config, mailer, clock, fetchImpl }) {
   const app = express();
   const nameRules = createNameRules({ pool });
-  const auth = createAuthService({ pool, config, mailer, clock, nameRules });
+  const settings = createSettingsService({ pool, config, clock });
+  const auth = createAuthService({ pool, config, mailer, clock, nameRules, settings });
   const quiz = createQuizService({ pool, config, clock });
   const teams = createTeamService({ pool, config, clock, nameRules });
   const accounts = createAccountService({ pool, clock });
@@ -144,6 +150,27 @@ export function createApp({ pool, config, mailer, clock, fetchImpl }) {
       const body = schemas.requestOtp.parse(req.body);
       await auth.requestOtp(body.email);
       res.json({ message: GENERIC_OTP_MESSAGE });
+    }),
+  );
+  // BR52: what the login page needs to know before anyone logs in (no personal data).
+  api.get(
+    '/auth/config',
+    handle(async (_req, res) => {
+      res.set('Cache-Control', 'no-store');
+      res.json({
+        otpPreview: await settings.otpPreview(),
+        mailConfigured: mailer.configured !== false,
+      });
+    }),
+  );
+  // BR52: the test inbox. Only while an admin has the code preview switched on; POST keeps the address out of URLs.
+  api.post(
+    '/auth/otp-preview',
+    limits.auth,
+    handle(async (req, res) => {
+      const body = schemas.requestOtp.parse(req.body);
+      res.set('Cache-Control', 'no-store');
+      res.json({ otp: await auth.previewCode(body.email) });
     }),
   );
   api.post(
@@ -207,6 +234,7 @@ export function createApp({ pool, config, mailer, clock, fetchImpl }) {
         'UPDATE students SET avatar_preset = ?, profile_picture = NULL WHERE student_id = ?',
         [preset, req.student.student_id],
       );
+      await deleteUpload(uploadDir, req.student.profile_picture);
       res.status(204).end();
     }),
   );
@@ -220,6 +248,8 @@ export function createApp({ pool, config, mailer, clock, fetchImpl }) {
         pictureUrl,
         req.student.student_id,
       ]);
+      // The old file is not used by anyone any more (every upload gets a new random name).
+      await deleteUpload(uploadDir, req.student.profile_picture);
       res.json({ pictureUrl });
     }),
   );
@@ -329,7 +359,8 @@ export function createApp({ pool, config, mailer, clock, fetchImpl }) {
     handle(async (req, res) => {
       if (!req.file) throw new AppError(400, 'INVALID_IMAGE', 'Please choose an image.');
       const pictureUrl = await storeProfilePicture(req.file.buffer, uploadDir);
-      await teams.setTeamPicture(req.student.student_id, pictureUrl);
+      const previous = await teams.setTeamPicture(req.student.student_id, pictureUrl);
+      await deleteUpload(uploadDir, previous);
       res.json({ pictureUrl });
     }),
   );
@@ -370,6 +401,14 @@ export function createApp({ pool, config, mailer, clock, fetchImpl }) {
       }),
     ),
   );
+  // BR54: any member leaves; the next member in the team order becomes leader if the leader left.
+  api.post(
+    '/teams/me/leave',
+    handle(async (req, res) => {
+      await teams.leave(req.student.student_id);
+      res.json({ team: null });
+    }),
+  );
   api.post(
     '/teams/me/invitations/:id/cancel',
     handle(async (req, res) =>
@@ -406,6 +445,18 @@ export function createApp({ pool, config, mailer, clock, fetchImpl }) {
     handle(async (_req, res) => {
       res.set('Cache-Control', 'private, no-store');
       res.json(await admin.stats());
+    }),
+  );
+  // BR52, BR55: run-time settings (the OTP code preview switch).
+  adminApi.get(
+    '/settings',
+    handle(async (_req, res) => res.json({ settings: await settings.getAll() })),
+  );
+  adminApi.put(
+    '/settings',
+    handle(async (req, res) => {
+      const body = schemas.adminSettings.parse(req.body);
+      res.json({ settings: await settings.setOtpPreview(actor(req), body.otpPreview) });
     }),
   );
   adminApi.get(
@@ -649,6 +700,23 @@ export function createApp({ pool, config, mailer, clock, fetchImpl }) {
       res.status(204).end();
     }),
   );
+  // BR54: the admin chooses the leader and the order of a team.
+  adminApi.put(
+    '/teams/:id/leader',
+    handle(async (req, res) => {
+      const body = schemas.adminLeader.parse(req.body);
+      await admin.setTeamLeader(actor(req), id.parse(req.params.id), body.studentId);
+      res.status(204).end();
+    }),
+  );
+  adminApi.put(
+    '/teams/:id/order',
+    handle(async (req, res) => {
+      const body = schemas.adminOrder.parse(req.body);
+      await admin.reorderTeam(actor(req), id.parse(req.params.id), body.studentIds);
+      res.status(204).end();
+    }),
+  );
   adminApi.delete(
     '/teams/:id',
     handle(async (req, res) => {
@@ -687,5 +755,5 @@ export function createApp({ pool, config, mailer, clock, fetchImpl }) {
   app.use('/api', api);
   app.use(errorHandler(config));
 
-  return { app, services: { auth, quiz, teams, boards, admin, accounts } };
+  return { app, services: { auth, quiz, teams, boards, admin, accounts, settings } };
 }

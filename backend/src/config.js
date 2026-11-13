@@ -26,14 +26,20 @@ function trustProxy(value) {
 
 // The pre-seeded administrators (BR26, BR37). They log in with the normal e-mail code, so only whoever reads one of
 // these mailboxes can use the account; that is why they may be outside the school domain.
-const DEFAULT_ADMIN_EMAILS = 'sekretariat.dski@heilbronn.dhbw.de,dhbw.campusgo@gmail.com';
+export const DEFAULT_ADMIN_EMAILS = 'sekretariat.dski@heilbronn.dhbw.de,dhbw.campusgo@gmail.com';
 
-/** The admin addresses from ADMIN_EMAILS (comma-separated, in lower case; default both above). */
+/**
+ * The admin addresses from ADMIN_EMAILS (comma-separated, in lower case; default both above). A set but empty
+ * ADMIN_EMAILS also means the default, so a blank line in .env.production never leaves a server without admins.
+ */
 function adminEmails(env) {
-  const clean = (env.ADMIN_EMAILS ?? DEFAULT_ADMIN_EMAILS)
-    .split(',')
-    .map((email) => email.trim().toLowerCase());
-  return [...new Set(clean.filter(Boolean))];
+  const parse = (text) =>
+    String(text)
+      .split(',')
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean);
+  const listed = parse(env.ADMIN_EMAILS ?? '');
+  return [...new Set(listed.length > 0 ? listed : parse(DEFAULT_ADMIN_EMAILS))];
 }
 
 export function loadConfig(env = process.env) {
@@ -59,6 +65,10 @@ export function loadConfig(env = process.env) {
     otpMaxFailedAttempts: int(env.OTP_MAX_FAILED_ATTEMPTS, 5),
     otpResendCooldownSeconds: int(env.OTP_RESEND_COOLDOWN_SECONDS, 30),
     otpResendMaxPerHour: int(env.OTP_RESEND_MAX_PER_HOUR, 5),
+    // BR52: start value of the admin switch "show the login code in the test inbox" (the admin can change it).
+    otpPreviewDefault: env.OTP_PREVIEW_DEFAULT
+      ? env.OTP_PREVIEW_DEFAULT === 'true'
+      : nodeEnv === 'development',
     sessionInactivityMinutes: int(env.SESSION_INACTIVITY_MINUTES, 30),
     invitationTtlHours: int(env.INVITATION_TTL_HOURS, 24),
     // Geofencing settings (Main Project Document, section 5 "Settings kept in one config file").
@@ -68,6 +78,8 @@ export function loadConfig(env = process.env) {
     nearerMarginM: int(env.NEARER_MARGIN_M, 20), // another checkpoint must be this much nearer to win
     maxPositionAgeMs: int(env.MAX_POSITION_AGE_MS, 30_000),
     secondsPerQuestion: int(env.SECONDS_PER_QUESTION, 60), // BR13
+    // R-66: a 3-2-1 countdown after the unlock; the questions and the quiz time start when it ends.
+    quizCountdownSeconds: int(env.QUIZ_COUNTDOWN_SECONDS, 3),
     verifyLimitPerMin: int(env.VERIFY_LIMIT_PER_MIN, 10),
     locationRetentionDays: int(env.LOCATION_RETENTION_DAYS, 7),
     maxProfilePictureBytes: int(env.MAX_PROFILE_PICTURE_MB, 2) * 1024 * 1024,
@@ -104,4 +116,17 @@ export function productionProblems(config) {
     problems.push('FRONTEND_ORIGIN must be an https:// address (geolocation needs HTTPS).');
   }
   return problems;
+}
+
+/**
+ * Things that are allowed but risky in production: printed as warnings at start-up, never a reason to refuse.
+ * The code preview (BR52) lets anyone log in as anyone, so a live system should start with it off.
+ */
+export function productionWarnings(config) {
+  if (!config.isProd) return [];
+  return config.otpPreviewDefault
+    ? [
+        'OTP_PREVIEW_DEFAULT=true: login codes are shown on the login page until an admin turns it off.',
+      ]
+    : [];
 }

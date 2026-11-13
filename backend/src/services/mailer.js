@@ -33,10 +33,14 @@ export function createSmtpTransport(smtp) {
   });
 }
 
-/** Sends through SMTP. Without SMTP_HOST nothing is delivered: codes are never printed or kept anywhere. */
+/**
+ * Sends through SMTP. Without SMTP_HOST nothing is e-mailed. `configured` tells the auth service whether a real
+ * e-mail goes out; the code preview of BR52 (admin switch) is handled there, not here.
+ */
 export function createMailer(config, { transport } = {}) {
   if (!config.smtp.host) {
     return {
+      configured: false,
       ...withQueue(() => {
         throw new Error('no SMTP_HOST configured, the e-mail was not sent');
       }),
@@ -48,6 +52,7 @@ export function createMailer(config, { transport } = {}) {
   }
   const smtp = transport ?? createSmtpTransport(config.smtp);
   return {
+    configured: true,
     ...withQueue(async (message) => {
       const info = await smtp.sendMail({ from: config.smtp.from, ...message });
       // Counts only: the recipient is personal data. A rejected recipient means the server refused the mail.

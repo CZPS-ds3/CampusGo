@@ -1,6 +1,7 @@
 import { LngLatBounds, Map as MapLibreMap, Marker } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSonar } from '../hooks/useSonar.js';
 import { t, useSettings } from '../i18n.js';
 import {
   BEARING,
@@ -23,7 +24,7 @@ import {
   PIN_SIZE,
   PUCK_SIZE,
   accuracyRingPx,
-  glide,
+  createFollower,
   groundHtml,
   metresPerPixel,
   pinHtml,
@@ -129,6 +130,14 @@ export default function MapView3D({
   const mapStyle = useMapStyle();
   const { theme } = useSettings();
   const dark = isDark(mapStyle, theme);
+  const resizeSonar = useSonar({
+    container,
+    zoomNow: () => (map.current ? fromGlZoom(map.current.getZoom()) : null),
+    me,
+    checkpoints,
+    pinElement: (id) => markers.current.get(id)?.getElement(),
+    pinsReady: ready,
+  });
   const latest = useRef({});
   latest.current = {
     onSelect,
@@ -140,6 +149,7 @@ export default function MapView3D({
     checkpoints,
     heading,
     me,
+    resizeSonar,
   };
 
   useEffect(() => {
@@ -209,8 +219,11 @@ export default function MapView3D({
     const report = () =>
       latest.current.onCamera({ bearing: instance.getBearing(), pitch: instance.getPitch() });
     instance.on('rotate', report);
-    // The live position shrinks and fades as the map zooms out.
-    const scale = () => scalePuck(container.current, fromGlZoom(instance.getZoom()));
+    // The live position shrinks and fades as the map zooms out; the sonar ring keeps the real unlock range.
+    const scale = () => {
+      scalePuck(container.current, fromGlZoom(instance.getZoom()));
+      latest.current.resizeSonar();
+    };
     instance.on('zoom', scale);
     scale();
     instance.on('pitch', report);
@@ -246,7 +259,7 @@ export default function MapView3D({
         if (instance.isStyleLoaded()) fly();
         else instance.once('load', fly);
       },
-      // At the pace of the ball's glide, so a walking visitor stays in the middle.
+      // About as long as the ball takes to reach a new reading, so a walking visitor stays in the middle.
       panTo: ([lat, lng]) =>
         instance.easeTo({
           center: [lng, lat],
@@ -300,7 +313,7 @@ export default function MapView3D({
   useEffect(() => {
     const markerStore = markers.current;
     return () => {
-      puck.current?.stop();
+      puck.current?.follower.stop();
       map.current?.remove();
       map.current = null;
       puck.current = null;
@@ -341,13 +354,13 @@ export default function MapView3D({
 
   // The live position as two markers. The ground (accuracy circle and direction wedge) lies on the map and turns
   // with it, so the wedge keeps pointing the right way. The ball faces the screen, so however the map is turned or
-  // tilted it stays round. Both glide from reading to reading; the ball rolls along.
+  // tilted it stays round. Both follow the position every frame (walking on between readings); the ball rolls along.
   const lat = me?.lat;
   const lng = me?.lng;
   useEffect(() => {
     if (!ready) return;
     if (lat === undefined) {
-      puck.current?.stop();
+      puck.current?.follower.stop();
       puck.current?.ground.remove();
       puck.current?.ball.remove();
       puck.current = null;
@@ -386,28 +399,25 @@ export default function MapView3D({
         })
           .setLngLat([lng, lat])
           .addTo(map.current),
-        at: point,
-        stop: () => undefined,
       };
+      const live = puck.current;
+      live.follower = createFollower(point, (at, east, north) => {
+        const instance = map.current;
+        if (!instance) return;
+        live.ground.setLngLat([at[1], at[0]]);
+        live.ball.setLngLat([at[1], at[0]]);
+        const px = metresPerPixel(at[0], fromGlZoom(instance.getZoom()));
+        rollBall(live.ball.getElement(), east / px, north / px, {
+          bearing: instance.getBearing(),
+          pitch: instance.getPitch(),
+        });
+      });
       return;
     }
-    const live = puck.current;
-    live.stop();
-    live.stop = glide(live.at, point, (at, east, north) => {
-      const instance = map.current;
-      if (!instance) return;
-      live.at = at;
-      live.ground.setLngLat([at[1], at[0]]);
-      live.ball.setLngLat([at[1], at[0]]);
-      const px = metresPerPixel(at[0], fromGlZoom(instance.getZoom()));
-      rollBall(live.ball.getElement(), east / px, north / px, {
-        bearing: instance.getBearing(),
-        pitch: instance.getPitch(),
-      });
-    });
+    puck.current.follower.moveTo(point, latest.current.me?.velocity);
   }, [lat, lng, ready]);
 
-  // Direction and accuracy change in place, so a compass reading never interrupts the glide.
+  // Direction and accuracy change in place, so a compass reading never interrupts the ball's movement.
   const accuracy = me?.accuracy;
   useEffect(() => {
     if (!ready || !puck.current || accuracy === undefined) return;

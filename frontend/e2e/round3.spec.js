@@ -38,13 +38,17 @@ test.describe('place photos', () => {
     await page.clock.install();
     await login(page);
     await open(page, '/quests');
-    await page.getByRole('link', { name: /Mensa/ }).click();
+    // The Library has several of the team's photos (the Mensa now has one, which does not move).
+    await page.getByRole('link', { name: /Library/ }).click();
     const dialog = page.getByRole('dialog');
-    await expect(dialog.getByRole('group', { name: /Photos of Mensa/ })).toBeVisible();
-    const dot = (n) => dialog.getByRole('button', { name: `Photo ${n} of 2` });
-    await expect(dot(1)).toHaveAttribute('aria-current', 'true');
-    // The carousel pauses while the pointer rests on it, so move the pointer away first.
+    await expect(dialog.getByRole('group', { name: /Photos of Library/ })).toBeVisible();
+    const dot = (n) => dialog.getByRole('button', { name: `Photo ${n} of 9` });
+    // A known start: the first photo, then pointer and focus off the carousel (both pause it). The 5 s timer starts
+    // again only now, so time that passed while the page loaded on a busy machine cannot move it on twice.
+    await dot(1).click();
     await page.mouse.move(0, 0);
+    await page.evaluate(() => document.activeElement?.blur());
+    await expect(dot(1)).toHaveAttribute('aria-current', 'true');
     await page.clock.fastForward(5200);
     await expect(dot(2)).toHaveAttribute('aria-current', 'true');
     await dialog.getByRole('button', { name: 'Previous photo' }).click();

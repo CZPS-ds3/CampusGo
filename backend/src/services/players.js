@@ -4,7 +4,7 @@ import { at } from '../clock.js';
 import { notFound } from '../middleware/errors.js';
 import { displayName } from './auth.js';
 import { rankOfTeam } from './team-ranking.js';
-import { MAX_TEAM_SIZE } from './teams.js';
+import { MAX_TEAM_SIZE, TEAM_ORDER } from './teams.js';
 
 export function createPlayerService({ pool, clock, boards }) {
   const person = (row) => ({
@@ -40,7 +40,7 @@ export function createPlayerService({ pool, clock, boards }) {
     );
     if (!row) throw notFound('Player not found.');
     const [[{ cleared }]] = await pool.query(
-      "SELECT COUNT(DISTINCT checkpoint_id) AS cleared FROM attempts WHERE student_id = ? AND status = 'passed'",
+      "SELECT COUNT(DISTINCT a.checkpoint_id) AS cleared FROM attempts a JOIN checkpoints c ON c.checkpoint_id = a.checkpoint_id WHERE a.student_id = ? AND a.status = 'passed' AND c.archived_at IS NULL",
       [playerId],
     );
     let team = null;
@@ -48,7 +48,7 @@ export function createPlayerService({ pool, clock, boards }) {
       const [[teamRow]] = await pool.query('SELECT * FROM teams WHERE team_id = ?', [row.team_id]);
       const [members] = await pool.query(
         `SELECT student_id, first_name, last_name, nickname, profile_picture, avatar_preset, total_points
-         FROM students WHERE team_id = ? AND status = 'active' ORDER BY team_joined_at, student_id`,
+         FROM students WHERE team_id = ? AND status = 'active' ORDER BY ${TEAM_ORDER}`,
         [row.team_id],
       );
       team = {

@@ -29,7 +29,7 @@ sequenceDiagram
     S->>F: Read the facts, tap "I'm ready"
     F->>F: navigator.geolocation (one fresh reading, 10 s timeout)
     F->>B: POST /checkpoints/:id/verify {lat, lng, accuracy, ageMs}
-    B->>B: fresh (<= 30 s)? accuracy <= 50 m? Haversine distance <= radius?
+    B->>B: fresh (<= 30 s)? accuracy <= 50 m? WGS84 distance <= radius?
     B->>D: lock student, create Attempt + draw questions, expires_at = now + n minutes
     B->>D: insert Location_Check (inside yes/no + time)
     B-->>F: attempt (questions, expiresAt, serverNow)

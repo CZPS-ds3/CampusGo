@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMockApi } from '../src/api/mock.js';
+import questionBank from '../src/api/question-bank.json';
 
 class ApiError extends Error {
   constructor(status, code, message, details = {}) {
@@ -23,20 +24,33 @@ async function signIn() {
   await api.consent();
 }
 
+const COUNTDOWN_MS = 3000;
+const BANK = Object.values(questionBank.bank).flat();
+
+/** Unlocks the Library and waits out the 3-2-1 countdown (R-66), after which the questions are sent. */
 async function startLibrary() {
-  return (await api.verifyLocation(2, { ...LIBRARY, accuracy: 10 })).attempt;
+  const { attempt } = await api.verifyLocation(2, { ...LIBRARY, accuracy: 10 });
+  vi.setSystemTime(Date.now() + COUNTDOWN_MS);
+  return (await api.attempt(attempt.id)).attempt;
 }
 
-/** The mock marks the right option in its text, so a test can answer without knowing internals. */
-const right = (attempt) => {
+/** Option ids of the current question that the team's bank marks right (`wanted` true) or wrong. */
+const optionIds = (attempt, wanted) => {
   const question = attempt.questions.find((q) => q.number === attempt.currentQuestion);
-  return question.options.find((o) => o.text.includes('placeholder answer')).id;
+  const source = BANK.find(
+    (b) => b.text === question.text && b.options.every((o, i) => o === question.options[i].text),
+  );
+  return question.options.filter((_, i) => source.right.includes(i) === wanted).map((o) => o.id);
 };
+/** All right options (one, or two or three for a multi-select question). */
+const right = (attempt) => optionIds(attempt, true);
 
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
   sessionStorage.clear();
   api = createMockApi(ApiError, () => () => {});
 });
+afterEach(() => vi.useRealTimers());
 
 describe('mock API keeps the same rules as the server (BR12, BR13, BR14, BR18)', () => {
   it('BR02 a school address is required', async () => {
@@ -114,9 +128,7 @@ describe('mock API keeps the same rules as the server (BR12, BR13, BR14, BR18)',
   it('BR14 the right answer is shown only after a wrong answer', async () => {
     await signIn();
     const attempt = await startLibrary();
-    const wrongId = attempt.questions[0].options.find(
-      (o) => !o.text.includes('placeholder answer'),
-    ).id;
+    const [wrongId] = optionIds(attempt, false);
     const res = await api.answer(attempt.id, wrongId);
     expect(res.correct).toBe(false);
     expect(res.attempt.questions[0].correctOptionId).toBeDefined();
@@ -128,7 +140,8 @@ describe('mock API keeps the same rules as the server (BR12, BR13, BR14, BR18)',
     vi.setSystemTime(new Date('2026-11-02T12:00:00Z'));
     await signIn();
     let attempt = await startLibrary();
-    vi.setSystemTime(new Date('2026-11-02T12:01:00Z'));
+    // One minute after the quiz started (it starts 3 s after the unlock, R-66): 240 of 300 seconds left.
+    vi.setSystemTime(new Date('2026-11-02T12:01:03Z'));
     let res;
     for (let i = 0; i < 5; i += 1) {
       res = await api.answer(attempt.id, right(attempt));
@@ -160,5 +173,45 @@ describe('mock API keeps the same rules as the server (BR12, BR13, BR14, BR18)',
 
   it('calls without a session end in UNAUTHENTICATED', async () => {
     await expect(api.checkpoints()).rejects.toMatchObject({ status: 401, code: 'UNAUTHENTICATED' });
+  });
+});
+
+describe('R-66 the 3-2-1 countdown before the first question (mock, like the server)', () => {
+  it('R-66 BR13 during the countdown no question is sent and no answer is taken; the quiz time starts after it', async () => {
+    await signIn();
+    const unlockedAt = Date.now();
+    const { attempt } = await api.verifyLocation(2, { ...LIBRARY, accuracy: 10 });
+    expect(attempt.questions).toEqual([]);
+    expect(Date.parse(attempt.startTime) - unlockedAt).toBe(COUNTDOWN_MS);
+    expect(attempt.timeLimitSeconds).toBe(300);
+    await expect(api.answer(attempt.id, [attempt.id * 10])).rejects.toMatchObject({
+      code: 'QUIZ_NOT_STARTED',
+    });
+    vi.setSystemTime(unlockedAt + COUNTDOWN_MS);
+    const started = (await api.attempt(attempt.id)).attempt;
+    expect(started.questions).toHaveLength(5);
+    expect(Date.parse(started.expiresAt) - Date.now()).toBe(300_000);
+  });
+});
+
+describe("BR09 BR50 the mock serves the team's question bank, not placeholders", () => {
+  it('BR09 every quest holds all bank questions with their facts and description', async () => {
+    await signIn();
+    const { checkpoints } = await api.checkpoints();
+    for (const checkpoint of checkpoints) {
+      const info = questionBank.info[checkpoint.name];
+      expect(checkpoint.description).toBe(info.description);
+      expect(checkpoint.facts).toEqual(info.facts);
+      expect(JSON.stringify(checkpoint)).not.toMatch(/PLACEHOLDER|placeholder answer/);
+    }
+  });
+
+  it('BR50 Library and Building B are mixed, so their multi-select questions are drawn', async () => {
+    await signIn();
+    const { checkpoints } = await api.checkpoints();
+    const mixed = checkpoints.filter((c) => c.typeMode === 'MIXED').map((c) => c.name);
+    expect(mixed.sort()).toEqual(['Building B', 'Library']);
+    const attempt = await startLibrary();
+    expect(attempt.questions.filter((q) => q.type === 'MULTI')).toHaveLength(1);
   });
 });

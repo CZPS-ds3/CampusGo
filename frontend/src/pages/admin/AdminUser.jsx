@@ -207,7 +207,7 @@ export default function AdminUser() {
         <p className="small muted break">{user.email}</p>
         <p className="small">
           <span className="mono">{formatNumber(user.totalPoints)}</span> {t('PTS')} ·{' '}
-          {user.questsPassed}/8 {t('quests')} · {user.teamName ?? t('No team yet')}
+          {user.questsPassed}/{user.questsTotal} {t('quests')} · {user.teamName ?? t('No team yet')}
         </p>
         {user.statusReason && (
           <p className="small muted">

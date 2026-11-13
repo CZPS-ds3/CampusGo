@@ -7,7 +7,14 @@ import { recordEvent } from './audit.js';
 import { displayName, mayLogIn, normalizeEmail } from './auth.js';
 import { SUBSTRING_TERMS, TOKEN_TERMS } from './name-filter-terms.js';
 import { createStatsService } from './stats.js';
-import { MAX_TEAM_SIZE, ensureLeader, refreshTeamScore } from './teams.js';
+import {
+  MAX_TEAM_SIZE,
+  TEAM_ORDER,
+  ensureLeader,
+  nextTeamPosition,
+  refreshTeamScore,
+  repairTeam,
+} from './teams.js';
 
 const SETTABLE_STATUSES = ['active', 'blocked', 'archived'];
 const ROLES = ['student', 'admin'];
@@ -32,6 +39,8 @@ const makeUserView = (mainAdminEmails) => (row) => ({
   createdAt: row.created_at.toISOString(),
   lastLoginAt: row.last_login_at ? new Date(row.last_login_at).toISOString() : null,
   questsPassed: Number(row.quests_passed ?? 0),
+  // Quests that exist now (admins add and remove quests, so this is not always 8).
+  questsTotal: Number(row.quests_total ?? 0),
 });
 
 const duplicateEmail = () =>
@@ -44,7 +53,9 @@ export function createAdminService({ pool, config, clock, nameRules }) {
 
   const SELECT_USER = `SELECT s.*, t.team_name,
       (SELECT MAX(created_at) FROM sessions WHERE student_id = s.student_id) AS last_login_at,
-      (SELECT COUNT(DISTINCT checkpoint_id) FROM attempts WHERE student_id = s.student_id AND status = 'passed') AS quests_passed
+      (SELECT COUNT(DISTINCT a.checkpoint_id) FROM attempts a JOIN checkpoints c ON c.checkpoint_id = a.checkpoint_id
+        WHERE a.student_id = s.student_id AND a.status = 'passed' AND c.archived_at IS NULL) AS quests_passed,
+      (SELECT COUNT(*) FROM checkpoints WHERE archived_at IS NULL) AS quests_total
     FROM students s LEFT JOIN teams t ON t.team_id = s.team_id`;
 
   async function loadUser(id, conn = pool) {
@@ -354,7 +365,7 @@ export function createAdminService({ pool, config, clock, nameRules }) {
       );
       await eraseStudentData(conn, id);
       await conn.query(
-        `UPDATE students SET role = ?, team_id = NULL, team_joined_at = NULL, total_points = 0,
+        `UPDATE students SET role = ?, team_id = NULL, team_joined_at = NULL, team_position = NULL, total_points = 0,
            points_exact_x100 = 0, points_updated_at = ? WHERE student_id = ?`,
         [role, at(now), id],
       );
@@ -408,11 +419,10 @@ export function createAdminService({ pool, config, clock, nameRules }) {
           `${team.team_name} already has ${MAX_TEAM_SIZE} members.`,
         );
       }
-      await conn.query('UPDATE students SET team_id = ?, team_joined_at = ? WHERE student_id = ?', [
-        teamId,
-        at(now),
-        studentId,
-      ]);
+      await conn.query(
+        'UPDATE students SET team_id = ?, team_joined_at = ?, team_position = ? WHERE student_id = ?',
+        [teamId, at(now), await nextTeamPosition(conn, teamId), studentId],
+      );
       await conn.query(
         "UPDATE team_invitations SET status = 'invalid', responded_at = ? WHERE invitee_id = ? AND status = 'pending'",
         [at(now), studentId],
@@ -431,12 +441,13 @@ export function createAdminService({ pool, config, clock, nameRules }) {
   // ----- teams -----
   async function listTeams() {
     const [teams] = await pool.query(
-      `SELECT t.team_id, t.team_name, t.team_score, t.created_at, COUNT(s.student_id) AS size
+      `SELECT t.team_id, t.team_name, t.team_score, t.created_at, t.leader_id, COUNT(s.student_id) AS size
        FROM teams t LEFT JOIN students s ON s.team_id = t.team_id
        GROUP BY t.team_id ORDER BY t.team_score DESC, t.team_id`,
     );
     const [members] = await pool.query(
-      'SELECT student_id, team_id, first_name, last_name, nickname FROM students WHERE team_id IS NOT NULL ORDER BY team_joined_at, student_id',
+      `SELECT student_id, team_id, first_name, last_name, nickname, status, team_position
+       FROM students WHERE team_id IS NOT NULL ORDER BY ${TEAM_ORDER}`,
     );
     return teams.map((t) => ({
       id: t.team_id,
@@ -444,9 +455,16 @@ export function createAdminService({ pool, config, clock, nameRules }) {
       score: t.team_score,
       size: Number(t.size),
       createdAt: t.created_at.toISOString(),
+      leaderId: t.leader_id,
+      // In team order (BR54): the leader hand-over follows it.
       members: members
         .filter((m) => m.team_id === t.team_id)
-        .map((m) => ({ id: m.student_id, displayName: displayName(m) })),
+        .map((m) => ({
+          id: m.student_id,
+          displayName: displayName(m),
+          position: m.team_position,
+          status: m.status,
+        })),
     }));
   }
 
@@ -479,22 +497,82 @@ export function createAdminService({ pool, config, clock, nameRules }) {
       ]);
       if (!team) throw notFound('Team not found.');
       const [res] = await conn.query(
-        'UPDATE students SET team_id = NULL, team_joined_at = NULL WHERE student_id = ? AND team_id = ?',
+        'UPDATE students SET team_id = NULL, team_joined_at = NULL, team_position = NULL WHERE student_id = ? AND team_id = ?',
         [studentId, teamId],
       );
       if (res.affectedRows === 0) throw notFound('Member not found.');
-      const [[{ left }]] = await conn.query(
-        'SELECT COUNT(*) AS `left` FROM students WHERE team_id = ?',
-        [teamId],
-      );
-      if (left > 0) {
-        await refreshTeamScore(conn, teamId, now);
-        await ensureLeader(conn, teamId);
-      } else {
-        await conn.query('DELETE FROM team_invitations WHERE team_id = ?', [teamId]);
-        await conn.query('DELETE FROM teams WHERE team_id = ?', [teamId]);
-      }
+      await repairTeam(conn, teamId, now);
       await recordEvent(conn, now, { studentId, actorId, type: 'removed_from_team' });
+    });
+  }
+
+  /** Locks a team and returns it with its members in team order (BR54). */
+  async function lockTeam(conn, teamId) {
+    const [[team]] = await conn.query(
+      'SELECT team_id, team_name, leader_id FROM teams WHERE team_id = ? FOR UPDATE',
+      [teamId],
+    );
+    if (!team) throw notFound('Team not found.');
+    const [members] = await conn.query(
+      `SELECT student_id, status FROM students WHERE team_id = ? ORDER BY ${TEAM_ORDER} FOR UPDATE`,
+      [teamId],
+    );
+    return { team, members };
+  }
+
+  /** BR54: an admin chooses the leader of a team. The new leader must be an active member of that team. */
+  async function setTeamLeader(actorId, teamId, studentId) {
+    const now = clock.now();
+    await withTransaction(pool, async (conn) => {
+      const { team, members } = await lockTeam(conn, teamId);
+      const member = members.find((m) => m.student_id === studentId);
+      if (!member) throw new AppError(404, 'NOT_A_MEMBER', 'This person is not in this team.');
+      if (member.status !== 'active') {
+        throw new AppError(409, 'STUDENT_NOT_ACTIVE', 'Only an active member can lead the team.');
+      }
+      if (team.leader_id === studentId) return;
+      await conn.query('UPDATE teams SET leader_id = ? WHERE team_id = ?', [studentId, teamId]);
+      await recordEvent(conn, now, {
+        studentId,
+        actorId,
+        type: 'team_leader_changed',
+        detail: `${team.team_name}: chosen by an admin`,
+      });
+    });
+  }
+
+  /**
+   * BR54: an admin puts the members of a team in a new order (the leader hand-over follows it). The list must
+   * name every member exactly once.
+   */
+  async function reorderTeam(actorId, teamId, studentIds) {
+    const now = clock.now();
+    await withTransaction(pool, async (conn) => {
+      const { team, members } = await lockTeam(conn, teamId);
+      const current = members.map((m) => m.student_id).sort((a, b) => a - b);
+      const wanted = [...studentIds].sort((a, b) => a - b);
+      const same =
+        new Set(studentIds).size === studentIds.length &&
+        current.length === wanted.length &&
+        current.every((value, index) => value === wanted[index]);
+      if (!same) {
+        throw new AppError(
+          400,
+          'ORDER_MISMATCH',
+          'The new order must list every member of the team exactly once.',
+        );
+      }
+      for (const [index, studentId] of studentIds.entries()) {
+        await conn.query('UPDATE students SET team_position = ? WHERE student_id = ?', [
+          index + 1,
+          studentId,
+        ]);
+      }
+      await recordEvent(conn, now, {
+        actorId,
+        type: 'team_reordered',
+        detail: team.team_name,
+      });
     });
   }
 
@@ -506,7 +584,7 @@ export function createAdminService({ pool, config, clock, nameRules }) {
       ]);
       if (!team) throw notFound('Team not found.');
       await conn.query(
-        'UPDATE students SET team_id = NULL, team_joined_at = NULL WHERE team_id = ?',
+        'UPDATE students SET team_id = NULL, team_joined_at = NULL, team_position = NULL WHERE team_id = ?',
         [teamId],
       );
       await conn.query('DELETE FROM team_invitations WHERE team_id = ?', [teamId]);
@@ -556,6 +634,8 @@ export function createAdminService({ pool, config, clock, nameRules }) {
     listTeams,
     renameTeam,
     removeMember,
+    setTeamLeader,
+    reorderTeam,
     deleteTeam,
     listTerms,
     addTerm,

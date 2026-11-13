@@ -83,3 +83,46 @@ def test_no_migration_stores_coordinates_of_people():
         sql = path.read_text(encoding="utf-8").lower()
         if "location_checks" in sql and "create table" in sql:
             assert "latitude" not in sql.split("location_checks", 1)[1].split(";", 1)[0]
+
+
+QUESTION_BANK = ROOT / "backend" / "src" / "db" / "question-bank.js"
+PUBLIC = ROOT / "frontend" / "public"
+
+
+def jpeg_segments(data):
+    """The marker bytes of the header segments of a JPEG file (stops at the image data)."""
+    markers, index = [], 2
+    while index + 4 <= len(data) and data[index] == 0xFF:
+        marker = data[index + 1]
+        if marker == 0xDA:  # start of scan: only image data follows
+            break
+        length = int.from_bytes(data[index + 2 : index + 4], "big")
+        markers.append((marker, data[index + 4 : index + 10]))
+        index += 2 + length
+    return markers
+
+
+def team_photos():
+    """Every photo the team took: the place photos named *-photo-* and the question photos."""
+    return sorted(PHOTOS.glob("*-photo-*.jpg")) + sorted((PUBLIC / "quests").rglob("*.jpg"))
+
+
+def test_the_team_photos_carry_no_metadata_such_as_a_location():
+    photos = team_photos()
+    assert len(photos) >= 40
+    for photo in photos:
+        data = photo.read_bytes()
+        assert data[:2] == b"\xff\xd8", f"{photo.name} is not a JPEG"
+        for marker, start in jpeg_segments(data):
+            # APP1 holds EXIF (GPS position, phone model, time) or XMP; neither may be published.
+            assert marker != 0xE1, f"{photo.name} still has EXIF/XMP metadata ({start!r})"
+        assert photo.stat().st_size < 400_000, f"{photo.name} is larger than 400 KB"
+
+
+def test_every_question_photo_file_is_used_by_the_question_bank():
+    """A file is named in question-bank.js either as it is or as a numbered series (`...-${n}.jpg`)."""
+    source = QUESTION_BANK.read_text(encoding="utf-8")
+    for photo in sorted((PUBLIC / "quests").rglob("*.jpg")):
+        path = photo.relative_to(PUBLIC).as_posix()
+        series = re.sub(r"-\d+\.jpg$", "-${n}.jpg", path)
+        assert path in source or series in source, f"{path} is not used by any question"
