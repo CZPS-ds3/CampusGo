@@ -64,7 +64,8 @@ docker-config:
     - docker compose config --services | grep -qx backend
     - docker compose config --services | grep -qx frontend
     # Production stack: dummy values only to check the file (the real ones live in .env.production on the server).
-    - printf 'PUBLIC_URL=https://ci.invalid\nMYSQL_ROOT_PASSWORD=ci\nMYSQL_PASSWORD=ci\n' > .env.production
+    # Every ${NAME:?...} of docker-compose.prod.yml needs a value here, or `config` fails (regression test).
+    - printf 'PUBLIC_URL=https://ci.invalid\nMYSQL_ROOT_PASSWORD=ci\nMYSQL_PASSWORD=ci\nSESSION_SECRET=ci\nOTP_SECRET=ci\nSMTP_HOST=ci.invalid\nSMTP_FROM=ci@ci.invalid\nTRUSTED_PROXIES=127.0.0.1\n' > .env.production
     - docker compose --env-file .env.production -f docker-compose.prod.yml config --quiet
     - docker compose --env-file .env.production -f docker-compose.prod.yml config --services | grep -qx web
     - rm .env.production

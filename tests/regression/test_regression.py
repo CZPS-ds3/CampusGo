@@ -6,6 +6,7 @@ bug is back.
 
 import json
 import os
+import re
 import shutil
 import struct
 import subprocess
@@ -634,3 +635,14 @@ def test_bug_the_ball_stopped_between_readings_and_missed_small_moves_br12():
         "console.log(JSON.stringify((shown.lat - 49.148) * 111320));"
     )
     assert values > 0.6, "a 1 m step must show at least 60 % after one reading"
+
+
+def test_bug_the_pipeline_docker_check_missed_required_production_settings_br52():
+    """The docker-config job failed: docker-compose.prod.yml needs more settings than the CI dummy file gave."""
+    compose = (ROOT / "docker-compose.prod.yml").read_text(encoding="utf-8")
+    required = set(re.findall(r"\$\{([A-Z_]+):\?", compose))
+    assert {"PUBLIC_URL", "SESSION_SECRET", "OTP_SECRET", "TRUSTED_PROXIES"} <= required
+    pipeline = (ROOT / ".gitlab-ci.yml").read_text(encoding="utf-8")
+    dummy = next(line for line in pipeline.splitlines() if "> .env.production" in line)
+    given = set(re.findall(r"(?:'|\\n)([A-Z_]+)=", dummy))
+    assert required <= given, f"missing in the CI dummy .env.production: {sorted(required - given)}"

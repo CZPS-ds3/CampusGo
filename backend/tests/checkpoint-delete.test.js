@@ -247,5 +247,6 @@ describe('BR49 the seed leaves quests to the admins', () => {
       'SELECT COUNT(*) AS unordered FROM students WHERE team_id IS NOT NULL AND team_position IS NULL',
     );
     expect(unordered).toBe(0);
-  });
+    // The demo seed writes many players and attempts: about 15 s on a Linux CI container, too close to the 20 s default.
+  }, 60_000);
 });
