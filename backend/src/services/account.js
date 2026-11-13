@@ -3,21 +3,14 @@ import { at } from '../clock.js';
 import { withTransaction } from '../db/pool.js';
 import { AppError, notFound } from '../middleware/errors.js';
 import { recordEvent } from './audit.js';
-import { ensureLeader, refreshTeamScore } from './teams.js';
+import { repairTeam } from './teams.js';
 
-/** Takes a student out of their team and repairs the team: score, leader, or removal when it is empty. */
+/**
+ * Repairs the team a student was just taken out of: score, order and leader, or removal when it is empty
+ * (BR44, BR54). The caller has already cleared the student's team columns.
+ */
 export async function leaveTeam(conn, teamId, now) {
-  const [[{ left }]] = await conn.query(
-    'SELECT COUNT(*) AS `left` FROM students WHERE team_id = ?',
-    [teamId],
-  );
-  if (left > 0) {
-    await refreshTeamScore(conn, teamId, now);
-    await ensureLeader(conn, teamId);
-  } else {
-    await conn.query('DELETE FROM team_invitations WHERE team_id = ?', [teamId]);
-    await conn.query('DELETE FROM teams WHERE team_id = ?', [teamId]);
-  }
+  await repairTeam(conn, teamId, now);
 }
 
 /** Removes the quiz history (answers, questions, location checks, attempts) of one student, in an order the foreign keys allow. */

@@ -136,8 +136,8 @@ const pairs = [
   ['Back to map', 'Zurück zur Karte'],
   ['Location check', 'Standortprüfung'],
   [
-    'the timer starts once your location is confirmed',
-    'der Timer startet, sobald dein Standort bestätigt ist',
+    'once your location is confirmed, a 3-second countdown runs, then the timer starts',
+    'sobald dein Standort bestätigt ist, läuft ein 3-Sekunden-Countdown, dann startet der Timer',
   ],
   ['Try again', 'Erneut versuchen'],
   ['Check again', 'Erneut prüfen'],

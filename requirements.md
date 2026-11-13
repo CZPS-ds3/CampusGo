@@ -33,13 +33,14 @@ npm run dev
 | Backend tests | `vitest`, `supertest` | Rule tests against a real test database |
 | Frontend | `react`, `react-dom`, `react-router-dom`, `leaflet`, `@fontsource/*` (Anton, Rubik, JetBrains Mono) | Screens, routing, map, self-hosted fonts |
 | Frontend build and tests | `vite`, `@vitejs/plugin-react`, `vitest`, `jsdom`, `@testing-library/*`, `@playwright/test` | Build, unit tests, browser tests on phone, tablet and laptop sizes |
-| Docker image | `mysql:8.4` | The development and test database |
+| Docker images | `mysql:8.4`, `node:22-bookworm-slim` (built from `backend/Dockerfile.dev` and `frontend/Dockerfile.dev`) | The development and test database; the API and the web app when everything runs in Docker (`npm run docker:up`) |
 
 ## 4. Daily commands (all via npm)
 
 | Task | Command |
 |---|---|
 | Start database, API and web app | `npm run dev` |
+| Start database, API and web app in Docker (Linux containers, Windows or Ubuntu) | `npm run docker:up` / `npm run docker:down` |
 | Web app only, with fake data and no Docker | `npm run dev:mock` |
 | Lint / auto-fix | `npm run lint` / `npm run lint:fix` |
 | Check formatting / format all files | `npm run format:check` / `npm run format` |
@@ -92,4 +93,4 @@ npm run test:all                                  # everything, restarts all tes
 
 ## CI (GitLab)
 
-`.gitlab-ci.yml` uses the `node:22` image and a `mysql:8.4` service for the backend tests (`TEST_DATABASE_URL` points at it, `SKIP_DOCKER=1`). The runner needs Docker (the shared GitLab runners have it). The manual browser job uses `mcr.microsoft.com/playwright:v1.64.1-noble`; keep that tag equal to the Playwright version in `package-lock.json`.
+`.gitlab-ci.yml` uses the `node:22` image and a `mysql:8.4` service for the backend tests (`TEST_DATABASE_URL` points at it, `SKIP_DOCKER=1`). The runner needs Docker (the shared GitLab runners have it). Every pipeline runs lint, the node config tests, `docker compose config` (job `docker-config`, image `docker:27-cli`, no daemon needed), Python lint and unit tests, backend and frontend tests, the integration tests (`tests/run-all.mjs --ci`: database, API, security and regression suites) and the build. The manual browser job uses `mcr.microsoft.com/playwright:v1.64.1-noble`; keep that tag equal to the Playwright version in `package-lock.json`.

@@ -11,6 +11,7 @@ import {
   cleanStyle,
   resetMapStyle,
   saveMapStyle,
+  sonarData,
   styleVariables,
   useMapStyle,
 } from '../mapStyle.js';
@@ -29,6 +30,15 @@ const PRESET_NAMES = {
   sunset: 'Sunset',
   mono: 'Mono',
 };
+const SPEEDS = [
+  ['slow', 'Slow'],
+  ['normal', 'Normal'],
+  ['fast', 'Fast'],
+];
+const LOOKS = [
+  ['sova', 'Scan line'],
+  ['soft', 'Soft pulse'],
+];
 const GROUND = { light: '#eef0f2', dark: '#181d22' };
 const MIN_CONTRAST = 3;
 
@@ -122,10 +132,14 @@ function Preview({ style, theme }) {
   );
   // The default building colour depends on light or dark, as on the 3D map.
   variables['--buildings'] = buildingColour(style, isDark(style, theme));
+  const sonar = sonarData(style);
   return (
     <div
       className="mapstyle__preview"
       data-base={style.base === 'follow' ? undefined : style.base}
+      data-sonar={sonar.sonar}
+      data-sonar-look={sonar.sonarLook}
+      data-sonar-speed={sonar.sonarSpeed}
       style={variables}
       role="img"
       aria-label={t('Preview of your map style')}
@@ -142,7 +156,95 @@ function Preview({ style, theme }) {
         <span className="mapstyle__pin mapstyle__pin--locked" />
         <span className="mapstyle__pin mapstyle__pin--selected" />
       </span>
+      <span className="mapstyle__puck" data-testid="preview-ball" aria-hidden="true">
+        <span className="puck-sonar mapstyle__sonar" data-testid="preview-sonar">
+          <span className="puck-sonar__wave" />
+          <span className="puck-sonar__wave" />
+          <span className="puck-sonar__wave" />
+          <span className="puck-sonar__edge" />
+        </span>
+        <span className="mapstyle__puck-beam" />
+        <span className="mapstyle__puck-ball" />
+      </span>
     </div>
+  );
+}
+
+/** One labelled on/off switch of the sonar settings. */
+function SonarSwitch({ id, label, hint, checked, disabled, onChange }) {
+  return (
+    <div className="row row--between mapstyle__switch">
+      <span>
+        <span id={id} className="small strong">
+          {label}
+        </span>
+        <span className="caption muted mapstyle__hint">{hint}</span>
+      </span>
+      <button
+        type="button"
+        role="switch"
+        className="switch"
+        aria-checked={checked}
+        aria-labelledby={id}
+        disabled={disabled}
+        onClick={() => onChange(!checked)}
+      />
+    </div>
+  );
+}
+
+/** The sonar range ring under the ball (BR48): on/off, pulse speed, look and the flash for quests in range. */
+function SonarSettings({ sonar, onChange }) {
+  const id = useId();
+  return (
+    <fieldset className="mapstyle__sonar-settings" data-testid="sonar-settings">
+      <legend className="strong">{t('Sonar range ring')}</legend>
+      <SonarSwitch
+        id={`${id}-show`}
+        label={t('Show the sonar')}
+        hint={t('Waves run from your ball out to how far away you can unlock a quest.')}
+        checked={sonar.show}
+        onChange={(show) => onChange({ show })}
+      />
+      <SonarSwitch
+        id={`${id}-ping`}
+        label={t('Flash quests in range')}
+        hint={t('A quest flashes once each time you come close enough to unlock it.')}
+        checked={sonar.show && sonar.ping}
+        disabled={!sonar.show}
+        onChange={(ping) => onChange({ ping })}
+      />
+      <p className="caption">{t('Pulse speed')}</p>
+      <div className="seg seg--3" role="radiogroup" aria-label={t('Pulse speed')}>
+        {SPEEDS.map(([value, name]) => (
+          <button
+            key={value}
+            type="button"
+            role="radio"
+            aria-checked={sonar.speed === value}
+            disabled={!sonar.show}
+            onClick={() => onChange({ speed: value })}
+          >
+            {t(name)}
+          </button>
+        ))}
+      </div>
+      <p className="caption">{t('Look')}</p>
+      <div className="seg seg--2" role="radiogroup" aria-label={t('Look')}>
+        {LOOKS.map(([value, name]) => (
+          <button
+            key={value}
+            type="button"
+            role="radio"
+            aria-checked={sonar.look === value}
+            disabled={!sonar.show}
+            onClick={() => onChange({ look: value })}
+          >
+            {t(name)}
+          </button>
+        ))}
+      </div>
+    </fieldset>
   );
 }
 
@@ -211,7 +313,28 @@ export function MapStyleSettings() {
       value: buildingColour(draft, isDark(draft, theme)),
       set: (hex) => ({ buildings: hex }),
     },
+    {
+      id: 'ball',
+      label: t('Your position: ball'),
+      value: draft.ball.body,
+      set: (hex) => ({ ball: { ...draft.ball, body: hex } }),
+    },
+    {
+      id: 'ball-lines',
+      label: t('Your position: lines and direction'),
+      value: draft.ball.lines,
+      set: (hex) => ({ ball: { ...draft.ball, lines: hex } }),
+    },
+    {
+      id: 'sonar',
+      label: t('Sonar range ring'),
+      value: draft.sonar.color,
+      set: (hex) => ({ sonar: { ...draft.sonar, color: hex } }),
+    },
   ];
+  // Sonar settings that are not colours: they keep the preset.
+  const setSonar = (change) =>
+    setDraft((now) => cleanStyle({ ...now, sonar: { ...now.sonar, ...change } }));
   const current = colours.find((c) => c.id === picked);
 
   const run = async (key, work, done) => {
@@ -265,12 +388,22 @@ export function MapStyleSettings() {
                 type="button"
                 className="mapstyle__preset"
                 aria-pressed={draft.preset === name}
-                onClick={() => setDraft(cleanStyle({ ...preset, base: draft.base }))}
+                onClick={() =>
+                  setDraft(
+                    cleanStyle({
+                      ...preset,
+                      base: draft.base,
+                      sonar: { ...draft.sonar, color: preset.sonar.color },
+                    }),
+                  )
+                }
               >
                 <span className="mapstyle__swatches" aria-hidden="true">
-                  {[preset.pins.open, preset.pins.done, preset.highlight].map((colour, i) => (
-                    <span key={i} className="mapstyle__swatch" style={{ background: colour }} />
-                  ))}
+                  {[preset.pins.open, preset.pins.done, preset.highlight, preset.ball.lines].map(
+                    (colour, i) => (
+                      <span key={i} className="mapstyle__swatch" style={{ background: colour }} />
+                    ),
+                  )}
                 </span>
                 <span className="small strong">{t(PRESET_NAMES[name])}</span>
               </button>
@@ -331,6 +464,8 @@ export function MapStyleSettings() {
             />
           </div>
         )}
+
+        <SonarSettings sonar={draft.sonar} onChange={setSonar} />
 
         {error && (
           <p className="field-note field-note--error" role="alert">

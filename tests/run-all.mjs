@@ -69,8 +69,14 @@ function runCommand(command, env) {
 
 function ensureDatabaseContainer() {
   if (process.env.SKIP_DOCKER || process.env.CI) return;
-  out('[runner] starting MySQL (docker compose up -d --wait)');
-  const up = spawnSync('docker compose up -d --wait', { cwd: ROOT, shell: true, stdio: 'inherit' });
+  // Only the database: docker-compose.yml also has the API and the web app, and starting them here would take
+  // ports 3000 and 5173 away from a running `npm run dev`.
+  out('[runner] starting MySQL (docker compose up -d --wait mysql)');
+  const up = spawnSync('docker compose up -d --wait mysql', {
+    cwd: ROOT,
+    shell: true,
+    stdio: 'inherit',
+  });
   if (up.status !== 0) throw new Error('MySQL did not start: is Docker Desktop running?');
 }
 

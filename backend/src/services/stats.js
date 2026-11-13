@@ -1,6 +1,7 @@
 // Numbers for the admin dashboard. "Day" means a Europe/Berlin calendar day; the boundaries are worked out
 // in Node, so no MySQL time zone tables are needed. Admins never count: every figure is about students.
 import { displayName } from './auth.js';
+import { countPlaceholders } from './placeholders.js';
 import { rankedTeams } from './team-ranking.js';
 
 const DAYS = 14;
@@ -138,6 +139,7 @@ export function createStatsService({ pool, clock }) {
          FROM checkpoints c
          LEFT JOIN (SELECT x.* FROM attempts x JOIN students s ON s.student_id = x.student_id
                     WHERE s.role = 'student') a ON a.checkpoint_id = c.checkpoint_id
+         WHERE c.archived_at IS NULL
          GROUP BY c.checkpoint_id ORDER BY c.checkpoint_id`,
       );
       return rows.map((r) => ({
@@ -232,14 +234,20 @@ export function createStatsService({ pool, clock }) {
     };
   }
 
-  /** Cached for 30 seconds; the cache is dropped at Berlin midnight because its key is the Berlin date. */
+  /**
+   * Cached for 30 seconds; the cache is dropped at Berlin midnight because its key is the Berlin date. The
+   * placeholder count (questions, facts, quests still holding seed texts) is always fresh.
+   */
   async function getStats() {
     const now = clock.now();
     const key = berlinDays(now, 1)[0].date;
-    if (cache && cache.key === key && now - cache.at < CACHE_MS) return cache.value;
-    const value = await build();
-    cache = { key, at: now, value };
-    return value;
+    if (!cache || cache.key !== key || now - cache.at >= CACHE_MS) {
+      cache = { key, at: now, value: await build() };
+    }
+    // Not cached: the warning must go away as soon as an admin replaces the last placeholder.
+    const errors = { ...cache.value.errors };
+    const placeholders = await section(errors, 'placeholders', () => countPlaceholders(pool));
+    return { ...cache.value, errors, placeholders };
   }
 
   return { getStats };

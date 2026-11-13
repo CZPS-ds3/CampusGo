@@ -18,21 +18,32 @@ npm install                              # installs everything and creates your 
 npm run dev                              # starts MySQL, creates the tables, loads the seed data, starts API + web app
 ```
 
-Then open **http://localhost:5173** (the API runs on http://localhost:3000). The first `npm run dev` takes a minute because Docker downloads MySQL once. Start Docker Desktop first; `npm run dev` tells you if it is not running.
+Then open **http://localhost:5173** (the API runs on http://localhost:3000). The first `npm run dev` takes a minute because Docker downloads MySQL once. Start Docker Desktop first; `npm run dev` tells you if it is not running (it also starts Docker Desktop for you when it can find it).
+
+**Or run everything in Docker** (no Node.js needed on the machine; Linux containers, so it works the same on Windows with Docker Desktop and on Ubuntu with Docker Engine and the compose plugin):
+
+```bash
+npm install            # once, only to create backend/.env and frontend/.env (or copy the two .env.example files)
+docker compose up --build        # or: npm run docker:up  → MySQL + API (port 3000) + web app (port 5173)
+docker compose down              # stop (add -v to also delete the database and uploaded pictures)
+```
+
+`docker-compose.yml` links the three containers and the two `.env` files; `backend/Dockerfile.dev` and `frontend/Dockerfile.dev` build the API and the web app. Code changes in `backend/src` and `frontend/src` reload without a rebuild. Use either `npm run dev` or Docker, not both at once (same ports).
 
 **How to use it**
 
-1. Press *Start* and enter an address that ends with `heilbronn.dhbw.de`. The six-digit code is sent by e-mail from the account set in the `SMTP_*` values of `backend/.env` (examples are in `backend/.env.example`); the server prints `[mail] SMTP ready` when the login works, and `[mail] sent (...)` for every mail. Nothing is printed in the terminal. Codes can be requested every 30 seconds, 5 per hour. Only `npm run dev:mock` (no backend) has an *Open mock inbox* button. The sixth digit logs you in.
+1. Press *Start* and enter an address that ends with `heilbronn.dhbw.de`. The six-digit code is sent by **e-mail** from the account set in the `SMTP_*` values of `backend/.env` (examples are in `backend/.env.example`); the server prints `[mail] SMTP ready` when the login works, and `[mail] sent (...)` for every mail. For testing there is also the **code preview** (admin page *Settings*, on by default in development): the same code is then shown behind *Open mock inbox* on the code screen and printed in the backend terminal, so you can log in without SMTP. **Turn it off before real students use the app**: while it is on, anyone can log in as anyone. Codes can be requested every 30 seconds, 5 per hour. The sixth digit logs you in.
 2. New address: create your player card (name, nickname, one of six avatars or your own photo). Then you are on the map.
 3. Tap a checkpoint pin, then *Start quest*. Accept the location notice once; the phone is asked for its position (the *radar* screen). To test without walking across campus, set `VITE_DEV_FAKE_LOCATION=true` in `frontend/.env` and tick *Pretend I am here*, or use your browser's location override (Chrome DevTools → Sensors).
 4. Read the three facts on the info page (no timer yet), press *I'm ready*, answer the quiz, see the result and your rank change.
 5. The red hexagon at the bottom opens the menu: Map, Quests, Team, Ranks, Profile. In the profile you can switch dark mode, font size (S to XL) and the language (Deutsch / English), and design your **map style** (light, dark or follow the app; presets; your own RGB colours for the pins, the highlight and the route). One map style is saved on your account.
 
-The questions in the seed data are **placeholders** (marked "PLACEHOLDER"); the real ones are added before the pilot (see [docs/question-bank.md](docs/question-bank.md)). The checkpoint centres are on the Bildungscampus Heilbronn (from OpenStreetMap) and still need the on-site check; the "Sensoricum" centre is an estimate next to Building C and must be confirmed on site (see [docs/geofencing.md](docs/geofencing.md); how to test the location check at a PC: [testing/location-testing-guide.md](testing/location-testing-guide.md)).
+The questions in the seed are the team's question bank from the Main Project Document (69 questions, with on-site photos; see [docs/question-bank.md](docs/question-bank.md)); the "read first" facts and quest descriptions are still **placeholders** (marked "PLACEHOLDER"). The checkpoint centres are on the Bildungscampus Heilbronn (from OpenStreetMap) and still need the on-site check; the "Sensoricum" centre is an estimate next to Building C and must be confirmed on site (see [docs/geofencing.md](docs/geofencing.md); how to test the location check at a PC: [testing/location-testing-guide.md](testing/location-testing-guide.md)).
 
 | I want to… | Command |
 |---|---|
 | Start everything | `npm run dev` |
+| Start everything in Docker (MySQL + API + web app) | `npm run docker:up` (stop: `npm run docker:down`) |
 | Try only the web app without Docker or a backend (fake data in the browser) | `npm run dev:mock` |
 | Run all checks before a push (lint, format, tests, build) | `npm run check` |
 | Browser tests on phone, tablet and laptop sizes | `npm run test:e2e` |
@@ -56,8 +67,47 @@ The questions in the seed data are **placeholders** (marked "PLACEHOLDER"); the 
 | No Docker allowed on your machine | Install MySQL 8 yourself, set `DATABASE_URL` in `backend/.env`, run `SKIP_DOCKER=1 npm run dev` |
 | The map is grey | The map tiles need internet; the pins and the rest still work |
 | "Please check your location" never succeeds | Allow location for `localhost`, or use the fake location above |
-| Login code does not arrive | Codes are only sent by e-mail (nothing is printed in the terminal). Check the `[mail]` line at server start: `SMTP check failed` means wrong host, port or password (Gmail and Microsoft 365 need an app password). Production refuses to start without `SMTP_HOST` |
+| Login code does not arrive | Check the `[mail]` line at server start: `SMTP check failed` means wrong host, port or password (Gmail and Microsoft 365 need an app password). Without SMTP, switch on the code preview (admin page *Settings*) and use *Open mock inbox*. Production refuses to start without `SMTP_HOST` |
+| The web app shows "proxy error" / nothing loads | The API is not running. Look at the `api` lines of `npm run dev` (or `docker compose logs backend`): usually the database is not up or a start-up step failed. Since 2026-11-10 the seed never undoes quest changes made in the admin area, which used to stop the API after a quest was edited or deleted |
+| `docker compose up` cannot find `backend/.env` | Run `npm install` once (it creates the `.env` files), or copy `backend/.env.example` and `frontend/.env.example` to `.env` |
 | Something is odd after pulling | `npm install` again; `npm run db:reset` if the database structure changed |
+
+### 🚀 Deploy on the Ubuntu server (production)
+
+The school's web server serves HTTPS for our subdomain and forwards plain HTTP to one port on the Ubuntu server.
+Only Docker Engine with the compose plugin is needed on the server (no Node.js). `docker-compose.yml` stays the
+development stack; production uses its own files: `docker-compose.prod.yml`, `backend/Dockerfile`,
+`frontend/Dockerfile` (built app served by nginx, `frontend/nginx.conf`).
+
+1. `git clone` the repository on the server, then `cp .env.production.example .env.production`.
+2. Fill in **every** value of `.env.production`: `PUBLIC_URL` (the `https://` subdomain), `HTTP_PORT` (the port
+   the school's web server forwards to), `TRUSTED_PROXIES` (the school web server's IP, ask IT), database
+   passwords (letters and digits), `SESSION_SECRET` and `OTP_SECRET` (`openssl rand -hex 32` each), the SMTP
+   settings (Gmail: app password), `ADMIN_EMAILS`. Never commit this file.
+3. Let only the school's web server reach the port. Visitors cannot fake their IP anyway (nginx believes
+   `X-Forwarded-For` only from `TRUSTED_PROXIES`), but plain HTTP on the port would skip HTTPS:
+   - school web server on **this** machine: set `HTTP_BIND=127.0.0.1` in `.env.production`.
+   - school web server on **another** machine: ask IT to allow `HTTP_PORT` only from that server in the network
+     firewall. `ufw` alone is not enough: ports that Docker publishes skip ufw's rules.
+4. Start: `docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build`
+5. Check: `docker compose --env-file .env.production -f docker-compose.prod.yml ps` (all *healthy*) and
+   `... logs backend` (must show `SMTP ready`; a `[content] warning` lists quests that still have placeholder
+   texts).
+6. Backups: `bash scripts/backup-prod.sh` writes a database dump and the pictures to `backups/` (owner-only, kept
+   14 days). Run it nightly with cron (the exact line is at the top of the script) and copy `backups/` to a second
+   machine now and then. Restore a dump into the running stack:
+   `gunzip -c backups/campusquest-db-<time>.sql.gz | docker compose --env-file .env.production -f docker-compose.prod.yml exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot'`
+   and the pictures with
+   `docker compose --env-file .env.production -f docker-compose.prod.yml exec -T backend tar -C /app/backend/uploads -xzf - < backups/campusquest-uploads-<time>.tar.gz`.
+7. Update after a merge: `git pull`, then the command of step 4 again. Data (database, pictures) stays in the
+   Docker volumes; `down -v` would delete it.
+
+What production does differently: the API refuses to start with development secrets, without SMTP or without an
+`https://` `PUBLIC_URL`; the code preview is off; no demo players; only the web container publishes a port
+(MySQL and the API are internal); the visitor IP for rate limits is believed only from `TRUSTED_PROXIES`. The quiz
+questions are the team's question bank; the "read first" facts and quest descriptions are still **placeholders**:
+replace them in the admin area before students use the app (the admin dashboard shows a warning while any are left). Without HTTPS in front, browsers block location, so check-ins need the
+school's HTTPS address.
 
 ---
 
@@ -132,7 +182,7 @@ The table shows the pilot seed. Admins can change every value and add quests (se
 - `npm run dev` also loads **fictional demo data** (24 players, 6 teams, quests over several days, a pending invitation, a blocked, an archived and a reported account) so the ranks and the admin pages have something to show. It is never loaded in production (`npm run db:seed:demo` runs it alone; `npm run db:reset` starts from an empty database).
 - **Admin area** (`/admin`): sign in with `sekretariat.dski@heilbronn.dhbw.de` or `dhbw.campusgo@gmail.com` (the same e-mail code login; the addresses are set in `ADMIN_EMAILS`). Users (create, edit, block, archive, report, delete, sessions, quests and activity log), teams, and name rules. The code arrives by e-mail (with `npm run dev:mock`, use *Open mock inbox* on the code screen).
 - **Quests (admin → Quests):** create, edit and delete quests: title, description, photos, information, number of questions, pass mark, time limit, hard question, question types (multiple choice, multi-select or both) and the questions with their four options. The location comes from a **Google Maps link** pasted into a box; an invalid link is explained and the place must lie inside the map students can see. A quest goes live only when it has enough questions.
-- **Teams:** the person who creates a team is its **leader** and can remove members; any member can cancel an invitation; an admin can add a student to any team (pop-up with search by e-mail). **Deleted accounts:** an admin delete (after a confirmation pop-up) and a student's own delete remove the account for good, with its data; it appears nowhere afterwards. **Roles:** an admin can make any account an admin or a student on the user page (BR53); it applies at once.
+- **Teams:** the person who creates a team is its **leader** and can remove members; any member can cancel an invitation or **leave the team** (if the leader leaves, the next member in the team order becomes the leader; the last one leaving deletes the team). An admin can add a student to any team (pop-up with search by e-mail), remove members, **choose the leader** and **change the team order** (BR54). **Deleted accounts:** an admin delete (after a confirmation pop-up) and a student's own delete remove the account for good, with its data; it appears nowhere afterwards. **Roles:** an admin can make any account an admin or a student on the user page (BR53); it applies at once.
 - **Name rules:** German and English banned words, whole-word matching so "Cass" is fine. List: [docs/banned-terms.md](docs/banned-terms.md).
 - **Photos** of the places are in `frontend/public/places/` with credits in `CREDITS.md`. They are generic Bildungscampus photos from Wikimedia Commons, **not** pictures of the single places; replace them with the team's own photos before the pilot (list: `frontend/src/api/places.json`, then `npm run db:seed`).
 - **Walking route:** the *Show walking route* button in a checkpoint draws the way with OpenStreetMap data; your position is used in the browser only.
@@ -456,7 +506,7 @@ campus-city-quest/
 ├── README.md               ← you are here
 ├── requirements.md         what to install
 ├── package.json            npm workspaces (frontend, backend) and all scripts
-├── docker-compose.yml      MySQL 8.4 for development and tests
+├── docker-compose.yml      MySQL 8.4 + API + web app (npm run dev uses only the MySQL service)
 ├── eslint.config.js, .prettierrc
 ├── CLAUDE.md               rules for AI assistants + AI logging
 ├── project_chater.md       project charter
@@ -464,14 +514,16 @@ campus-city-quest/
 ├── backend/                Express API
 │   ├── index.js            starts the server
 │   ├── src/routes|services|db|middleware
-│   ├── src/db/migrations   SQL schema; seed.js = scoring tables, checkpoints, placeholder questions
+│   ├── src/db/migrations   SQL schema; seed.js = scoring tables, checkpoints, question bank (question-bank.js)
 │   ├── tests/              Vitest + Supertest against a test database
+│   ├── Dockerfile.dev      development image of the API (docker compose)
 │   └── .env.example
 ├── frontend/               React + Vite web app
 │   ├── src/api|components|hooks|pages|styles|assets
 │   ├── tests/              Vitest + React Testing Library
 │   ├── e2e/                Playwright on phone, tablet and laptop sizes (mock API)
 │   ├── e2e-fullstack/      one smoke test through the real stack
+│   ├── Dockerfile.dev      development image of the web app (docker compose)
 │   └── .env.example
 ├── design/                 problem statement, architecture, ER diagram, API docs, decisions,
 │   │                       UI spec (arena result), prototype reference, screenshots

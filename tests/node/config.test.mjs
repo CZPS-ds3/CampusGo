@@ -65,3 +65,27 @@ test('every environment keeps the login code limits (30 s apart, 5 per hour)', (
   assert.equal(loadConfig({ NODE_ENV: 'production' }).otpResendCooldownSeconds, 30);
   assert.equal(loadConfig({ OTP_RESEND_COOLDOWN_SECONDS: '12' }).otpResendCooldownSeconds, 12);
 });
+
+test('BR52 production starts with the code preview off: the test inbox hands out nothing', async () => {
+  const config = loadConfig({ NODE_ENV: 'production' });
+  // No settings row yet: the start value applies (off outside development).
+  const pool = { query: async () => [[]] };
+  const { app } = createApp({ pool, config, mailer: quietMailer, clock: systemClock });
+  const server = app.listen(0);
+  try {
+    const { port } = server.address();
+    const base = `http://127.0.0.1:${port}/api/auth`;
+    const settings = await (await fetch(`${base}/config`)).json();
+    assert.equal(settings.otpPreview, false);
+    const response = await fetch(`${base}/otp-preview`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'a@heilbronn.dhbw.de' }),
+    });
+    const text = await response.text();
+    assert.equal(response.status, 404);
+    assert.ok(!/"otp"/.test(text), 'no code may be handed out while the preview is off');
+  } finally {
+    server.close();
+  }
+});

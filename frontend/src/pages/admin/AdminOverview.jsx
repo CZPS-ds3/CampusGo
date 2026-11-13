@@ -60,6 +60,24 @@ function Card({ title, takeaway, span, children }) {
   );
 }
 
+/** Seeded quiz texts are placeholders; the dashboard says so until admins have replaced them all. */
+function PlaceholderBanner({ placeholders }) {
+  if (!placeholders || placeholders.quests.length === 0) return null;
+  return (
+    <section className="admin-card admin-card--warn" role="alert">
+      <h2 className="display h3">{t('Placeholder content is still live')}</h2>
+      <p className="small">
+        {t('{questions} placeholder questions and {facts} placeholder facts in: {quests}.', {
+          questions: placeholders.questions,
+          facts: placeholders.facts,
+          quests: placeholders.quests.join(', '),
+        })}
+      </p>
+      <p className="small muted">{t('Replace them on the Quests page before the pilot.')}</p>
+    </section>
+  );
+}
+
 function Tile({ label, value, delta }) {
   return (
     <div className="card card--tight admin-tile">
@@ -108,8 +126,17 @@ export default function AdminOverview() {
   if (failed) return <Missing onRetry={load} />;
   if (!stats) return <Skeleton rows={3} height={120} />;
 
-  const { tiles, daily, usersByStatus, checkpoints, topPlayers, topTeams, signedIn, recent } =
-    stats;
+  const {
+    tiles,
+    daily,
+    usersByStatus,
+    checkpoints,
+    topPlayers,
+    topTeams,
+    signedIn,
+    recent,
+    placeholders,
+  } = stats;
   const retry = <Missing onRetry={load} />;
   const delta = (today, before) => (today === null || before === null ? null : today - before);
   const totalLogins = daily?.reduce((n, d) => n + d.logins, 0) ?? 0;
@@ -117,6 +144,7 @@ export default function AdminOverview() {
 
   return (
     <div className="admin-dash">
+      <PlaceholderBanner placeholders={placeholders} />
       <section className="admin-tiles" aria-label={t('Key numbers')}>
         <Tile label={t('Signed in now')} value={tiles.signedInNow} />
         <Tile label={t('Active players')} value={tiles.activeStudents} />

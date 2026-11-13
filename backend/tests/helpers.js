@@ -8,6 +8,7 @@ import { createTestMailer } from '../src/services/mailer.js';
 
 const TABLES = [
   'location_checks',
+  'question_images',
   'attempt_answers',
   'attempt_questions',
   'attempts',
@@ -18,13 +19,22 @@ const TABLES = [
   'teams',
   'audit_events',
   'banned_terms',
+  'app_settings',
 ];
 
 export const DOMAIN = 'heilbronn.dhbw.de';
 
 /** Builds the app against the test database with a fake clock and an in-memory mailer. */
 export async function createTestContext(envOverrides = {}) {
-  const config = { ...loadConfig({ ...process.env, NODE_ENV: 'test', ...envOverrides }) };
+  // No 3-2-1 countdown (R-66) unless a test asks for it, so the questions can be answered right after the unlock.
+  const config = {
+    ...loadConfig({
+      ...process.env,
+      NODE_ENV: 'test',
+      QUIZ_COUNTDOWN_SECONDS: '0',
+      ...envOverrides,
+    }),
+  };
   const pool = createPool(config.databaseUrl);
   const clock = createFakeClock();
   const mailer = createTestMailer();
@@ -45,10 +55,21 @@ export async function createTestContext(envOverrides = {}) {
         "DELETE q FROM questions q JOIN checkpoints c ON c.checkpoint_id = q.checkpoint_id WHERE c.checkpoint_name LIKE 'TQ %'",
       );
       await conn.query("DELETE FROM checkpoints WHERE checkpoint_name LIKE 'TQ %'");
+      // The tests use the placeholder questions; questions of the team's bank (left by a seed run in another suite)
+      // are removed. Safe here: the attempt tables were emptied above.
+      await conn.query(
+        "DELETE o FROM options o JOIN questions q ON q.question_id = o.question_id WHERE q.question_text NOT LIKE 'PLACEHOLDER%'",
+      );
+      await conn.query("DELETE FROM questions WHERE question_text NOT LIKE 'PLACEHOLDER%'");
       await conn.query(
         "UPDATE checkpoints SET time_limit_seconds = NULL, type_mode = 'MCQ_ONLY', archived_at = NULL",
       );
-      await seedReference(conn);
+      await seedReference(conn, { restore: true });
+      // The tests use the placeholder facts and descriptions (a seed test may have put in the real ones).
+      await conn.query("DELETE FROM checkpoint_facts WHERE fact_text NOT LIKE 'PLACEHOLDER%'");
+      await conn.query(
+        "UPDATE checkpoints SET description = CONCAT('PLACEHOLDER description for ', checkpoint_name, '.')",
+      );
       await seedPlaceholderFacts(conn);
       await seedPlaceholderQuestions(conn); // inserts once, later runs only reset the flags below
       await conn.query('UPDATE checkpoints SET is_active = 1');

@@ -1,5 +1,6 @@
 // The checkpoint pins are plain HTML, so the flat (Leaflet) and the 3D (MapLibre) map show the same pins and both
 // take their colours from the map style's CSS variables (BR48).
+import { distanceM } from './geo.js';
 
 /** Size of a pin's box and the point of it that sits on the checkpoint, in pixels. */
 export const PIN_SIZE = [140, 70];
@@ -79,17 +80,123 @@ export const GROUND_SIZE = 96;
 // A few waves in a loop, one after another, like a submarine's sonar.
 const WAVES = '<span class="puck-ground__wave"></span>'.repeat(3);
 
+// The sonar range ring (like Sova's recon dart, or the range ring of a location game): waves run out from the ball to
+// the real unlock range, drawn to scale, and a faint edge marks the range. Its radius in pixels comes from the map
+// (--sonar-r, set by sizeSonar); its look, speed and on/off from the map style's data attributes (BR48).
+const SONAR = `<span class="puck-sonar">${'<span class="puck-sonar__wave"></span>'.repeat(3)}<span class="puck-sonar__edge"></span></span>`;
+
+/** How long one sonar wave takes from the ball to the edge, in ms, for each speed of the map style (screens.css). */
+export const SONAR_WAVE_MS = { slow: 4500, normal: 3000, fast: 1800 };
+
+/** How far away a quest can be unlocked in metres: its radius plus the grace zone (`reachM` from the server). */
+export const reachOf = (checkpoint) => checkpoint.reachM ?? checkpoint.radius;
+
 /**
- * What lies on the ground under the ball, below the checkpoint pins: sonar waves rolling out to as far as the GPS
- * accuracy reaches (`ringPx` radius) and the soft red wedge that points to the walking or compass direction
+ * The reach of the range ring in metres: the smallest reach of the open quests, so every quest inside the ring can
+ * really be unlocked (all quests when every open one is done, null without any open quest).
+ */
+export function ringReachM(checkpoints) {
+  const open = checkpoints.filter((c) => c.isActive);
+  const left = open.filter((c) => !c.completed);
+  const reaches = (left.length > 0 ? left : open).map(reachOf).filter(Number.isFinite);
+  return reaches.length > 0 ? Math.min(...reaches) : null;
+}
+
+/**
+ * The ring's radius on screen in pixels at a Leaflet zoom. Capped at `maxPx` (the screen's diagonal): past that the
+ * edge is off-screen anyway, and the waves stay a size the browser can draw smoothly.
+ */
+export function reachPx(reachM, lat, zoom, maxPx = Infinity) {
+  if (!Number.isFinite(reachM) || !Number.isFinite(lat)) return 0;
+  return Math.round(Math.min(maxPx, reachM / metresPerPixel(lat, zoom)));
+}
+
+/** Hands the ring's radius to the sonar inside a map's element (--sonar-r in screens.css). */
+export function sizeSonar(element, { reachM, lat, zoom }) {
+  if (!element) return;
+  const diagonal = Math.hypot(window.innerWidth, window.innerHeight);
+  element.style.setProperty('--sonar-r', `${reachPx(reachM, lat, zoom, diagonal)}px`);
+}
+
+/** Whether a quest is close enough to unlock from `me` ({ lat, lng }), by its own reach. Display only (BR12). */
+export function inRange(me, checkpoint) {
+  const reach = reachOf(checkpoint);
+  return (
+    Number.isFinite(reach) &&
+    distanceM([me.lat, me.lng], [checkpoint.latitude, checkpoint.longitude]) <= reach
+  );
+}
+
+/**
+ * Notices the quests that come into range: `update` returns the open quests that are in range now and were not at
+ * the last update, each with its distance in metres, so each one flashes once per entry (leaving and coming back
+ * flashes again). The first update counts as entering, so the quests already in range flash once when the map opens.
+ * `canShow(id)` says whether the quest's pin is drawn yet: one that is not counts as not entered, so it still flashes
+ * once its pin appears.
+ */
+export function createRangeWatch() {
+  let inside = new Set();
+  return {
+    update(me, checkpoints, canShow = () => true) {
+      const now = new Set();
+      const entered = [];
+      for (const checkpoint of checkpoints) {
+        if (!checkpoint.isActive || !inRange(me, checkpoint) || !canShow(checkpoint.id)) continue;
+        now.add(checkpoint.id);
+        if (!inside.has(checkpoint.id)) {
+          const metres = distanceM([me.lat, me.lng], [checkpoint.latitude, checkpoint.longitude]);
+          entered.push({ id: checkpoint.id, metres });
+        }
+      }
+      inside = now;
+      return entered;
+    },
+  };
+}
+
+/**
+ * When the flash of a quest that just came into range starts, in ms: when the next sonar wave reaches it, so the wave
+ * seems to find the quest. `metres` is its distance, `ringM` the ring's reach.
+ */
+export function pingDelayMs(metres, ringM, speed) {
+  const wave = SONAR_WAVE_MS[speed] ?? SONAR_WAVE_MS.normal;
+  if (!Number.isFinite(ringM) || ringM <= 0) return 0;
+  return Math.round(wave * Math.min(1, Math.max(0, metres / ringM)));
+}
+
+/** Flashes a quest's pin once after \`delayMs\` (pin--ping in screens.css), restarting a flash that is still running. */
+export function pingPin(element, delayMs) {
+  const pin = element?.querySelector('.pin');
+  if (!pin) return;
+  pin.classList.remove('pin--ping');
+  pin.style.setProperty('--ping-delay', `${delayMs}ms`);
+  // Reading the layout between removing and adding the class restarts the animation.
+  void pin.offsetWidth;
+  pin.classList.add('pin--ping');
+  pin.addEventListener('animationend', () => pin.classList.remove('pin--ping'), { once: true });
+}
+
+/**
+ * What lies on the ground under the ball, below the checkpoint pins: the sonar range ring, waves rolling out to as far
+ * as the GPS accuracy reaches (`ringPx` radius) and the soft red wedge that points to the walking or compass direction
  * (`heading`, 0 = north; hidden while unknown).
  */
 export function groundHtml(heading, ringPx) {
   const known = Number.isFinite(heading);
   return `<span class="puck-ground${known ? '' : ' puck-ground--still'}" aria-hidden="true">
+    ${SONAR}
     <span class="puck-ground__waves" style="width: ${ringPx * 2}px; height: ${ringPx * 2}px">${WAVES}</span>
-    <span class="puck-ground__beam" style="transform: rotate(${Math.round(heading ?? 0)}deg)"></span>
+    <span class="puck-ground__beam" data-turn="${Math.round(heading ?? 0)}" style="transform: rotate(${Math.round(heading ?? 0)}deg)"></span>
   </span>`;
+}
+
+/**
+ * The angle (degrees, any number of turns) equal to `heading` that is nearest to `current`, so the wedge turns the short
+ * way round: from 359 to 1 degree it moves 2 degrees forward instead of spinning back 358.
+ */
+export function nearestTurn(current, heading) {
+  const delta = ((((heading - current) % 360) + 540) % 360) - 180;
+  return Math.round((current + delta) * 10) / 10;
 }
 
 /** Updates the ground in place: the wedge turned to `heading` (hidden if null) and how far the waves go. */
@@ -97,8 +204,10 @@ export function updateGround(element, heading, ringPx) {
   const ground = element?.querySelector('.puck-ground');
   if (!ground) return;
   ground.classList.toggle('puck-ground--still', !Number.isFinite(heading));
-  ground.querySelector('.puck-ground__beam').style.transform =
-    `rotate(${Math.round(heading ?? 0)}deg)`;
+  const beam = ground.querySelector('.puck-ground__beam');
+  const angle = nearestTurn(Number(beam.dataset.turn ?? 0), heading ?? 0);
+  beam.dataset.turn = String(angle);
+  beam.style.transform = `rotate(${angle}deg)`;
   const waves = ground.querySelector('.puck-ground__waves').style;
   waves.width = `${ringPx * 2}px`;
   waves.height = `${ringPx * 2}px`;
@@ -298,7 +407,15 @@ export function rollBall(element, east, north, { bearing = 0, pitch = 0 } = {}) 
   }
 }
 
-const GLIDE_MS = 350; // short, so the ball shows a new reading almost at once, without a jump
+// The ball follows the live position every frame instead of hopping from reading to reading: it eases towards the
+// newest position (half the way in about FOLLOW_TAU_MS x 0.7) and, while the visitor walks, keeps walking on at the
+// measured pace between two readings (for at most PREDICT_MAX_MS), so it moves as fluidly as the visitor does and
+// even a step of a few centimetres shows. Slower than MOVING_SPEED_MPS counts as standing (GPS jitter, no walking on).
+const FOLLOW_TAU_MS = 200;
+const PREDICT_MAX_MS = 2000;
+const MOVING_SPEED_MPS = 0.3;
+const SETTLED_M = 0.01;
+const LONGEST_FRAME_MS = 100; // a frame after a pause (hidden tab) is counted as this long, so the ball never leaps
 const JUMP_M = 150; // further than a walk between two readings: jump instead of sliding across the map
 const reducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 const nextFrame = (step) =>
@@ -306,30 +423,76 @@ const nextFrame = (step) =>
 const cancelFrame = (frame) =>
   window.cancelAnimationFrame ? window.cancelAnimationFrame(frame) : clearTimeout(frame);
 
+/** The step from `a` to `b` ([lat, lng]) on the ground in metres, [east, north]. */
+const stepMetres = (a, b) => [
+  (b[1] - a[1]) * M_PER_DEG * Math.cos((a[0] * Math.PI) / 180),
+  (b[0] - a[0]) * M_PER_DEG,
+];
+
+/** A [lat, lng] moved `east` and `north` metres. */
+const shifted = ([lat, lng], east, north) => [
+  lat + north / M_PER_DEG,
+  lng + east / (M_PER_DEG * Math.cos((lat * Math.PI) / 180)),
+];
+
 /**
- * Moves the live position smoothly from `from` to `to` ([lat, lng]) instead of jumping. `draw(at, east, north)`
- * gets every step, with its length on the ground in metres, so the ball can roll along. Returns a stop function.
+ * Draws the live position fluidly. `draw(at, east, north)` gets every frame's position with its step on the ground in
+ * metres, so the ball can roll along. `moveTo(point, velocity)` hands over a new reading ([lat, lng]) and the walking
+ * velocity [east, north] in m/s (or none); `stop()` ends the animation. The animation sleeps while the ball is still.
  */
-export function glide(from, to, draw) {
-  const metres = (a, b) => [
-    (b[1] - a[1]) * M_PER_DEG * Math.cos((a[0] * Math.PI) / 180),
-    (b[0] - a[0]) * M_PER_DEG,
-  ];
-  if (reducedMotion() || Math.hypot(...metres(from, to)) > JUMP_M) {
-    draw(to, 0, 0);
-    return () => undefined;
+export function createFollower(start, draw) {
+  let at = start;
+  let target = { point: start, velocity: [0, 0], since: 0 };
+  let frame = null;
+  let last = null;
+
+  const goalAt = (now) => {
+    const [east, north] = target.velocity;
+    if (Math.hypot(east, north) < MOVING_SPEED_MPS) return { goal: target.point, done: true };
+    const ahead = Math.min(now - target.since, PREDICT_MAX_MS);
+    return {
+      goal: shifted(target.point, (east * ahead) / 1000, (north * ahead) / 1000),
+      done: ahead >= PREDICT_MAX_MS,
+    };
+  };
+
+  function step() {
+    const now = performance.now();
+    const elapsed = last === null ? 16 : Math.min(LONGEST_FRAME_MS, now - last);
+    last = now;
+    const { goal, done } = goalAt(now);
+    const share = 1 - Math.exp(-elapsed / FOLLOW_TAU_MS);
+    let next = [at[0] + (goal[0] - at[0]) * share, at[1] + (goal[1] - at[1]) * share];
+    const settled = done && Math.hypot(...stepMetres(next, goal)) < SETTLED_M;
+    if (settled) next = goal;
+    const [east, north] = stepMetres(at, next);
+    at = next;
+    draw(at, east, north);
+    frame = settled ? null : nextFrame(step);
+    if (settled) last = null;
   }
-  const start = performance.now();
-  let last = from;
-  let frame = nextFrame(function step() {
-    const t = Math.min(1, (performance.now() - start) / GLIDE_MS);
-    const at = [from[0] + (to[0] - from[0]) * t, from[1] + (to[1] - from[1]) * t];
-    draw(at, ...metres(last, at));
-    last = at;
-    if (t < 1) frame = nextFrame(step);
-  });
-  return () => cancelFrame(frame);
+
+  return {
+    moveTo(point, velocity = [0, 0]) {
+      target = { point, velocity: velocity ?? [0, 0], since: performance.now() };
+      if (reducedMotion() || Math.hypot(...stepMetres(at, point)) > JUMP_M) {
+        if (frame !== null) cancelFrame(frame);
+        frame = null;
+        last = null;
+        target.velocity = [0, 0];
+        at = point;
+        draw(point, 0, 0);
+        return;
+      }
+      if (frame === null) frame = nextFrame(step);
+    },
+    stop() {
+      if (frame !== null) cancelFrame(frame);
+      frame = null;
+      last = null;
+    },
+  };
 }
 
-/** How long a glide takes, for the map to follow at the same pace. */
-export const GLIDE_SECONDS = GLIDE_MS / 1000;
+/** How long the map takes to pan to a new reading while following: about as long as the ball takes to get there. */
+export const GLIDE_SECONDS = (FOLLOW_TAU_MS * 3) / 1000;

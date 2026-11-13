@@ -4,10 +4,12 @@ import { bearingDeg, distanceM } from '../geo.js';
 // The live position for the map: watched in the browser and never sent to our server (only the walking route asks
 // the OpenStreetMap router, as before). The arrow shows the walking direction from the GPS while moving, otherwise
 // the device's compass or gyroscope when the browser offers one (phones, tablets and PCs with orientation sensors).
-const MOVING_MPS = 0.8;
-const STEP_M = 8;
+// Sensitive on purpose, so the arrow turns soon after the visitor does: a slow walk counts as moving, a few metres
+// give a direction, and the compass arrow follows turns of a couple of degrees.
+const MOVING_MPS = 0.5;
+const STEP_M = 4;
 const GPS_HEADING_WINS_MS = 3000;
-const COMPASS_STEP_DEG = 4;
+const COMPASS_STEP_DEG = 2;
 
 /** Smallest difference between two directions in degrees (0 to 180). */
 const turn = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
@@ -30,9 +32,26 @@ export function headingFrom({ coords }, anchor) {
   return { heading: null, anchor: anchor ?? here, fromGps: false };
 }
 
+// The browser's watch reports only when the device decides to; standing still, or in a browser that saves power,
+// it can stay quiet for a long time. So the ball gets a new reading at least every REFRESH_MS: when the watch has
+// been quiet for REFRESH_MS - ASK_AHEAD_MS, it is restarted, and a new watch (maximumAge 0) starts with a fresh fix
+// (a warm GPS answers within about a second). A restarted watch that is still waiting is given REARM_GRACE_MS before
+// the next restart, so a slow fix is not cut off again and again. Nothing is restarted while the tab is hidden (no
+// battery spent for an unseen map). A watch is restarted rather than a one-off reading asked for: a one-off reading
+// cannot be cancelled when the map closes, and a browser with a simulated position (DevTools, browser tests) never
+// answers it while a watch runs and then holds back the next page's location check as well.
+export const REFRESH_MS = 3000;
+export const ASK_AHEAD_MS = 1000;
+export const REARM_GRACE_MS = 6000;
+const REFRESH_CHECK_MS = 250;
+
 // How far the true position can drift from the prediction per second, as a variance (m²/s): a person changing pace
-// or turning. Smaller smooths more, larger follows quicker.
-const DRIFT_M2_PER_S = 9;
+// or turning. Smaller smooths more, larger follows quicker. Set to stay close to the device: a 5 m fix every second
+// moves the ball about three quarters of the way at once, so the ball sits where the phone says it is.
+const DRIFT_M2_PER_S = 60;
+// A precise fix always counts at least this much, so a long still stretch (where the estimate grows very sure of
+// itself) never leaves the ball hanging a metre off the device.
+const MIN_TRUSTED_GAIN = 0.5;
 const M_PER_DEG = 111320;
 
 /** A position moved `east` and `north` metres. */
@@ -49,9 +68,13 @@ const SPEED_GAIN = 0.35;
 const MAX_SPEED_MPS = 3;
 const TRUSTED_FIX_M = 15;
 
-/** The walking velocity [east, north] in m/s the GPS reported with a fix, or null without one. */
+/**
+ * The walking velocity [east, north] in m/s the GPS reported with a fix, or null without one. Below a slow walk the
+ * reported speed is GPS noise (a phone lying on a table says 0.2 m/s in a random direction), so it counts as standing.
+ */
 function gpsVelocity({ speed, heading }) {
   if (!Number.isFinite(speed) || !Number.isFinite(heading)) return null;
+  if (speed <= MOVING_MPS) return [0, 0];
   const angle = (heading * Math.PI) / 180;
   return [speed * Math.sin(angle), speed * Math.cos(angle)];
 }
@@ -62,11 +85,20 @@ function gpsVelocity({ speed, heading }) {
  * then each new fix is weighed by its accuracy against it: GPS jitter is smoothed out, a coarse Wi-Fi fix hardly
  * moves a precise one, and the ball keeps up with a walking visitor instead of trailing behind. A fix far outside
  * both accuracies is a real jump and is taken as it is. A fix is { lat, lng, accuracy (m), time (ms), speed (m/s)
- * and heading (degrees) or null }; the result also carries `velocity`.
+ * and heading (degrees) or null }; the result also carries `velocity` and `raw` (the last fix as it came).
+ * A fix older than the last one, or the same fix delivered again, is not new evidence: `shown` is returned as it
+ * is, so the shown accuracy never shrinks from counting one reading twice.
  */
 export function fuseFix(shown, fix) {
-  const fresh = { ...fix, velocity: gpsVelocity(fix) ?? [0, 0] };
+  const raw = { lat: fix.lat, lng: fix.lng, accuracy: fix.accuracy, time: fix.time };
+  const fresh = { ...fix, raw, velocity: gpsVelocity(fix) ?? [0, 0] };
   if (!shown) return fresh;
+  const again =
+    fix.time === shown.raw?.time &&
+    fix.lat === shown.raw.lat &&
+    fix.lng === shown.raw.lng &&
+    fix.accuracy === shown.raw.accuracy;
+  if (fix.time < shown.time || again || !Number.isFinite(fix.accuracy)) return shown;
   const seconds = Math.max(0, (fix.time - shown.time) / 1000);
   const [east, north] = shown.velocity ?? [0, 0];
   const ahead = moved(shown, east * seconds, north * seconds);
@@ -74,10 +106,18 @@ export function fuseFix(shown, fix) {
   const off = distanceM([ahead.lat, ahead.lng], [fix.lat, fix.lng]);
   // Further off than 2.5 times the combined uncertainty of the estimate and the fix: a real move, taken as it is.
   if (off > 2.5 * Math.sqrt(variance + fix.accuracy ** 2)) return fresh;
-  const gain = variance / (variance + fix.accuracy ** 2);
+  const kalman = variance / (variance + fix.accuracy ** 2);
+  const gain = fix.accuracy <= TRUSTED_FIX_M ? Math.max(kalman, MIN_TRUSTED_GAIN) : kalman;
   const lat = ahead.lat + gain * (fix.lat - ahead.lat);
   const lng = ahead.lng + gain * (fix.lng - ahead.lng);
-  return { ...fix, lat, lng, accuracy: Math.sqrt((1 - gain) * variance), velocity: learn() };
+  return {
+    ...fix,
+    lat,
+    lng,
+    accuracy: Math.sqrt((1 - gain) * variance),
+    raw,
+    velocity: learn(),
+  };
 
   /** The velocity for the next step: the GPS's own, else nudged by how far this fix was from the prediction. */
   function learn() {
@@ -116,7 +156,7 @@ export function compassFrom(event, screenTurn = 0) {
 
 /**
  * Live location. `status`: off (not asked yet), waiting, on, denied or unavailable. `position` is
- * { lat, lng, accuracy } and `heading` 0-360 or null. Watching starts by itself only when the browser already
+ * { lat, lng, accuracy, velocity ([east, north] m/s) } and `heading` 0-360 or null. Watching starts by itself only when the browser already
  * allows location for this site; otherwise `start()` (from a tap) asks first.
  */
 export function useLiveLocation() {
@@ -130,6 +170,9 @@ export function useLiveLocation() {
   const hasCompass = useRef(false);
   // The last gyroscope-only reading and how far to turn such readings to north (from the walking direction).
   const gyro = useRef({ last: null, offset: 0 });
+  // When the last reading came and when the watch was last restarted (browser clock, REFRESH_MS).
+  const lastReadingAt = useRef(0);
+  const refresh = useRef({ timer: null, rearmedAt: 0 });
 
   const onCompass = useCallback((event) => {
     const reading = compassFrom(event, screenAngle());
@@ -177,45 +220,76 @@ export function useLiveLocation() {
       return;
     }
     setState((now) => ({ ...now, status: now.position ? 'on' : 'waiting' }));
-    watch.current = navigator.geolocation.watchPosition(
-      (reading) => {
-        const fix = {
-          lat: reading.coords.latitude,
-          lng: reading.coords.longitude,
-          accuracy: reading.coords.accuracy,
-          time: reading.timestamp ?? Date.now(),
-          speed: reading.coords.speed,
-          heading: reading.coords.heading,
-        };
-        const fused = fuseFix(shown.current, fix);
-        shown.current = fused;
-        const next = headingFrom(reading, anchor.current);
-        anchor.current = next.anchor;
-        if (next.fromGps) {
-          gpsHeadingAt.current = Date.now();
-          // While walking, the gyroscope learns where north is, so it can turn the arrow when the visitor stops.
-          if (gyro.current.last !== null)
-            gyro.current.offset = wrap(next.heading - gyro.current.last);
-        }
-        setState((now) => ({
-          ...now,
-          status: 'on',
-          position: { lat: fused.lat, lng: fused.lng, accuracy: fused.accuracy },
-          heading: next.heading ?? now.heading,
-        }));
-      },
-      (error) => {
-        if (error.code === 1) {
-          navigator.geolocation.clearWatch(watch.current);
-          watch.current = null;
-          setState({ status: 'denied', position: null, heading: null });
-        } else {
-          setState((now) => (now.position ? now : { ...now, status: 'unavailable' }));
-        }
-      },
-      // Always a fresh fix from the GPS (never a cached one), as precise as the device can give.
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 },
-    );
+    const stopRefresh = () => {
+      clearInterval(refresh.current.timer);
+      refresh.current = { timer: null, rearmedAt: 0 };
+    };
+    const onFailure = (error) => {
+      if (error.code === 1) {
+        navigator.geolocation.clearWatch(watch.current);
+        watch.current = null;
+        stopRefresh();
+        setState({ status: 'denied', position: null, heading: null });
+      } else {
+        setState((now) => (now.position ? now : { ...now, status: 'unavailable' }));
+      }
+    };
+    const onReading = (reading) => {
+      lastReadingAt.current = Date.now();
+      const fix = {
+        lat: reading.coords.latitude,
+        lng: reading.coords.longitude,
+        accuracy: reading.coords.accuracy,
+        time: reading.timestamp ?? Date.now(),
+        speed: reading.coords.speed,
+        heading: reading.coords.heading,
+      };
+      const fused = fuseFix(shown.current, fix);
+      if (fused === shown.current) return;
+      shown.current = fused;
+      const next = headingFrom(reading, anchor.current);
+      anchor.current = next.anchor;
+      if (next.fromGps) {
+        gpsHeadingAt.current = Date.now();
+        // While walking, the gyroscope learns where north is, so it can turn the arrow when the visitor stops.
+        if (gyro.current.last !== null)
+          gyro.current.offset = wrap(next.heading - gyro.current.last);
+      }
+      setState((now) => ({
+        ...now,
+        status: 'on',
+        // The walking velocity [east, north] in m/s lets the map walk the ball on between two readings.
+        position: {
+          lat: fused.lat,
+          lng: fused.lng,
+          accuracy: fused.accuracy,
+          velocity: fused.velocity,
+        },
+        heading: next.heading ?? now.heading,
+      }));
+    };
+    // Always a fresh fix from the GPS (never a cached one), as precise as the device can give.
+    const watchNow = () =>
+      navigator.geolocation.watchPosition(onReading, onFailure, {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: 20000,
+      });
+    lastReadingAt.current = Date.now();
+    watch.current = watchNow();
+    stopRefresh();
+    refresh.current.timer = setInterval(() => {
+      const now = Date.now();
+      const quiet = now - lastReadingAt.current >= REFRESH_MS - ASK_AHEAD_MS;
+      // A restart that has not answered yet keeps its grace time.
+      const waiting =
+        refresh.current.rearmedAt > lastReadingAt.current &&
+        now - refresh.current.rearmedAt < REARM_GRACE_MS;
+      if (!quiet || waiting || document.hidden || watch.current === null) return;
+      navigator.geolocation.clearWatch(watch.current);
+      refresh.current.rearmedAt = now;
+      watch.current = watchNow();
+    }, REFRESH_CHECK_MS);
   }, [listenToCompass]);
 
   // Only a site that is already allowed starts at once, so the map never asks for location without a tap.
@@ -235,6 +309,8 @@ export function useLiveLocation() {
     () => () => {
       if (watch.current !== null) navigator.geolocation.clearWatch(watch.current);
       watch.current = null;
+      clearInterval(refresh.current.timer);
+      refresh.current = { timer: null, rearmedAt: 0 };
       window.removeEventListener('deviceorientationabsolute', onCompass);
       window.removeEventListener('deviceorientation', onCompass);
       compassOn.current = false;

@@ -59,6 +59,9 @@ const query = (params) => {
 
 const realApi = {
   requestOtp: (email) => post('/auth/request-otp', { email }),
+  // BR52: is the code preview (test inbox) on? Asked by the login page before anyone is logged in.
+  authConfig: () => request('GET', '/auth/config'),
+  otpPreview: (email) => post('/auth/otp-preview', { email }),
   verify: (payload) => post('/auth/verify', payload),
   logout: () => post('/auth/logout'),
   me: () => request('GET', '/me'),
@@ -93,6 +96,7 @@ const realApi = {
   invitePlayer: (playerId) => post('/teams/me/invitations', { playerId }),
   cancelInvitation: (id) => post(`/teams/me/invitations/${id}/cancel`),
   removeFromTeam: (studentId) => request('DELETE', `/teams/me/members/${studentId}`),
+  leaveTeam: () => post('/teams/me/leave'),
   mapStyle: () => request('GET', '/me/map-style'),
   saveMapStyle: (style) => request('PUT', '/me/map-style', { body: style }),
   resetMapStyle: () => request('DELETE', '/me/map-style'),
@@ -121,6 +125,12 @@ const realApi = {
     removeMember: (teamId, studentId) =>
       request('DELETE', `/admin/teams/${teamId}/members/${studentId}`),
     deleteTeam: (id) => request('DELETE', `/admin/teams/${id}`),
+    setTeamLeader: (teamId, studentId) =>
+      request('PUT', `/admin/teams/${teamId}/leader`, { body: { studentId } }),
+    reorderTeam: (teamId, studentIds) =>
+      request('PUT', `/admin/teams/${teamId}/order`, { body: { studentIds } }),
+    settings: () => request('GET', '/admin/settings'),
+    saveSettings: (body) => request('PUT', '/admin/settings', { body }),
     quests: () => request('GET', '/admin/checkpoints'),
     quest: (id) => request('GET', `/admin/checkpoints/${id}`),
     checkLink: (mapLink) => post('/admin/checkpoints/check-link', { mapLink }),

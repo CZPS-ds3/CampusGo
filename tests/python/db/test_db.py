@@ -16,6 +16,7 @@ TABLES = {
     "checkpoints",
     "checkpoint_facts",
     "checkpoint_images",
+    "question_images",
     "questions",
     "options",
     "attempts",
@@ -237,3 +238,22 @@ def test_only_one_active_session_per_student_is_possible(db):
         "WHERE table_schema = DATABASE() AND table_name = 'sessions' AND column_name = 'active_student_id'",
     )
     assert any(index["non_unique"] == 0 for index in indexes)
+
+
+def test_question_photos_belong_to_one_question_and_say_when_they_are_shown(db):
+    """BR11: question photos live in the database; `shown` is 'question' or 'answer' (migration 013)."""
+    columns = {
+        row["name"]: row["type"]
+        for row in query(
+            db,
+            "SELECT COLUMN_NAME AS name, COLUMN_TYPE AS type FROM information_schema.columns "
+            "WHERE table_schema = DATABASE() AND table_name = 'question_images'",
+        )
+    }
+    assert columns["shown"] == "enum('question','answer')"
+    rules = query(
+        db,
+        "SELECT DELETE_RULE AS rule FROM information_schema.referential_constraints "
+        "WHERE constraint_schema = DATABASE() AND table_name = 'question_images'",
+    )
+    assert [rule["rule"] for rule in rules] == ["CASCADE"]
