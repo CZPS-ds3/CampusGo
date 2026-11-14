@@ -6,6 +6,7 @@
 import { AppError } from '../middleware/errors.js';
 
 export const MAP_BASES = ['follow', 'light', 'dark'];
+// Calmer since 2026-11-14: fast is the old normal pace, normal the old slow one, slow slower still.
 export const SONAR_SPEEDS = ['slow', 'normal', 'fast'];
 export const SONAR_LOOKS = ['sova', 'soft'];
 
@@ -19,7 +20,7 @@ export const DEFAULT_MAP_STYLE = {
   route: '#e2001a',
   buildings: '#dcd9d4',
   ball: { body: '#ffffff', lines: '#e2001a' },
-  sonar: { show: true, color: '#e2001a', speed: 'normal', look: 'sova', ping: true },
+  sonar: { show: true, color: '#e2001a', speed: 'normal', look: 'soft', ping: true },
 };
 
 const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;

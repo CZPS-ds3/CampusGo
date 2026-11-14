@@ -186,7 +186,7 @@ export function GeofenceEditor({
             max={SLIDER_MAX}
             step={SLIDER_STEP}
             value={
-              Number.isFinite(radius) ? Math.min(SLIDER_MAX, Math.max(SLIDER_MIN, radius)) : 80
+              Number.isFinite(radius) ? Math.min(SLIDER_MAX, Math.max(SLIDER_MIN, radius)) : 35
             }
             aria-valuetext={Number.isFinite(radius) ? `${radius} m` : undefined}
             onChange={(event) => set(event.target.value)}

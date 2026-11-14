@@ -1,5 +1,12 @@
 import { expect, test } from '@playwright/test';
-import { expectNoHorizontalScroll, login, open, openCheckpoint, shot } from './helpers.js';
+import {
+  chooseMapView,
+  expectNoHorizontalScroll,
+  login,
+  open,
+  openCheckpoint,
+  shot,
+} from './helpers.js';
 
 // Made-up test positions on the Bildungscampus (the seed's placeholder checkpoints), never a real student's.
 const CAMPUS_GARDEN = { latitude: 49.147082, longitude: 9.217206, accuracy: 10 };
@@ -55,26 +62,55 @@ async function fakeRouter(page) {
 
 const viewSwitch = (page) => page.getByRole('switch', { name: '3D map' });
 const following = (page) => expect(page.getByTestId('recenter')).toHaveClass(/is-following/);
-/** Zoom levels of the street tiles on screen (Leaflet loads whole-number tile levels). */
+/** Zoom levels of the street tiles on screen (the Leaflet fallback loads whole-number tile levels). */
 const tileZooms = (page) =>
   page
     .locator('img.leaflet-tile')
     .evaluateAll((tiles) => [
       ...new Set(tiles.map((tile) => tile.src.match(/openstreetmap\.org\/(\d+)\//)?.[1])),
     ]);
+/** The tilt the compass needle shows, in degrees (it tilts with the map). */
+const needleTilt = (page) =>
+  page
+    .locator('.mapctl__needle')
+    .evaluate((needle) => Number(needle.style.transform.match(/rotateX\(([\d.]+)deg\)/)?.[1]));
 
-test.describe('map buttons, 3D map and live location', () => {
+/**
+ * Clicks the 2D/3D switch in the page and samples the needle's tilt every 30 ms until it reaches `until` (measured in
+ * the page, because the test runner can be slower than the animation).
+ */
+const switchAndSampleTilt = (page, until) =>
+  page.evaluate(
+    (end) =>
+      new Promise((resolve) => {
+        const tilts = [];
+        document.querySelector('[role="switch"][aria-label="3D map"]').click();
+        const sample = setInterval(() => {
+          const tilt = document
+            .querySelector('.mapctl__needle')
+            ?.style.transform.match(/rotateX\(([\d.]+)deg\)/)?.[1];
+          if (tilt !== undefined) tilts.push(Number(tilt));
+          if (Math.abs(tilts.at(-1) - end) < 0.1 || tilts.length > 1000) {
+            clearInterval(sample);
+            resolve(tilts);
+          }
+        }, 30);
+      }),
+    until,
+  );
+
+test.describe('map buttons, 2D and 3D on one map, and live location', () => {
   test('the 3D view chosen in the preferences opens with pins and the puck; the switch shows the view that is on', async ({
     page,
   }, testInfo) => {
     await offlineMap(page);
     await login(page);
     await open(page, '/profile');
-    await page.getByTestId('map-type').getByRole('radio', { name: '3D with buildings' }).click();
+    await page.getByTestId('map-type').getByRole('radio', { name: '3D', exact: true }).click();
     await page.goto('/map');
 
     const map = page.getByTestId('map-3d');
-    await expect(map).toBeVisible({ timeout: 25_000 }); // MapLibre is loaded on demand
+    await expect(map).toBeVisible({ timeout: 25_000 }); // MapLibre is loaded apart from the app
     await expect(map.locator('canvas.maplibregl-canvas')).toBeVisible();
     await expect(viewSwitch(page)).toHaveText('3D');
     await expect(viewSwitch(page)).toHaveAttribute('aria-checked', 'true');
@@ -95,94 +131,62 @@ test.describe('map buttons, 3D map and live location', () => {
     await expect(page.getByRole('dialog')).toBeVisible();
     await page.keyboard.press('Escape');
 
+    // 2D is the same map, flat: it still turns, so the compass stays.
     await viewSwitch(page).click();
     await expect(viewSwitch(page)).toHaveText('2D');
-    await expect(page.locator('.leaflet-container')).toBeVisible();
-    await expect(page.locator('.leaflet-container .puck')).toBeVisible();
+    await expect(map).toBeVisible();
+    await expect(map.locator('.puck')).toBeVisible();
+    await expect(page.locator('.leaflet-container')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Point the map north' })).toBeVisible();
+    await expect.poll(() => needleTilt(page), { timeout: 10_000 }).toBe(0);
   });
 
-  test('switching 2D/3D and aerial/street does not move the map, and the closest zoom still shows the map', async ({
+  test('2D is the turnable MapLibre map; the switch tilts the same map in and out without moving it', async ({
     page,
   }) => {
     await offlineMap(page);
     await login(page);
-    await page.goto('/map');
+    await chooseMapView(page, '2d');
+    const map = page.getByTestId('map-3d');
+    await expect(map).toBeVisible({ timeout: 25_000 });
     await following(page);
+    await expect(page.locator('.leaflet-container')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Point the map north' })).toBeVisible();
+    await expect(viewSwitch(page)).toHaveText('2D');
+    await expect.poll(() => needleTilt(page)).toBe(0);
 
-    // Street map from the aerial/street switch; wait for the fly-in to the close following view (about 20.4, on a
-    // phone the closest zoom, drawn with the street server's last tiles, 19), then zoom step by step (a click during
-    // an animation would be cut short by it).
-    await page.getByRole('switch', { name: 'Aerial photo' }).click();
-    await expect(page.getByRole('switch', { name: 'Aerial photo' })).toHaveAttribute(
-      'aria-checked',
-      'false',
-    );
-    await expect.poll(() => tileZooms(page), { timeout: 20_000 }).toEqual(['19']);
-
-    // Closer than the tile server goes: its last level is enlarged instead of the map going blank.
+    // Away from the following view, so the switch keeps the place and the zoom: zoomed out, and the map moved by
+    // hand, so it no longer follows (a new reading would otherwise pan it while the test measures).
     for (let step = 0; step < 2; step += 1) {
-      await page.getByRole('button', { name: 'Zoom in' }).click();
-      await page.waitForTimeout(400);
-    }
-    await expect.poll(() => tileZooms(page)).toEqual(['19']);
-    await expect(page.locator('img.leaflet-tile').first()).toBeVisible();
-
-    for (let step = 0; step < 4; step += 1) {
       await page.getByRole('button', { name: 'Zoom out' }).click();
       await page.waitForTimeout(400);
     }
-    await expect.poll(() => tileZooms(page)).toEqual(['17']);
-    const library = page.locator('.leaflet-marker-icon[title="Library"]');
-    await page.waitForTimeout(500);
+    const box = await map.boundingBox();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 + 30, box.y + box.height / 2 + 20, { steps: 5 });
+    await page.mouse.up();
+    await expect(page.getByTestId('recenter')).not.toHaveClass(/is-following/);
+    const library = map.locator('.map3d-pin[title="Library"]');
+    await page.waitForTimeout(1500);
     const before = await library.boundingBox();
     const zoomIn = page.getByRole('button', { name: 'Zoom in' });
     const plusIn2d = await zoomIn.boundingBox();
 
-    await viewSwitch(page).click();
-    await expect(page.getByTestId('map-3d')).toBeVisible({ timeout: 25_000 });
-    // The compass appears above "+" in a slot kept free on the flat map, so no button moves.
-    await expect(page.getByRole('button', { name: 'Point the map north' })).toBeVisible();
+    // Into 3D: the same map tilts in, step by step; no button moves.
+    const tiltsIn = await switchAndSampleTilt(page, 55);
+    expect(tiltsIn.at(-1)).toBeCloseTo(55, 0);
+    expect(tiltsIn.some((tilt) => tilt > 5 && tilt < 50)).toBe(true);
+    await expect(viewSwitch(page)).toHaveText('3D');
     expect(await zoomIn.boundingBox()).toEqual(plusIn2d);
-    // The 3D map tilts in on the spot; the compass needle tilts with it.
-    const needle = page.locator('.mapctl__needle');
-    await expect(needle).toHaveAttribute('style', /rotateX\(55deg\)/, { timeout: 25_000 });
-    // The way back is the tilt in reverse: the 3D map flattens step by step, then the flat map takes over.
-    // Measured in the page, because the test runner itself can be slower than the animation.
-    const back = await page.evaluate(
-      () =>
-        new Promise((resolve) => {
-          const started = performance.now();
-          const compass = document.querySelector('.mapctl__needle');
-          const tilts = [];
-          const toggle = document.querySelector('[role="switch"][aria-label="3D map"]');
-          let early = null;
-          // Shortly after the tap: the switch already shows 2D while the 3D map is still flattening.
-          setTimeout(() => {
-            early = {
-              checked: toggle.getAttribute('aria-checked'),
-              text: toggle.textContent,
-              still3d: Boolean(document.querySelector('[data-testid="map-3d"]')),
-            };
-          }, 60);
-          const sample = setInterval(() => {
-            const tilt = compass?.style.transform.match(/rotateX\(([\d.]+)deg\)/)?.[1];
-            if (tilt !== undefined) tilts.push(Number(tilt));
-          }, 50);
-          toggle.click();
-          const watcher = new MutationObserver(() => {
-            if (!document.querySelector('.leaflet-container')) return;
-            watcher.disconnect();
-            clearInterval(sample);
-            resolve({ ms: performance.now() - started, tilts, early });
-          });
-          watcher.observe(document.body, { childList: true, subtree: true });
-        }),
-    );
-    expect(back.early).toEqual({ checked: 'false', text: '2D', still3d: true });
-    expect(back.ms).toBeGreaterThan(400);
-    expect(back.tilts.some((tilt) => tilt > 5 && tilt < 50)).toBe(true);
-    await expect(page.locator('.leaflet-container')).toBeVisible();
-    await expect.poll(() => tileZooms(page)).toEqual(['17']);
+
+    // Back to 2D: the tilt in reverse, on the same map, and the pin is where it was.
+    const tiltsOut = await switchAndSampleTilt(page, 0);
+    expect(tiltsOut.at(-1)).toBeLessThan(0.1);
+    expect(tiltsOut.some((tilt) => tilt > 5 && tilt < 50)).toBe(true);
+    await expect(viewSwitch(page)).toHaveText('2D');
+    await expect(page.locator('.leaflet-container')).toHaveCount(0);
+    await page.waitForTimeout(300);
     const after = await library.boundingBox();
     expect(Math.abs(after.x - before.x)).toBeLessThan(3);
     expect(Math.abs(after.y - before.y)).toBeLessThan(3);
@@ -190,31 +194,9 @@ test.describe('map buttons, 3D map and live location', () => {
     // Aerial photo and back to the street map: the map stays where it is.
     await page.getByRole('switch', { name: 'Aerial photo' }).click();
     await page.getByRole('switch', { name: 'Aerial photo' }).click();
-    await expect.poll(() => tileZooms(page)).toEqual(['17']);
+    await page.waitForTimeout(300);
     const again = await library.boundingBox();
     expect(Math.abs(again.x - before.x)).toBeLessThan(3);
-
-    // Into 3D a second time without moving the map: it tilts in again, step by step (sampled in the page from the
-    // click on, because the test runner can be slower than the animation).
-    const tiltsIn = await page.evaluate(
-      () =>
-        new Promise((resolve) => {
-          const tilts = [];
-          document.querySelector('[role="switch"][aria-label="3D map"]').click();
-          const sample = setInterval(() => {
-            const tilt = document
-              .querySelector('.mapctl__needle')
-              ?.style.transform.match(/rotateX\(([\d.]+)deg\)/)?.[1];
-            if (tilt !== undefined) tilts.push(Number(tilt));
-            if (tilts.at(-1) >= 54.9 || tilts.length > 1000) {
-              clearInterval(sample);
-              resolve(tilts);
-            }
-          }, 30);
-        }),
-    );
-    expect(tiltsIn.at(-1)).toBeGreaterThanOrEqual(54.9);
-    expect(tiltsIn.some((tilt) => tilt > 5 && tilt < 50)).toBe(true);
   });
 
   test('moving the map stops following; Re-center flies back to the live position', async ({
@@ -223,10 +205,11 @@ test.describe('map buttons, 3D map and live location', () => {
     await offlineMap(page);
     await login(page);
     await page.goto('/map');
+    const map = page.getByTestId('map-3d');
+    await expect(map.locator('.puck')).toBeVisible({ timeout: 25_000 });
     await following(page);
-    await expect(page.locator('.leaflet-container .puck')).toBeVisible();
 
-    const box = await page.locator('.leaflet-container').boundingBox();
+    const box = await map.boundingBox();
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
     await page.mouse.move(box.x + box.width / 2 + 120, box.y + box.height / 2 + 80, { steps: 8 });
@@ -239,14 +222,17 @@ test.describe('map buttons, 3D map and live location', () => {
     await following(page);
   });
 
-  test('the walking route starts at the live position and shrinks while walking', async ({
+  test('on the Leaflet fallback, the walking route starts at the live position and shrinks while walking', async ({
     page,
     context,
   }) => {
+    // The Leaflet map draws the route as SVG paths that can be measured here; MapLibre draws it into its canvas (its
+    // route layers are checked in map-3d.test.js).
     await context.setGeolocation(CAMPUS_GARDEN);
-    await offlineMap(page);
+    await offlineMap(page, { styleStatus: 503 });
     await fakeRouter(page);
     await login(page);
+    await expect(page.locator('.leaflet-container')).toBeVisible({ timeout: 25_000 });
     await openCheckpoint(page, 'Building B');
     await page.getByRole('button', { name: 'Show walking route' }).click();
 
@@ -270,14 +256,39 @@ test.describe('map buttons, 3D map and live location', () => {
     await expect(page.getByText('You have arrived at Building B.')).toBeVisible();
   });
 
-  test('when the 3D map cannot load, the student is told and gets the flat map', async ({
+  test('when MapLibre cannot load, the student is told and gets the flat Leaflet map, which still draws the closest zoom', async ({
     page,
   }) => {
     await offlineMap(page, { styleStatus: 503 });
     await login(page);
-    await page.goto('/map');
-    await viewSwitch(page).click();
+    await chooseMapView(page, '2d');
     // The dev server needs a while for MapLibre the first time when many tests run in parallel.
+    await expect(
+      page.getByText('The turnable map could not be loaded, so a simpler flat map is shown.'),
+    ).toBeVisible({ timeout: 25_000 });
+    await expect(page.locator('.leaflet-container')).toBeVisible();
+    // The fallback cannot turn, so it has no compass.
+    await expect(page.getByRole('button', { name: 'Point the map north' })).toHaveCount(0);
+    await following(page);
+
+    // New accounts start on the street map; wait for the fly-in to the close following view (on a phone the closest
+    // zoom, drawn with the street server's last tiles, 19), then zoom step by step (a click during an animation would
+    // be cut short).
+    await expect(page.getByRole('switch', { name: 'Aerial photo' })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    );
+    await expect.poll(() => tileZooms(page), { timeout: 20_000 }).toEqual(['19']);
+    // Closer than the tile server goes: its last level is enlarged instead of the map going blank.
+    for (let step = 0; step < 2; step += 1) {
+      await page.getByRole('button', { name: 'Zoom in' }).click();
+      await page.waitForTimeout(400);
+    }
+    await expect.poll(() => tileZooms(page)).toEqual(['19']);
+    await expect(page.locator('img.leaflet-tile').first()).toBeVisible();
+
+    // 3D tries MapLibre again; when it still cannot load, the student is told and keeps the flat map.
+    await viewSwitch(page).click();
     await expect(
       page.getByText('The 3D map could not be loaded, so the flat map is shown.'),
     ).toBeVisible({ timeout: 25_000 });
@@ -307,46 +318,55 @@ test.describe('map buttons, 3D map and live location', () => {
     await expect(page.getByRole('dialog')).toHaveCount(0);
   });
 
-  test('BR48 regression: the tint shows on the flat street map, the aerial photo stays untinted', async ({
+  test('BR48 regression: the tint shows on the flat Leaflet street map, the aerial photo stays untinted', async ({
     page,
   }) => {
-    await offlineMap(page);
+    await offlineMap(page, { styleStatus: 503 });
     await login(page);
     await open(page, '/profile');
     const settings = page.getByTestId('map-style');
     await settings.locator('summary').click();
-    await settings.getByRole('button', { name: /Ocean/ }).click(); // tint 30 %
-    await settings.getByRole('button', { name: 'Save map style' }).click();
-    await expect(page.getByText('Map style saved')).toBeVisible();
+    await settings.getByRole('button', { name: 'Next map theme' }).click(); // Ocean: tint 30 %
+    await expect(settings.getByTestId('map-theme-name')).toContainText('Ocean');
+    await settings.getByRole('button', { name: 'Save customisation' }).click();
+    await expect(page.getByText('Customisation saved')).toBeVisible();
 
     await page.goto('/map');
+    await expect(page.locator('.leaflet-container')).toBeVisible({ timeout: 25_000 });
     const opacityOf = (selector) =>
       page
         .locator(selector)
         .first()
         .evaluate((layer) => getComputedStyle(layer).opacity);
-    // Leaflet writes an inline opacity of 1 on every tile layer; the tint must still win on the street map.
-    await page.getByRole('switch', { name: 'Aerial photo' }).click();
+    // Leaflet writes an inline opacity of 1 on every tile layer; the tint must still win on the street map (where
+    // new accounts start).
     await expect.poll(() => opacityOf('.leaflet-container .map-tiles--street')).toBe('0.7');
     await page.getByRole('switch', { name: 'Aerial photo' }).click();
     await expect(page.locator('.leaflet-container .map-tiles--street')).toHaveCount(0);
     await expect.poll(() => opacityOf('.leaflet-container .leaflet-layer')).toBe('1');
   });
 
-  test('BR48 the map style offers a colour for the 3D buildings', async ({ page }) => {
+  test('BR48 Customisation offers a colour for the 3D buildings, edited in a popup', async ({
+    page,
+  }) => {
     await login(page);
     await open(page, '/profile');
     const settings = page.getByTestId('map-style');
     await settings.locator('summary').click();
-    await settings.getByRole('button', { name: 'Buildings (3D map)' }).click();
-    const editor = settings.getByTestId('colour-Buildings (3D map)');
-    await editor.getByLabel('Colour code').fill('#123456');
-    await settings.getByRole('button', { name: 'Save map style' }).click();
-    await expect(page.getByText('Map style saved')).toBeVisible();
+    await settings.getByRole('button', { name: 'Buildings (3D map)' }).dblclick();
+    const popup = page.getByRole('dialog', { name: 'Buildings (3D map)' });
+    await popup.getByTestId('colour-Buildings (3D map)').getByLabel('Colour code').fill('#123456');
+    await popup.getByRole('button', { name: 'Close' }).click();
+    await expect(popup).toHaveCount(0);
+    await settings.getByRole('button', { name: 'Save customisation' }).click();
+    await expect(page.getByText('Customisation saved')).toBeVisible();
     await page.reload();
     await open(page, '/profile'); // a reload starts on the map
     await page.getByTestId('map-style').locator('summary').click();
-    await page.getByTestId('map-style').getByRole('button', { name: 'Buildings (3D map)' }).click();
+    await page
+      .getByTestId('map-style')
+      .getByRole('button', { name: 'Buildings (3D map)' })
+      .dblclick();
     await expect(
       page.getByTestId('colour-Buildings (3D map)').getByLabel('Colour code'),
     ).toHaveValue('#123456');

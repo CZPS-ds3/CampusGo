@@ -1,6 +1,7 @@
 import { LngLatBounds, Map as MapLibreMap, Marker } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNight } from '../daylight.js';
 import { useSonar } from '../hooks/useSonar.js';
 import { t, useSettings } from '../i18n.js';
 import {
@@ -23,7 +24,6 @@ import {
   PIN_ANCHOR,
   PIN_SIZE,
   PUCK_SIZE,
-  accuracyRingPx,
   createFollower,
   groundHtml,
   metresPerPixel,
@@ -41,6 +41,13 @@ const ROUTE_PADDING = { top: 200, left: 50, bottom: 150, right: 50 };
 // Following the visitor looks a little steeper, like a navigation app.
 const FOLLOW_PITCH = 60;
 const TILT_MS = 700;
+const MAX_PITCH = 70;
+const FLIGHT_LIMIT_MS = 5000;
+/** The tilt of the view: none on the flat (2D) map, PITCH or the steeper following tilt in 3D. */
+const pitchOf = (flat, following = false) => {
+  if (flat) return 0;
+  return following ? FOLLOW_PITCH : PITCH;
+};
 
 /** A focusable pin that opens its checkpoint with a click, Enter or Space, like the flat map's markers. */
 function pinElement(checkpoint, selected, onSelect) {
@@ -83,8 +90,8 @@ function closeCreditsOnce(container) {
   watcher.observe(credits, { attributes: true, attributeFilter: ['class'] });
 }
 
-/** Tilted camera that shows all points, keeping the current turn of the map. */
-function showAll(map, points, padding, animate) {
+/** Camera that shows all points at the given tilt, keeping the current turn of the map. */
+function showAll(map, points, padding, animate, pitch) {
   const bounds = new LngLatBounds();
   for (const [lat, lng] of points) bounds.extend([lng, lat]);
   const camera = map.cameraForBounds(bounds, {
@@ -93,17 +100,19 @@ function showAll(map, points, padding, animate) {
     bearing: map.getBearing(),
   });
   if (!camera) return;
-  const target = { ...camera, pitch: PITCH };
+  const target = { ...camera, pitch };
   if (animate) map.easeTo({ ...target, essential: false });
   else map.jumpTo(target);
 }
 
 /**
- * The 3D campus map (MapLibre GL): OpenFreeMap street map or the LGL aerial photo with extruded buildings, the
- * same pins as the flat map, the live position and the student's map style (BR48). The buttons live outside the
- * map (MapControls); this component hands them a small camera API through `onReady`. `camera` is shared with the
- * flat map, so switching between 2D and 3D keeps the place and the zoom. `onFail` is called when the map cannot
- * be shown (no WebGL, map style not reachable), so the page can fall back to the flat map.
+ * The campus map in 2D and 3D (MapLibre GL): OpenFreeMap street map or the LGL aerial photo, the pins, the live
+ * position and the student's map style (BR48). `flat` is the 2D view: no tilt and no raised buildings, but the map
+ * still turns (two fingers, or the right mouse button); 3D tilts it and raises the buildings. A switch eases between
+ * the two on the same map. The buttons live outside the map (MapControls); this component hands them a small camera
+ * API through `onReady`. `camera` is shared with the Leaflet fallback, so a switch keeps the place and the zoom.
+ * `onFail` is called when the map cannot be shown (no WebGL, map style not reachable), so the page can fall back
+ * to the Leaflet map.
  */
 export default function MapView3D({
   checkpoints,
@@ -113,6 +122,7 @@ export default function MapView3D({
   me = null,
   heading = null,
   base,
+  flat = false,
   camera,
   mayFitPins,
   onReady,
@@ -130,6 +140,7 @@ export default function MapView3D({
   const mapStyle = useMapStyle();
   const { theme } = useSettings();
   const dark = isDark(mapStyle, theme);
+  const night = useNight();
   const resizeSonar = useSonar({
     container,
     zoomNow: () => (map.current ? fromGlZoom(map.current.getZoom()) : null),
@@ -150,6 +161,7 @@ export default function MapView3D({
     heading,
     me,
     resizeSonar,
+    flat,
   };
 
   useEffect(() => {
@@ -164,8 +176,8 @@ export default function MapView3D({
   }, [dark]);
 
   const style = useMemo(
-    () => baseStyle && buildStyle(baseStyle, { mapStyle, dark, base, route }),
-    [baseStyle, mapStyle, dark, base, route],
+    () => baseStyle && buildStyle(baseStyle, { mapStyle, dark, base, route, flat, night }),
+    [baseStyle, mapStyle, dark, base, route, flat, night],
   );
 
   // The map is made once, with the first complete style; later changes are applied as a style diff.
@@ -176,8 +188,9 @@ export default function MapView3D({
       return;
     }
     const saved = camera.current;
-    // Coming from the flat map: the same place, zoom and north-up view, then a smooth tilt on the spot.
-    const fromFlat = saved?.pitch === 0;
+    const startFlat = latest.current.flat;
+    // Coming from the Leaflet map (always flat and north up) into 3D: the same place and zoom, then a smooth tilt.
+    const tiltIn = !startFlat && saved?.pitch === 0;
     let instance;
     try {
       instance = new MapLibreMap({
@@ -185,27 +198,37 @@ export default function MapView3D({
         style,
         center: saved ? [saved.center[1], saved.center[0]] : CAMPUS_CENTER,
         zoom: toGlZoom(saved?.zoom ?? 17),
-        pitch: fromFlat ? 0 : PITCH,
-        bearing: saved ? saved.bearing : BEARING,
+        pitch: startFlat || tiltIn ? 0 : (saved?.pitch ?? PITCH),
+        bearing: saved?.bearing ?? (startFlat ? 0 : BEARING),
         minZoom: MIN_ZOOM_3D,
         maxZoom: toGlZoom(MAX_ZOOM),
-        maxPitch: 70,
+        // The 2D view cannot tilt; it can still turn.
+        maxPitch: startFlat ? 0 : MAX_PITCH,
         maxBounds: BOUNDS_3D,
         attributionControl: { compact: true },
+        // A phone with a very sharp screen draws at most twice its CSS pixels: the map stays sharp and draws faster.
+        pixelRatio: Math.min(window.devicePixelRatio || 1, 2),
+        // Tiles kept in the cache are not fetched again just because the server said they would expire.
+        refreshExpiredTiles: false,
       });
     } catch (error) {
       latest.current.onFail(error);
       return;
     }
     map.current = instance;
+    // MapLibre fires "load" once in a map's life. Later the style is briefly "not loaded" after every change (a route
+    // update, a colour), so a flight must not wait for "load" again, or it would never start.
+    let loadedOnce = false;
+    instance.once('load', () => {
+      loadedOnce = true;
+    });
     closeCreditsOnce(container.current);
-    // Coming from the flat map in its following view, the tilt-in goes straight into the 3D following view in one
-    // move; otherwise it tilts on the spot.
+    // In the following view, the tilt-in goes straight into the 3D following view in one move.
     const target = switchTo?.current;
-    if (fromFlat) {
+    if (tiltIn) {
       instance.once('load', () =>
         instance.easeTo({
-          pitch: target ? FOLLOW_PITCH : PITCH,
+          pitch: pitchOf(false, Boolean(target)),
           ...(target && {
             center: [target.point[1], target.point[0]],
             offset: [0, instance.getContainer().clientHeight * FOLLOW_LOW],
@@ -236,29 +259,41 @@ export default function MapView3D({
         pitch: instance.getPitch(),
       };
     });
-    // Only the visitor's own dragging stops following; the zoom buttons and pinching keep it.
-    instance.on('dragstart', (event) => event.originalEvent && latest.current.onUserMove());
+    // Only the visitor's own dragging stops following; the zoom buttons and pinching keep it. Every step of a drag
+    // counts, not only its start, so a drag that began during a camera move still stops following.
+    const userDrag = (event) => event.originalEvent && latest.current.onUserMove();
+    instance.on('dragstart', userDrag);
+    instance.on('drag', userDrag);
     report();
     latest.current.onReady({
       zoomIn: () => instance.zoomIn(),
       zoomOut: () => instance.zoomOut(),
       north: () => instance.easeTo({ bearing: 0 }),
-      // While following, the visitor is shown below the middle, so the ball sits low in the middle.
-      flyTo: ([lat, lng], zoom) => {
-        const fly = () =>
-          instance.flyTo({
-            center: [lng, lat],
-            offset: [0, instance.getContainer().clientHeight * FOLLOW_LOW],
-            zoom: toGlZoom(zoom),
-            pitch: FOLLOW_PITCH,
-            speed: 1.1,
-            curve: 1.42,
-            essential: false,
-          });
-        // Right after a switch the map may still be loading its style; it flies once it has.
-        if (instance.isStyleLoaded()) fly();
-        else instance.once('load', fly);
-      },
+      // While following, the visitor is shown below the middle, so the ball sits low in the middle. Resolves when the
+      // flight ends (or is stopped by a drag), so following does not cut it short.
+      flyTo: ([lat, lng], zoom) =>
+        new Promise((resolve) => {
+          const fly = () => {
+            instance.flyTo({
+              center: [lng, lat],
+              offset: [0, instance.getContainer().clientHeight * FOLLOW_LOW],
+              zoom: toGlZoom(zoom),
+              pitch: pitchOf(latest.current.flat, true),
+              speed: 1.1,
+              curve: 1.42,
+              essential: false,
+            });
+            // Listened for only now: the flight first stops a follow pan that is still running, and the "moveend" of
+            // that pan must not count as the end of the flight (the next pan would cut the flight short).
+            if (instance.isMoving()) instance.once('moveend', resolve);
+            else resolve();
+          };
+          // Never leave following waiting, whatever happens to the flight.
+          setTimeout(resolve, FLIGHT_LIMIT_MS);
+          // Right after a switch the map may still be loading its style for the first time; it flies once it has.
+          if (loadedOnce || instance.isStyleLoaded()) fly();
+          else instance.once('load', fly);
+        }),
       // About as long as the ball takes to reach a new reading, so a walking visitor stays in the middle.
       panTo: ([lat, lng]) =>
         instance.easeTo({
@@ -268,47 +303,44 @@ export default function MapView3D({
           easing: (t) => t,
           essential: false,
         }),
-      fitPoints: (points) => showAll(instance, points, ROUTE_PADDING, true),
-      // The way back to the flat map: the tilt-in in reverse, ending north up like the flat map.
-      // `to` (the flat map's following view, or null) is where the flattening ends, so the flat map takes over there
-      // without a second move.
-      flatten: (to) =>
-        new Promise((resolve) => {
-          if (!to && instance.getPitch() === 0 && instance.getBearing() === 0) {
-            resolve();
-            return;
-          }
-          let fallback = null;
-          const done = () => {
-            clearTimeout(fallback);
-            resolve();
-          };
-          fallback = setTimeout(done, TILT_MS + 300); // never leave the switch waiting
-          // A running move (a follow pan) ends first, so its end is not taken for the end of the flattening.
-          instance.stop();
-          instance.once('moveend', done);
-          instance.easeTo({
-            pitch: 0,
-            bearing: 0,
-            ...(to && {
-              center: [to.point[1], to.point[0]],
-              offset: [0, instance.getContainer().clientHeight * FOLLOW_LOW],
-              zoom: toGlZoom(to.zoom),
-            }),
-            duration: TILT_MS,
-            essential: false,
-          });
-        }),
+      fitPoints: (points) =>
+        showAll(instance, points, ROUTE_PADDING, true, pitchOf(latest.current.flat)),
       fitPins: () =>
         showAll(
           instance,
           latest.current.checkpoints.map((c) => [c.latitude, c.longitude]),
           PINS_PADDING,
           true,
+          pitchOf(latest.current.flat),
         ),
     });
     setReady(true);
   }, [style, camera, switchTo]);
+
+  // 2D and 3D on the same map: the camera eases between flat and tilted where it is, keeping its turn; in the
+  // following view it ends in the other view's following tilt. The buildings come and go with the style (flat).
+  const shownFlat = useRef(flat);
+  useEffect(() => {
+    const instance = map.current;
+    if (!ready || !instance || shownFlat.current === flat) return;
+    shownFlat.current = flat;
+    const target = switchTo?.current;
+    // A running move (a follow pan) ends first, so it does not cut the tilt short.
+    instance.stop();
+    if (!flat) instance.setMaxPitch(MAX_PITCH);
+    instance.easeTo({
+      pitch: pitchOf(flat, Boolean(target)),
+      ...(target && {
+        center: [target.point[1], target.point[0]],
+        offset: [0, instance.getContainer().clientHeight * FOLLOW_LOW],
+        zoom: toGlZoom(target.zoom),
+      }),
+      duration: TILT_MS,
+      essential: false,
+    });
+    // Once flat, the map can no longer be tilted by a gesture.
+    if (flat) instance.once('moveend', () => shownFlat.current && instance.setMaxPitch(0));
+  }, [flat, ready, switchTo]);
 
   useEffect(() => {
     const markerStore = markers.current;
@@ -348,11 +380,12 @@ export default function MapView3D({
         checkpoints.map((c) => [c.latitude, c.longitude]),
         PINS_PADDING,
         false,
+        pitchOf(latest.current.flat),
       );
     }
   }, [checkpoints, selectedId, ready, camera]);
 
-  // The live position as two markers. The ground (accuracy circle and direction wedge) lies on the map and turns
+  // The live position as two markers. The ground (sonar ring and direction wedge) lies on the map and turns
   // with it, so the wedge keeps pointing the right way. The ball faces the screen, so however the map is turned or
   // tilted it stays round. Both follow the position every frame (walking on between readings); the ball rolls along.
   const lat = me?.lat;
@@ -376,17 +409,13 @@ export default function MapView3D({
         element.innerHTML = html;
         return element;
       };
-      const { heading: turn, me: here } = latest.current;
+      const { heading: turn } = latest.current;
       const ball = box(PUCK_SIZE[0], PUCK_SIZE[1], puckHtml());
       ball.style.zIndex = '5'; // above the checkpoint pins, like on the flat map
       // MapLibre needs the position before a marker is added; the ground goes first, so it lies under the ball.
       puck.current = {
         ground: new Marker({
-          element: box(
-            GROUND_SIZE,
-            GROUND_SIZE,
-            groundHtml(turn, accuracyRingPx(here.accuracy, lat)),
-          ),
+          element: box(GROUND_SIZE, GROUND_SIZE, groundHtml(turn)),
           rotationAlignment: 'map',
           pitchAlignment: 'map',
         })
@@ -417,12 +446,11 @@ export default function MapView3D({
     puck.current.follower.moveTo(point, latest.current.me?.velocity);
   }, [lat, lng, ready]);
 
-  // Direction and accuracy change in place, so a compass reading never interrupts the ball's movement.
-  const accuracy = me?.accuracy;
+  // The direction changes in place, so a compass reading never interrupts the ball's movement.
   useEffect(() => {
-    if (!ready || !puck.current || accuracy === undefined) return;
-    updateGround(puck.current.ground.getElement(), heading, accuracyRingPx(accuracy, lat));
-  }, [heading, accuracy, lat, ready]);
+    if (!ready || !puck.current) return;
+    updateGround(puck.current.ground.getElement(), heading);
+  }, [heading, lat, ready]);
 
   return (
     <div

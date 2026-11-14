@@ -22,6 +22,19 @@ export async function login(
   await expect(page.getByRole('link', { name: 'Open profile' })).toBeVisible();
 }
 
+/**
+ * Picks the view the map starts with in the preferences and opens the map. A new account starts in 3D or 2D
+ * depending on the device, so tests that need one choose it.
+ */
+export async function chooseMapView(page, view) {
+  await open(page, '/profile');
+  await page
+    .getByTestId('map-type')
+    .getByRole('radio', { name: view === '3d' ? '3D' : '2D', exact: true })
+    .click();
+  await page.goto('/map');
+}
+
 /** The page must never scroll sideways. */
 /**
  * Opens a page inside the running app, like a tap in the menu. A fresh page load (page.goto) always starts on the map,

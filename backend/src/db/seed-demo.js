@@ -84,12 +84,25 @@ async function loadRules(conn) {
   };
 }
 
+/**
+ * BR56: marks the invented players as demo players, so rankings and lists leave them out until an admin shows them.
+ * Also marks those of a run before the mark existed.
+ */
+async function markDemoPlayers(conn) {
+  await conn.query('UPDATE students SET is_demo = TRUE WHERE email IN (?)', [
+    PEOPLE.map(([first, last]) => emailOf(first, last)),
+  ]);
+}
+
 /** Writes the demo world. Returns false when it already exists. */
 export async function seedDemo(conn, now = Date.now()) {
   const [[existing]] = await conn.query('SELECT student_id FROM students WHERE email = ?', [
     emailOf(PEOPLE[0][0], PEOPLE[0][1]),
   ]);
-  if (existing) return false;
+  if (existing) {
+    await markDemoPlayers(conn);
+    return false;
+  }
   const rules = await loadRules(conn);
   // Only quests students can play now: an archived or closed quest gets no invented history.
   const [checkpoints] = await conn.query(
@@ -103,8 +116,8 @@ export async function seedDemo(conn, now = Date.now()) {
     const joined = now - pick(3, 9) * DAY - pick(0, 20) * 3600 * 1000;
     const [inserted] = await conn.query(
       `INSERT INTO students (email, first_name, last_name, nickname, avatar_preset, total_points, points_exact_x100,
-         points_updated_at, created_at, location_consent_at)
-       VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?, ?)`,
+         points_updated_at, created_at, location_consent_at, is_demo)
+       VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?, ?, TRUE)`,
       [
         emailOf(first, last),
         first,

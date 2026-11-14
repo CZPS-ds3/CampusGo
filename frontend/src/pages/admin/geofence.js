@@ -5,8 +5,8 @@ export const RADIUS_MAX = 500;
 export const SLIDER_MIN = 20;
 export const SLIDER_MAX = 200;
 export const SLIDER_STEP = 5;
-export const DEFAULT_GRACE_M = 30;
-export const RADIUS_PRESETS = [60, 80, 100, 150];
+export const DEFAULT_GRACE_M = 10;
+export const RADIUS_PRESETS = [25, 35, 50, 80];
 
 /** The radius to draw: the typed number when it is valid, otherwise the nearest valid one. NaN when empty. */
 export function drawableRadius(text) {

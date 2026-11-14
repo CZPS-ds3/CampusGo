@@ -5,6 +5,7 @@ import { withTransaction } from '../db/pool.js';
 import { AppError, notFound } from '../middleware/errors.js';
 import { evaluateLocation } from './geo.js';
 import { ceilDiv, multiplierFor, remainingWholeSeconds, scoreAttempt } from './scoring.js';
+import { realPlayers } from './demo.js';
 import { teamStandingAround } from './team-ranking.js';
 import { refreshTeamScore } from './teams.js';
 
@@ -31,7 +32,7 @@ function shuffle(list) {
   return out;
 }
 
-export function createQuizService({ pool, config, clock }) {
+export function createQuizService({ pool, config, clock, settings }) {
   // ---------- reference data ----------
   async function loadRules(conn) {
     const [difficulty] = await conn.query('SELECT difficulty, points_awarded FROM difficulty');
@@ -755,7 +756,9 @@ export function createQuizService({ pool, config, clock }) {
   /** Solo rank a student with this total would hold (the student's own row is not counted against itself). */
   async function rankAmong(total, studentId) {
     const [[row]] = await pool.query(
-      "SELECT COUNT(*) AS higher FROM students WHERE total_points > ? AND student_id <> ? AND status = 'active' AND role = 'student'",
+      `SELECT COUNT(*) AS higher FROM students s
+       WHERE total_points > ? AND student_id <> ? AND status = 'active' AND role = 'student'
+         AND ${realPlayers(await settings.showDemo())}`,
       [total, studentId],
     );
     return Number(row.higher) + 1;
@@ -810,7 +813,13 @@ export function createQuizService({ pool, config, clock }) {
       // Administrators are in no ranking (BR41, BR42).
       rankBefore: isAdmin ? null : await rankAmong(totalBefore, studentId),
       rankAfter: isAdmin ? null : await rankAmong(student.total_points, studentId),
-      ...(isAdmin ? {} : { team: await teamStandingAround(pool, studentId, totalBefore) }),
+      ...(isAdmin
+        ? {}
+        : {
+            team: await teamStandingAround(pool, studentId, totalBefore, {
+              showDemo: await settings.showDemo(),
+            }),
+          }),
       nextMultiplierPercent: multiplierFor(rules.multipliers, used + 1),
       checkpointCompleted: passed > 0,
       nextAttemptNumber: used + 1,

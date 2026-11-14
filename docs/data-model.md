@@ -254,6 +254,16 @@ erDiagram
   with their metadata (location, phone, time) removed.
 - New `App_Setting` key `question_bank_v1`: the team's question bank was put into the pilot quests once.
 
+### 3.v Additions of 2026-11-14 (migrations 014 and 015)
+
+- `014_tight_radius.sql`: the seeded checkpoint radii shrink to 35 m (Mensa, Library, Building B,
+  Building C), 30 m (Campus Garden) and 25 m (CAS Cafe, Care.box and Shop.box, Sensoricum): every pilot circle that is
+  larger shrinks, also one enlarged by migration 011 or an admin under the old rule; a smaller radius an admin set and
+  quests the admins made stay as they are (BR12).
+- `015_demo_players.sql`: `Student.is_demo` (boolean, default false) marks the invented players of the demo seed;
+  `seed-demo.js` sets it, also on the players of an earlier run. New `App_Setting` key `show_demo_players`
+  (`true`/`false`, missing = false): whether they appear in rankings, profiles, statistics and the admin lists (BR56).
+
 ## 4. Seed data for BR11 (no admin UI)
 
 **Approach.** Reference data and the question bank are plain files in the repository (SQL or CSV) loaded by a seed script, run by the developers at deployment. The script is idempotent: it upserts by natural key (`difficulty`, `bonus_type`, `attempt_number`, `checkpoint_name`, and for questions a stable external key kept in the seed file), so running it twice gives the same result. Changing a point value means editing the table (or the seed file) and re-running it; no backend code changes (BR11). The script runs in one transaction and ends with a validation step that fails the whole load if any of these is violated:

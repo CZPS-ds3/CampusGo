@@ -13,13 +13,13 @@ test('production refuses to start with the development secrets and without an SM
   assert.ok(problems.length >= 1, 'a production config with default secrets must have problems');
 });
 
-test('the lenient geofence defaults are in place and can be tuned by environment', () => {
+test('BR12 the tight geofence defaults are in place and can be tuned by environment', () => {
   const config = loadConfig({ NODE_ENV: 'development' });
   assert.equal(config.maxAccuracyM, 200);
-  assert.equal(config.geofenceSlackM, 30);
-  assert.equal(config.accuracyCreditM, 50);
+  assert.equal(config.geofenceSlackM, 10);
+  assert.equal(config.accuracyCreditM, 15);
   assert.equal(config.nearerMarginM, 20);
-  assert.equal(loadConfig({ GEOFENCE_SLACK_M: '10' }).geofenceSlackM, 10);
+  assert.equal(loadConfig({ GEOFENCE_SLACK_M: '30' }).geofenceSlackM, 30);
 });
 
 test('BR26 the administrator addresses come from the configuration, in lower case, both by default', () => {

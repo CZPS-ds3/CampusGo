@@ -15,8 +15,8 @@ const COUNTDOWN_MS = 3 * SECOND;
 const OTP = '123456';
 const DOMAIN = 'heilbronn.dhbw.de';
 const MAX_ACCURACY_M = 200;
-const GEOFENCE_SLACK_M = 30; // grace zone added to every radius
-const ACCURACY_CREDIT_M = 50; // at most this much of a reading's error margin counts for the student
+const GEOFENCE_SLACK_M = 10; // grace zone added to every radius
+const ACCURACY_CREDIT_M = 15; // at most this much of a reading's error margin counts for the student
 const NEARER_MARGIN_M = 20; // another checkpoint must be this much nearer to win
 const MAX_POSITION_AGE_MS = 30_000;
 // The pre-seeded administrators, as on the server (BR26): they may be outside the school domain.
@@ -58,14 +58,14 @@ const bannedWord = (text, extra = []) => {
 
 // Same centres, radii and status as backend/src/db/seed.js (Bildungscampus Heilbronn).
 const CHECKPOINTS = [
-  ['Mensa', 49.148464, 9.215808, 80, 5, 4, true, true],
-  ['Library', 49.149493, 9.216467, 80, 5, 4, true, true],
-  ['CAS Cafe', 49.148951, 9.216205, 60, 3, 2, false, true],
-  ['Campus Garden', 49.147082, 9.217206, 70, 3, 2, false, true],
-  ['Care.box and Shop.box', 49.149088, 9.21727, 60, 3, 2, false, true],
-  ['Building B', 49.147126, 9.218486, 80, 5, 4, true, true],
-  ['Building C', 49.147316, 9.2179, 80, 5, 4, true, true],
-  ['Sensoricum', 49.14762, 9.217807, 60, 3, 2, false, true],
+  ['Mensa', 49.148464, 9.215808, 35, 5, 4, true, true],
+  ['Library', 49.149493, 9.216467, 35, 5, 4, true, true],
+  ['CAS Cafe', 49.148951, 9.216205, 25, 3, 2, false, true],
+  ['Campus Garden', 49.147082, 9.217206, 30, 3, 2, false, true],
+  ['Care.box and Shop.box', 49.149088, 9.21727, 25, 3, 2, false, true],
+  ['Building B', 49.147126, 9.218486, 35, 5, 4, true, true],
+  ['Building C', 49.147316, 9.2179, 35, 5, 4, true, true],
+  ['Sensoricum', 49.14762, 9.217807, 25, 3, 2, false, true],
 ].map(([name, latitude, longitude, radius, questionCount, passThreshold, hard, isActive], i) => ({
   id: i + 1,
   name,
@@ -182,8 +182,9 @@ const fresh = () => ({
     },
   ],
   lastOtpEmail: null,
-  // BR52: the admin switch of the code preview (the mock has no real e-mail, so it starts on).
-  settings: { otpPreview: true },
+  // BR52: the admin switch of the code preview (the mock has no real e-mail, so it starts on). BR56: the mock's
+  // other players are all invented demo players, so they start shown; the switch hides them as on the server.
+  settings: { otpPreview: true, showDemo: true },
   admin: {
     nextId: 200,
     users: [
@@ -206,6 +207,7 @@ const fresh = () => ({
       role: 'student',
       status,
       statusReason: status === 'blocked' ? 'Repeated misuse (demo)' : null,
+      demo: true,
       reported: false,
       reportReason: null,
       teamId: teamName ? 1 : null,
@@ -255,7 +257,12 @@ export function createMockApi(ApiError, getUnauthorized) {
   const copy = (value) => JSON.parse(JSON.stringify(value));
   const checkpoint = (id) => state.quests.find((c) => c.id === Number(id));
 
-  const rankFor = (total) => 1 + OTHERS.filter((o) => o.points > total).length;
+  // BR56: the invented players of the demo seed, and the teams they are in, only while an admin shows them.
+  const showDemo = () => state.settings?.showDemo ?? true;
+  const others = () => (showDemo() ? OTHERS : []);
+  const realUser = (user) => showDemo() || !user.demo;
+  const realTeam = (team) => showDemo() || team.members.every((m) => !adminUser(m).demo);
+  const rankFor = (total) => 1 + others().filter((o) => o.points > total).length;
   const publicStudent = () => ({
     ...state.student,
     totalPoints: totalPoints(),
@@ -874,7 +881,7 @@ export function createMockApi(ApiError, getUnauthorized) {
     async player(id) {
       needLogin();
       const isYou = Number(id) === 1;
-      const other = OTHERS.find((o) => o.id === Number(id));
+      const other = others().find((o) => o.id === Number(id));
       if (!isYou && !other) throw fail(404, 'NOT_FOUND', 'Player not found.');
       const points = isYou ? totalPoints() : other.points;
       const teamName = isYou ? (state.team?.name ?? null) : (TEAM_OF[other.id] ?? null);
@@ -1021,7 +1028,7 @@ export function createMockApi(ApiError, getUnauthorized) {
         isYou: true,
       };
       const ranked = rank(
-        [...OTHERS.map((o) => ({ ...o, pictureUrl: null, isYou: false })), you].sort(
+        [...others().map((o) => ({ ...o, pictureUrl: null, isYou: false })), you].sort(
           (a, b) => b.points - a.points,
         ),
       );
@@ -1035,7 +1042,7 @@ export function createMockApi(ApiError, getUnauthorized) {
       if (!state.team)
         throw fail(403, 'NO_TEAM', 'Join or create a team to see the team leaderboard.');
       const mine = teamView();
-      const others = [
+      const demoTeams = [
         {
           id: 11,
           name: 'Campus Crew',
@@ -1053,9 +1060,10 @@ export function createMockApi(ApiError, getUnauthorized) {
           isYourTeam: false,
         },
       ];
+      const shown = showDemo() ? demoTeams : [];
       const entries = mine.ranked
         ? [
-            ...others,
+            ...shown,
             {
               id: 1,
               name: mine.name,
@@ -1065,12 +1073,19 @@ export function createMockApi(ApiError, getUnauthorized) {
               isYourTeam: true,
             },
           ]
-        : others;
+        : shown;
       const ranked = rank(entries.sort((a, b) => b.points - a.points));
       const own = ranked.find((e) => e.isYourTeam);
       return { entries: ranked, yourTeam: own ? { rank: own.rank, points: own.points } : null };
     },
   };
+
+  const settingsView = () => ({
+    otpPreview: state.settings?.otpPreview ?? true,
+    showDemo: showDemo(),
+    mailConfigured: false,
+    environment: 'mock',
+  });
 
   const needAdmin = () => {
     needLogin();
@@ -1255,7 +1270,7 @@ export function createMockApi(ApiError, getUnauthorized) {
       needAdmin();
       const q = {
         description: '',
-        radius: 80,
+        radius: 35,
         timeLimitSeconds: null,
         hardQuestionEnabled: false,
         typeMode: 'MCQ_ONLY',
@@ -1493,7 +1508,8 @@ export function createMockApi(ApiError, getUnauthorized) {
         errors: {},
         tiles: {
           signedInNow: 3,
-          activeStudents: state.admin.users.filter((u) => u.status === 'active').length,
+          activeStudents: state.admin.users.filter((u) => u.status === 'active' && realUser(u))
+            .length,
           loginsToday: daily[13].logins,
           loginsYesterday: daily[12].logins,
           questsPassedToday: daily[13].passed,
@@ -1509,12 +1525,12 @@ export function createMockApi(ApiError, getUnauthorized) {
           passed: Math.max(0, 9 - i),
           passRate: (9 - i > 0 ? 9 - i : 0) / (12 - i),
         })),
-        topPlayers: OTHERS.map((o, i) => ({
+        topPlayers: others().map((o, i) => ({
           rank: i + 1,
           displayName: o.displayName,
           points: o.points,
         })),
-        topTeams: [{ rank: 1, name: 'Campus Crew', members: 3, points: 4100 }],
+        topTeams: showDemo() ? [{ rank: 1, name: 'Campus Crew', members: 3, points: 4100 }] : [],
         placeholders: placeholderCountsOf(state.quests),
         signedIn: [
           {
@@ -1550,7 +1566,7 @@ export function createMockApi(ApiError, getUnauthorized) {
     },
     async overview() {
       needAdmin();
-      const count = (s) => state.admin.users.filter((u) => u.status === s).length;
+      const count = (s) => state.admin.users.filter((u) => u.status === s && realUser(u)).length;
       return {
         users: {
           active: count('active'),
@@ -1561,7 +1577,7 @@ export function createMockApi(ApiError, getUnauthorized) {
         activeSessions: 3,
         questsPassedToday: 11,
         loginsToday: 17,
-        teams: state.admin.teams.length,
+        teams: state.admin.teams.filter(realTeam).length,
       };
     },
     async users({ q = '', status = '', role = '', noTeam = false } = {}) {
@@ -1570,6 +1586,7 @@ export function createMockApi(ApiError, getUnauthorized) {
       return {
         users: state.admin.users.filter(
           (u) =>
+            realUser(u) &&
             (!noTeam || (!u.teamId && u.status === 'active' && u.role === 'student')) &&
             (!needle ||
               `${u.email} ${u.firstName} ${u.lastName} ${u.nickname}`
@@ -1712,7 +1729,7 @@ export function createMockApi(ApiError, getUnauthorized) {
     async teams() {
       needAdmin();
       return {
-        teams: state.admin.teams.map((t) => ({
+        teams: state.admin.teams.filter(realTeam).map((t) => ({
           id: t.id,
           name: t.name,
           score: t.score,
@@ -1757,25 +1774,17 @@ export function createMockApi(ApiError, getUnauthorized) {
     },
     async settings() {
       needAdmin();
-      return {
-        settings: {
-          otpPreview: state.settings?.otpPreview ?? true,
-          mailConfigured: false,
-          environment: 'mock',
-        },
-      };
+      return { settings: settingsView() };
     },
-    async saveSettings({ otpPreview }) {
+    async saveSettings({ otpPreview, showDemo: shown }) {
       needAdmin();
-      state.settings = { ...(state.settings ?? {}), otpPreview: Boolean(otpPreview) };
-      save();
-      return {
-        settings: {
-          otpPreview: state.settings.otpPreview,
-          mailConfigured: false,
-          environment: 'mock',
-        },
+      state.settings = {
+        ...(state.settings ?? {}),
+        ...(otpPreview !== undefined && { otpPreview: Boolean(otpPreview) }),
+        ...(shown !== undefined && { showDemo: Boolean(shown) }),
       };
+      save();
+      return { settings: settingsView() };
     },
     async renameTeam(id, name) {
       needAdmin();
