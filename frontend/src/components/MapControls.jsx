@@ -32,7 +32,7 @@ function BaseSwitch({ base, onBase }) {
   );
 }
 
-/** A compass needle that turns and tilts with the 3D map; a tap turns the map back to north. */
+/** A compass needle that turns and tilts with the map; a tap turns the map back to north. */
 function Compass({ bearing, pitch, onNorth }) {
   return (
     <button
@@ -58,16 +58,15 @@ function Compass({ bearing, pitch, onNorth }) {
 }
 
 /**
- * The one set of map buttons on the map page, the same for the flat and the 3D map: compass (3D only), zoom,
- * the aerial/street switch and the 2D/3D switch. The flat map keeps an empty slot where the compass goes, so the buttons below
- * it stay in place when the view switches. The 2D/3D switch shows `switchView`, which changes at the tap, while
- * the compass follows the map until its animation is over. The switch shows the view that is on, so students can turn 3D off on a slow
- * phone.
+ * The one set of map buttons on the map page, the same in 2D and 3D: compass (whenever the map can turn), zoom,
+ * the aerial/street switch and the 2D/3D switch. The Leaflet fallback cannot turn, so it keeps an empty slot where
+ * the compass goes and the buttons below stay in place. The 2D/3D switch shows the view that is on, so students
+ * can turn 3D off on a slow phone.
  */
-export function MapControls({ view, switchView = view, onToggleView, base, onBase, camera, map }) {
+export function MapControls({ view, turnable, onToggleView, base, onBase, camera, map }) {
   return (
     <div className="mapctl" data-testid="map-controls">
-      {view === '3d' ? (
+      {turnable ? (
         <div className="mapctl__group">
           <Compass
             bearing={camera.bearing}
@@ -105,13 +104,13 @@ export function MapControls({ view, switchView = view, onToggleView, base, onBas
         <button
           type="button"
           role="switch"
-          aria-checked={switchView === '3d'}
+          aria-checked={view === '3d'}
           aria-label={t('3D map')}
           title={t('3D map')}
           className="mapctl__btn mapctl__view"
           onClick={onToggleView}
         >
-          {switchView === '3d' ? '3D' : '2D'}
+          {view === '3d' ? '3D' : '2D'}
         </button>
       </div>
     </div>
@@ -119,8 +118,9 @@ export function MapControls({ view, switchView = view, onToggleView, base, onBas
 }
 
 /**
- * Bottom-left button in the puck's colours with its red chevron: a small red square while the map follows
- * the visitor, a white (dark map: light grey) "Re-center" button once they have moved the map away (or before the live location is on).
+ * Bottom-left button with the puck's red chevron: a small red square while the map follows the visitor, a
+ * "Re-center" button in the map buttons' colours (white, or black on a dark map) once they have moved the map away
+ * (or before the live location is on).
  */
 export function RecenterButton({ following, onClick }) {
   return (

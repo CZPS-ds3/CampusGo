@@ -41,20 +41,21 @@ export const MULTIPLIERS = [
 ];
 
 // Bildungscampus Heilbronn (DHBW Heilbronn, Bildungscampus 4). Centres are taken from OpenStreetMap features
-// with these names; radii and question counts are the starting values of the Main Project Document, section 5.
-// They still need the on-site check of WP13 (two phones at the edge of every circle).
+// with these names; question counts are the starting values of the Main Project Document, section 5. The radii are
+// tight (BR12, 2026-11-14): 35 m for buildings, 30 m for the garden, 25 m for small spots, because the checkpoints are
+// only 34-127 m apart. They still need the on-site check of WP13 (two phones at the edge of every circle).
 // name, latitude, longitude, radius (m), questionCount, passThreshold, hardEnabled, active
 export const CHECKPOINTS = [
-  ['Mensa', 49.148464, 9.215808, 80, 5, 4, true, true], // OSM "Mensa Bildungscampus", Bildungscampus 8
-  ['Library', 49.149493, 9.216467, 80, 5, 4, true, true], // OSM "Bib Bildungscampus", R-Bau, Bildungscampus 15
-  ['CAS Cafe', 49.148951, 9.216205, 60, 3, 2, false, true], // OSM "M-Bau (DHBW CAS)", Bildungscampus 13
-  ['Campus Garden', 49.147082, 9.217206, 70, 3, 2, false, true], // OSM "Campus Garden", by A-Bau (Forum)
-  ['Care.box and Shop.box', 49.149088, 9.21727, 60, 3, 2, false, true], // midpoint of OSM care.box / shop.box
-  ['Building B', 49.147126, 9.218486, 80, 5, 4, true, true], // OSM "B-Bau (DHBW)", Bildungscampus 4
-  ['Building C', 49.147316, 9.2179, 80, 5, 4, true, true], // OSM "C-Bau (DHBW)", Bildungscampus 5
+  ['Mensa', 49.148464, 9.215808, 35, 5, 4, true, true], // OSM "Mensa Bildungscampus", Bildungscampus 8
+  ['Library', 49.149493, 9.216467, 35, 5, 4, true, true], // OSM "Bib Bildungscampus", R-Bau, Bildungscampus 15
+  ['CAS Cafe', 49.148951, 9.216205, 25, 3, 2, false, true], // OSM "M-Bau (DHBW CAS)", Bildungscampus 13
+  ['Campus Garden', 49.147082, 9.217206, 30, 3, 2, false, true], // OSM "Campus Garden", by A-Bau (Forum)
+  ['Care.box and Shop.box', 49.149088, 9.21727, 25, 3, 2, false, true], // midpoint of OSM care.box / shop.box
+  ['Building B', 49.147126, 9.218486, 35, 5, 4, true, true], // OSM "B-Bau (DHBW)", Bildungscampus 4
+  ['Building C', 49.147316, 9.2179, 35, 5, 4, true, true], // OSM "C-Bau (DHBW)", Bildungscampus 5
   // Not labelled in OpenStreetMap: the DHBW Sensoricum, the grey building beside the Bildungscampus car park, next to
   // Building C. Centre taken on site; confirm the radius in the WP13 tests.
-  ['Sensoricum', 49.14762, 9.217807, 60, 3, 2, false, true],
+  ['Sensoricum', 49.14762, 9.217807, 25, 3, 2, false, true],
 ];
 
 const PILOT_NAMES = CHECKPOINTS.map(([name]) => name);

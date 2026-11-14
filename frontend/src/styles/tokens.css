@@ -49,7 +49,8 @@
 }
 
 :root {
-  --font: 'Source Sans 3', 'Frutiger', 'Segoe UI', Arial, sans-serif;
+  /* The DHBW font (base.css), then the open font the app shipped with. */
+  --font: 'Generis Sans', 'Source Sans 3', 'Frutiger', 'Segoe UI', Arial, sans-serif;
 
   --r-1: 10px;
   --r-2: 14px;

@@ -82,11 +82,23 @@ def test_bug_team_score_must_be_the_average_rounded_up_br43(player):
 
 
 def test_bug_building_b_blocked_students_standing_a_little_outside_br12(player):
+    # The grace zone still lets a student a few metres outside the (now tight, 35 m) circle in.
     student = player("lenient")
-    reply = student.start_quiz("Building B", dy_m=100)
+    reply = student.start_quiz("Building B", dy_m=45)
     assert reply.json()["status"] == "OK", reply.text
-    far = player("too-far").start_quiz("Building B", dy_m=170)
+    far = player("too-far").start_quiz("Building B", dy_m=80)
     assert far.json()["status"] == "OUTSIDE"
+
+
+def test_bug_a_student_at_the_mensa_could_unlock_care_box_and_shop_box_br12(player):
+    # The Mensa is about 126 m from Care.box and Shop.box: 106 m west and 69 m south of it.
+    at_mensa = player("mensa-centre").start_quiz("Care.box and Shop.box", dx_m=-105, dy_m=-69)
+    assert at_mensa.json()["status"] == "OUTSIDE", at_mensa.text
+    # Not from the edge of the Mensa's circle either, even with a vague reading (its credit is capped).
+    at_edge = player("mensa-edge").start_quiz(
+        "Care.box and Shop.box", dx_m=-76, dy_m=-50, accuracy=200
+    )
+    assert at_edge.json()["status"] == "OUTSIDE", at_edge.text
 
 
 def test_bug_deleting_an_account_must_free_the_address_and_never_hit_the_admin_br30(player, admin):
@@ -674,3 +686,45 @@ def test_bug_the_pin_flash_was_lost_when_the_pin_was_not_drawn_yet_br12():
     assert values == [0, 1]
     hook = (ROOT / "frontend" / "src" / "hooks" / "useSonar.js").read_text(encoding="utf-8")
     assert "requestAnimationFrame" in hook
+
+
+def test_bug_re_center_flew_only_part_of_the_way_while_the_map_followed_new_readings_br12():
+    """The fly-in first stopped a running follow pan; that pan's "moveend" was taken for the end of the flight, so
+    the next reading's pan cut the flight short and Re-center moved the map only a little.
+    """
+    gl_map = (ROOT / "frontend" / "src" / "components" / "MapView3D.jsx").read_text(
+        encoding="utf-8"
+    )
+    fly = gl_map.split("flyTo: ([lat, lng], zoom) =>", 1)[1].split("panTo:", 1)[0]
+    assert fly.index("instance.flyTo(") < fly.index("instance.once('moveend', resolve)")
+    flat_map = (ROOT / "frontend" / "src" / "components" / "MapView.jsx").read_text(
+        encoding="utf-8"
+    )
+    leaflet_fly = flat_map.split("const fly = (point, zoom) =>", 1)[1].split(
+        "latest.current.onReady", 1
+    )[0]
+    assert leaflet_fly.index("instance.flyTo(") < leaflet_fly.index(
+        "instance.once('moveend', resolve)"
+    )
+    # Readings that arrive during the flight wait until it has landed.
+    assert "if (followed.current === key || flying.current) return;" in flat_map
+    spec = (ROOT / "frontend" / "e2e" / "map-buttons.spec.js").read_text(encoding="utf-8")
+    assert "Re-center always lands on the ball in the close following view" in spec
+
+
+def test_bug_re_center_never_flew_when_tapped_while_the_map_style_was_updating_br12():
+    """MapLibre fires "load" once; a tap during a later style update waited for it forever."""
+    gl_map = (ROOT / "frontend" / "src" / "components" / "MapView3D.jsx").read_text(
+        encoding="utf-8"
+    )
+    assert "if (loadedOnce || instance.isStyleLoaded()) fly();" in gl_map
+
+
+def test_bug_the_go_ball_covered_the_end_of_the_wide_re_center_button_br12():
+    """On a narrow phone or with large text the wide Re-center button reached under the GO ball."""
+    css = (ROOT / "frontend" / "src" / "styles" / "screens.css").read_text(encoding="utf-8")
+    recenter = css.split("\n.recenter {", 1)[1].split("}", 1)[0]
+    assert "max-width: min(200px, calc(50% - var(--ball) / 2 - 16px - 8px));" in recenter
+    assert "z-index: calc(var(--z-map-ui) + 1);" in recenter
+    base = (ROOT / "frontend" / "src" / "styles" / "base.css").read_text(encoding="utf-8")
+    assert "touch-action: manipulation;" in base

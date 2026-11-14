@@ -11,7 +11,7 @@ test.describe('the sonar range ring', () => {
     await expect(page.locator('.puck').first()).toBeVisible();
     const sonar = page.locator('.puck-ground .puck-sonar').first();
     await expect(sonar).toBeVisible();
-    await expect(sonar.locator('.puck-sonar__wave')).toHaveCount(3);
+    await expect(sonar.locator('.puck-sonar__wave')).toHaveCount(1);
     // To scale: at least as wide as the ball, set from the map's zoom.
     await expect
       .poll(() => sonar.evaluate((element) => element.getBoundingClientRect().width))
@@ -25,18 +25,29 @@ test.describe('the sonar range ring', () => {
       .toMatch(/^\d+ms$/);
   });
 
-  test('BR48 a student turns the sonar off and the map shows only the ball', async ({ page }) => {
+  test('BR48 a student turns the sonar off in the preferences and the map shows only the ball', async ({
+    page,
+  }) => {
     await login(page);
     await open(page, '/profile');
-    const settings = page.getByTestId('map-style');
-    await settings.locator('summary').click();
+    // In the preferences, below the default map; a change is saved at once, like the other preferences.
+    const settings = page.getByTestId('sonar-settings');
+    await expect(page.getByTestId('map-type')).toBeVisible();
+    expect((await settings.boundingBox()).y).toBeGreaterThan(
+      (await page.getByTestId('map-type').boundingBox()).y,
+    );
+    await expect(settings.getByRole('radio', { name: 'Soft pulse' })).toBeChecked();
     await settings.getByRole('switch', { name: 'Show the sonar' }).click();
     await expect(settings.getByRole('switch', { name: 'Flash quests in range' })).toBeDisabled();
-    await settings.getByRole('button', { name: 'Save map style' }).click();
-    await expect(page.getByText('Map style saved')).toBeVisible();
     await open(page, '/map');
     await expect(page.locator('.puck').first()).toBeVisible();
     await expect(page.locator('html')).toHaveAttribute('data-sonar', 'off');
     await expect(page.locator('.puck-ground .puck-sonar').first()).toBeHidden();
+    // It was saved on the account: still off after a reload.
+    await page.reload();
+    await open(page, '/profile'); // a reload starts on the map
+    await expect(
+      page.getByTestId('sonar-settings').getByRole('switch', { name: 'Show the sonar' }),
+    ).toHaveAttribute('aria-checked', 'false');
   });
 });

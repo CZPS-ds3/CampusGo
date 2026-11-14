@@ -95,7 +95,13 @@ const schemas = {
   adminTest: z.object({ text: z.string().max(200) }),
   adminLeader: z.object({ studentId: id }),
   adminOrder: z.object({ studentIds: z.array(id).min(1).max(5) }),
-  adminSettings: z.object({ otpPreview: z.boolean() }),
+  // BR52 code preview, BR56 demo players; each request changes one or both.
+  adminSettings: z
+    .object({ otpPreview: z.boolean().optional(), showDemo: z.boolean().optional() })
+    .strict()
+    .refine((body) => body.otpPreview !== undefined || body.showDemo !== undefined, {
+      message: 'Send otpPreview or showDemo.',
+    }),
 };
 
 /**
@@ -107,11 +113,11 @@ export function createApp({ pool, config, mailer, clock, fetchImpl }) {
   const nameRules = createNameRules({ pool });
   const settings = createSettingsService({ pool, config, clock });
   const auth = createAuthService({ pool, config, mailer, clock, nameRules, settings });
-  const quiz = createQuizService({ pool, config, clock });
+  const quiz = createQuizService({ pool, config, clock, settings });
   const teams = createTeamService({ pool, config, clock, nameRules });
   const accounts = createAccountService({ pool, clock });
-  const admin = createAdminService({ pool, config, clock, nameRules });
-  const boards = createLeaderboardService({ pool });
+  const admin = createAdminService({ pool, config, clock, nameRules, settings });
+  const boards = createLeaderboardService({ pool, settings });
   const quests = createCheckpointAdminService({
     pool,
     config,
@@ -119,7 +125,7 @@ export function createApp({ pool, config, mailer, clock, fetchImpl }) {
     uploadDir: resolve(config.uploadDir),
     fetchImpl,
   });
-  const players = createPlayerService({ pool, clock, boards });
+  const players = createPlayerService({ pool, clock, boards, settings });
   const mapStyles = createMapStyleService({ pool });
   const limits = createLimiters(config);
   const needLogin = requireAuth(auth);
@@ -447,7 +453,7 @@ export function createApp({ pool, config, mailer, clock, fetchImpl }) {
       res.json(await admin.stats());
     }),
   );
-  // BR52, BR55: run-time settings (the OTP code preview switch).
+  // BR52, BR55, BR56: run-time settings (the OTP code preview switch, demo players shown or hidden).
   adminApi.get(
     '/settings',
     handle(async (_req, res) => res.json({ settings: await settings.getAll() })),
@@ -456,7 +462,9 @@ export function createApp({ pool, config, mailer, clock, fetchImpl }) {
     '/settings',
     handle(async (req, res) => {
       const body = schemas.adminSettings.parse(req.body);
-      res.json({ settings: await settings.setOtpPreview(actor(req), body.otpPreview) });
+      if (body.otpPreview !== undefined) await settings.setOtpPreview(actor(req), body.otpPreview);
+      if (body.showDemo !== undefined) await settings.setShowDemo(actor(req), body.showDemo);
+      res.json({ settings: await settings.getAll() });
     }),
   );
   adminApi.get(

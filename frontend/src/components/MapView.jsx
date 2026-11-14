@@ -1,9 +1,12 @@
 import L from 'leaflet';
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
+import { useNight } from '../daylight.js';
+import { canDrawWebGl } from '../device.js';
 import { insideMapArea } from '../geo.js';
 import { useSonar } from '../hooks/useSonar.js';
 import { useToast } from '../hooks/useToast.jsx';
-import { getMapBase, getMapView, t } from '../i18n.js';
+import { getMapBase, getMapView, t, useSettings } from '../i18n.js';
+import { STYLE_URLS, fetchBaseStyle, isDark } from '../map-3d.js';
 import { MAX_ZOOM, createBaseLayers } from '../map-layers.js';
 import {
   FOLLOW_LOW,
@@ -15,7 +18,6 @@ import {
   PIN_SIZE,
   PUCK_ANCHOR,
   PUCK_SIZE,
-  accuracyRingPx,
   groundHtml,
   metresPerPixel,
   pinHtml,
@@ -33,6 +35,7 @@ const DARKEN = import.meta.env.VITE_MAP_DARKEN !== 'false';
 const CAMPUS_CENTER = [49.1485, 9.2165];
 const MAX_BOUNDS = L.latLngBounds([49.12, 9.17], [49.18, 9.26]);
 const MIN_ZOOM = 14;
+const FLIGHT_LIMIT_MS = 5000;
 
 // Worse than this (metres), the phone is sharing only an approximate location.
 const APPROXIMATE_M = 100;
@@ -42,8 +45,8 @@ const reducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce
 const followZoom = () =>
   window.matchMedia?.('(max-width: 767px)').matches ? MAX_ZOOM : FOLLOW_ZOOM;
 
-// MapLibre is large, so it is only downloaded when someone opens the 3D map. If the download fails, the stand-in
-// reports it and the page shows the flat map again.
+// MapLibre is large, so it is downloaded apart from the app, when the map opens. If the download fails, the stand-in
+// reports it and the page shows the Leaflet map instead.
 const MapView3D = lazy(() =>
   import('./MapView3D.jsx').catch((error) => ({
     default: function Unavailable({ onFail }) {
@@ -68,9 +71,10 @@ const fitOptions = (top) => ({
 });
 
 /**
- * Flat Leaflet map with one diamond pin per checkpoint: ringed = open, green tick = done, padlock = closed, plus
- * the walking route and the live position. The buttons live outside the map (MapControls); this component hands
- * them a small camera API through `onReady`. `camera` is shared with the 3D map, so a switch keeps place and zoom.
+ * The fallback map (Leaflet), flat and north up, for browsers without WebGL or when MapLibre cannot load: one
+ * diamond pin per checkpoint (ringed = open, green tick = done, padlock = closed), the walking route and the live
+ * position. The buttons live outside the map (MapControls); this component hands them a small camera API through
+ * `onReady`. `camera` is shared with the MapLibre map, so a switch keeps place and zoom.
  */
 function MapView2D({
   checkpoints,
@@ -93,6 +97,7 @@ function MapView2D({
   const leadLine = useRef(null);
   const puck = useRef(null);
   const style = useMapStyle();
+  const night = useNight();
   const resizeSonar = useSonar({
     container,
     zoomNow: () => map.current?.getZoom() ?? null,
@@ -149,10 +154,20 @@ function MapView2D({
         instance.project(point, zoom).subtract(L.point(0, instance.getSize().y * FOLLOW_LOW)),
         zoom,
       );
+    // Resolves when the flight ends (or is stopped by a drag), so following does not cut it short.
     const fly = (point, zoom) =>
-      reducedMotion()
-        ? instance.setView(followCentre(point, zoom), zoom)
-        : instance.flyTo(followCentre(point, zoom), zoom, { duration: 1.2, easeLinearity: 0.2 });
+      new Promise((resolve) => {
+        if (reducedMotion()) {
+          instance.setView(followCentre(point, zoom), zoom);
+          resolve();
+          return;
+        }
+        instance.flyTo(followCentre(point, zoom), zoom, { duration: 1.2, easeLinearity: 0.2 });
+        // Listened for only now: the flight first stops a follow pan that is still running, and the "moveend" of
+        // that pan must not count as the end of the flight (the next pan would cut the flight short).
+        instance.once('moveend', resolve);
+        setTimeout(resolve, FLIGHT_LIMIT_MS); // never leave following waiting
+      });
     latest.current.onReady({
       zoomIn: () => instance.zoomIn(),
       zoomOut: () => instance.zoomOut(),
@@ -279,9 +294,8 @@ function MapView2D({
           keyboard: false,
           zIndexOffset,
         }).addTo(map.current);
-      const { heading: turn, me: here } = latest.current;
       const ground = marker(
-        groundHtml(turn, accuracyRingPx(here.accuracy, lat)),
+        groundHtml(latest.current.heading),
         [GROUND_SIZE, GROUND_SIZE],
         [GROUND_SIZE / 2, GROUND_SIZE / 2],
         -1000,
@@ -300,17 +314,16 @@ function MapView2D({
     puck.current.follower.moveTo(point, latest.current.me?.velocity);
   }, [lat, lng]);
 
-  // Direction and accuracy change in place, so a compass reading never interrupts the ball's movement.
-  const accuracy = me?.accuracy;
+  // The direction changes in place, so a compass reading never interrupts the ball's movement.
   useEffect(() => {
-    if (!puck.current || accuracy === undefined) return;
-    updateGround(puck.current.ground.getElement(), heading, accuracyRingPx(accuracy, lat));
-  }, [heading, accuracy, lat]);
+    if (!puck.current) return;
+    updateGround(puck.current.ground.getElement(), heading);
+  }, [heading, lat]);
 
   return (
     <div
       ref={container}
-      className={`map${DARKEN ? ' map--darken' : ''}`}
+      className={`map${DARKEN ? ' map--darken' : ''}${night ? ' map--night' : ''}`}
       role="region"
       aria-label={t('Campus map')}
     />
@@ -318,8 +331,9 @@ function MapView2D({
 }
 
 /**
- * The campus map. It starts flat (2D) or tilted with buildings (3D), and with the aerial photo or the street map,
- * as chosen in the preferences; the buttons switch both without moving the camera. With the live location on, the
+ * The campus map. It starts in 2D (flat, turnable) or 3D (tilted with buildings), and with the aerial photo or the
+ * street map, as chosen in the preferences; the buttons switch both without moving the camera. MapLibre draws both
+ * views; the Leaflet map stands in, flat and north up, where MapLibre cannot run. With the live location on, the
  * map follows the visitor closely; moving the map stops that, and "Re-center" flies back.
  *
  * `route` is the part of the walking route still ahead, `fitRoute` counts the routes the visitor asked for (the map
@@ -337,7 +351,13 @@ export function MapView({
   onLocate = () => {},
 }) {
   const toast = useToast();
+  const mapStyle = useMapStyle();
+  const { theme } = useSettings();
   const [view, setView] = useState(getMapView);
+  // 'gl' (MapLibre, 2D and 3D) or 'leaflet' (the flat fallback). A 3D preference always tries MapLibre.
+  const [engine, setEngine] = useState(() =>
+    getMapView() === '3d' || canDrawWebGl() ? 'gl' : 'leaflet',
+  );
   // Phones can share only an approximate location (iOS "Precise Location", Android "Use precise location" turned
   // off for the browser): the page cannot change that, so it says once how to turn it on.
   const coarse = (me?.accuracy ?? 0) > APPROXIMATE_M;
@@ -354,21 +374,21 @@ export function MapView({
   }, [coarse, toast]);
   const [base, setBase] = useState(getMapBase);
   const [following, setFollowing] = useState(true);
-  // Flat and north up until the 3D map reports its real turn and tilt.
+  // Flat and north up until MapLibre reports its real turn and tilt.
   const [turn, setTurn] = useState({ bearing: 0, pitch: 0 });
   const [mapVersion, setMapVersion] = useState(0);
   const api = useRef(null);
   const camera = useRef(null);
   const centred = useRef(false);
-  const switching = useRef(false);
-  // The view the switch shows: it changes at the tap, before the map has finished animating to it.
-  const [switchView, setSwitchView] = useState(view);
   const followed = useRef('');
+  // True while the map flies in to the visitor: a new reading then waits instead of cutting the flight short with a
+  // pan (the flight ended somewhere in between, and Re-center seemed not to work).
+  const flying = useRef(false);
   // Where a 2D/3D switch should end: the following view, when the map is in it at the switch; otherwise null.
   const switchTo = useRef(null);
   const here = me && insideMapArea([me.lat, me.lng]) ? me : null;
   const latest = useRef({});
-  latest.current = { following, here, route, meAccuracy: me?.accuracy };
+  latest.current = { following, here, route, meAccuracy: me?.accuracy, view };
 
   const onReady = useCallback((value) => {
     api.current = value;
@@ -376,6 +396,16 @@ export function MapView({
   }, []);
   const onUserMove = useCallback(() => setFollowing(false), []);
   const mayFitPins = useCallback(() => !(latest.current.following && latest.current.here), []);
+
+  /** Flies in to `point` in the following view; readings that arrive meanwhile wait until it has landed. */
+  const flyIn = useCallback((point) => {
+    const flight = api.current?.flyTo(point, followZoom());
+    if (!flight) return;
+    flying.current = true;
+    flight.then(() => {
+      flying.current = false;
+    });
+  }, []);
 
   // Following: the first position flies in close, later ones pan gently. The 2D/3D switch animation itself ends in
   // the other map's following view (see toggleView), so nothing moves again after it.
@@ -386,13 +416,14 @@ export function MapView({
     const point = [hereLat, hereLng];
     const key = point.join(',');
     if (centred.current) {
-      if (followed.current !== key) api.current.panTo(point);
+      if (followed.current === key || flying.current) return;
+      api.current.panTo(point);
     } else {
       centred.current = true;
-      api.current.flyTo(point, followZoom());
+      flyIn(point);
     }
     followed.current = key;
-  }, [hereLat, hereLng, following, mapVersion]);
+  }, [hereLat, hereLng, following, mapVersion, flyIn]);
 
   // A new route the visitor asked for: show all of it, and stop following until "Re-center".
   useEffect(() => {
@@ -420,38 +451,40 @@ export function MapView({
       return;
     }
     centred.current = true;
-    followed.current = `${here.lat},${here.lng}`; // the fly-in is not cut short by a follow pan
-    api.current?.flyTo([here.lat, here.lng], followZoom());
+    followed.current = `${here.lat},${here.lng}`;
+    flyIn([here.lat, here.lng]);
   };
 
-  // 3D to 2D: the 3D map first eases back to flat and north up, then the flat map takes over at that view.
-  const toggleView = async () => {
-    if (switching.current) return;
-    // In the following view (following, still at its zoom) the switch goes in one move to the other map's following
-    // view; away from it the switch keeps the place and zoom.
+  // 2D and 3D are one MapLibre map that eases between flat and tilted; from the Leaflet fallback, 3D tries MapLibre
+  // again.
+  // The street-map style downloads while MapLibre itself is still loading, not after it: the map shows sooner. A
+  // failed download is reported by the map itself, which asks again.
+  const styleUrl = STYLE_URLS[isDark(mapStyle, theme) ? 'dark' : 'light'];
+  useEffect(() => {
+    if (engine === 'gl') fetchBaseStyle(styleUrl).catch(() => undefined);
+  }, [engine, styleUrl]);
+
+  const toggleView = () => {
+    // In the following view (following, still at its zoom) the switch goes in one move to the other view's following
+    // tilt; away from it the switch keeps the place and zoom.
     const inFollowView =
       following && here && Math.abs((camera.current?.zoom ?? 0) - followZoom()) < 0.5;
     switchTo.current = inFollowView ? { point: [here.lat, here.lng], zoom: followZoom() } : null;
-    if (view === '2d') {
-      setSwitchView('3d');
-      setView('3d');
-      return;
-    }
-    switching.current = true;
-    setSwitchView('2d');
-    try {
-      await api.current?.flatten?.(switchTo.current);
-    } finally {
-      switching.current = false;
-    }
-    setView('2d');
+    const next = view === '2d' ? '3d' : '2d';
+    setView(next);
+    if (next === '3d') setEngine('gl');
   };
 
   // No WebGL, no network or a blocked map style: the student is told and keeps a working map.
   const fail = useCallback(() => {
-    toast.info(t('The 3D map could not be loaded, so the flat map is shown.'));
-    setSwitchView('2d');
+    toast.info(
+      latest.current.view === '3d'
+        ? t('The 3D map could not be loaded, so the flat map is shown.')
+        : t('The turnable map could not be loaded, so a simpler flat map is shown.'),
+    );
+    setEngine('leaflet');
     setView('2d');
+    setTurn({ bearing: 0, pitch: 0 });
   }, [toast]);
 
   const props = {
@@ -469,16 +502,22 @@ export function MapView({
   };
   return (
     <>
-      {view === '2d' ? (
+      {engine === 'leaflet' ? (
         <MapView2D {...props} />
       ) : (
         <Suspense fallback={<div className="map" />}>
-          <MapView3D {...props} switchTo={switchTo} onCamera={setTurn} onFail={fail} />
+          <MapView3D
+            {...props}
+            flat={view === '2d'}
+            switchTo={switchTo}
+            onCamera={setTurn}
+            onFail={fail}
+          />
         </Suspense>
       )}
       <MapControls
         view={view}
-        switchView={switchView}
+        turnable={engine === 'gl'}
         onToggleView={toggleView}
         base={base}
         onBase={setBase}

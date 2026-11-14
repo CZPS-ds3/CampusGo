@@ -1,19 +1,20 @@
-// Solo and team leaderboards (BR04, BR24, R-50 .. R-55).
+// Solo and team leaderboards (BR04, BR24, R-50 .. R-55). The demo seed's invented players only while shown (BR56).
 import { AppError } from '../middleware/errors.js';
 import { displayName } from './auth.js';
+import { realPlayers } from './demo.js';
 import { assignRanks } from './scoring.js';
 import { rankedTeams } from './team-ranking.js';
 
 const LIST_LIMIT = 100;
 
-export function createLeaderboardService({ pool }) {
+export function createLeaderboardService({ pool, settings }) {
   const top = (entries) => entries.slice(0, LIST_LIMIT);
   const standing = (entry) => (entry ? { rank: entry.rank, points: entry.points } : null);
 
   async function solo(studentId) {
     const [rows] = await pool.query(
       `SELECT student_id, first_name, last_name, nickname, profile_picture, avatar_preset, total_points, points_updated_at
-       FROM students WHERE status = 'active' AND role = 'student'
+       FROM students s WHERE status = 'active' AND role = 'student' AND ${realPlayers(await settings.showDemo())}
        ORDER BY total_points DESC, points_updated_at ASC, student_id ASC`,
     );
     const entries = assignRanks(rows.map((r) => ({ ...r, points: r.total_points }))).map((r) => ({
@@ -35,7 +36,7 @@ export function createLeaderboardService({ pool }) {
     // BR06: only students who belong to a team may see the team board.
     if (!student?.team_id)
       throw new AppError(403, 'NO_TEAM', 'Join or create a team to see the team leaderboard.');
-    const ranked = await rankedTeams(pool);
+    const ranked = await rankedTeams(pool, { showDemo: await settings.showDemo() });
     const entries = ranked.map((r) => ({
       rank: r.rank,
       id: r.team_id,
@@ -51,7 +52,8 @@ export function createLeaderboardService({ pool }) {
   /** Competition rank for a given total: one more than the number of students with strictly more points (R-52). */
   async function rankOf(total, conn = pool) {
     const [[row]] = await conn.query(
-      "SELECT COUNT(*) AS higher FROM students WHERE total_points > ? AND status = 'active' AND role = 'student'",
+      `SELECT COUNT(*) AS higher FROM students s
+       WHERE total_points > ? AND status = 'active' AND role = 'student' AND ${realPlayers(await settings.showDemo())}`,
       [total],
     );
     return Number(row.higher) + 1;

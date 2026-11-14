@@ -42,13 +42,31 @@ const lineOf = (points) => ({
 });
 const collection = (features) => ({ type: 'FeatureCollection', features });
 
+// The aerial photo at night: the same photo, darker, greyer and a little blue (no open night photo of Heilbronn exists).
+const NIGHT_PAINT = {
+  'raster-brightness-max': 0.42,
+  'raster-saturation': -0.45,
+  'raster-contrast': 0.12,
+};
+const NIGHT_VEIL = { colour: '#0b1d3f', opacity: 0.28 };
+/** The aerial photo is only fetched for the map area, [west, south, east, north]. */
+const AREA_BOUNDS = [MAP_AREA.west, MAP_AREA.south, MAP_AREA.east, MAP_AREA.north];
+
+/** A copy of `layer` that is not drawn. */
+const hidden = (layer) => ({ ...layer, layout: { ...layer.layout, visibility: 'none' } });
+
 /**
- * The full MapLibre style: the downloaded street map plus, in this order, the tint, the aerial photo, the 3D
- * buildings (all below the labels), then the walking route and its dotted lead-in on top (the live position and
- * its accuracy circle are markers). Like the flat map, the tint changes the street map only and the aerial photo is
- * never tinted (BR48). The base style is not changed.
+ * The full MapLibre style: the downloaded street map plus, in this order, the tint, the aerial photo (with its night
+ * veil), the 3D buildings (all below the labels), then the walking route and its dotted lead-in on top (the live
+ * position and its sonar ring are markers). `flat` is the 2D view: the raised buildings are hidden, the street map's
+ * own flat building outlines stay. Over the aerial photo the street map's areas and roads are not drawn (the photo
+ * covers them), only its labels. `night` gives the photo its night look. Like the Leaflet map, the tint changes the
+ * street map only and the aerial photo is never tinted (BR48). The base style is not changed.
  */
-export function buildStyle(baseStyle, { mapStyle, dark, base, route = null }) {
+export function buildStyle(
+  baseStyle,
+  { mapStyle, dark, base, route = null, flat = false, night = false },
+) {
   const style = structuredClone(baseStyle);
   // The street map's own extruded buildings are replaced by ours, which take the student's colour.
   const layers = style.layers.filter((layer) => layer.type !== 'fill-extrusion');
@@ -56,14 +74,22 @@ export function buildStyle(baseStyle, { mapStyle, dark, base, route = null }) {
   // not below the first label; otherwise roads would be drawn over the aerial photo.
   const labelsAt = layers.findLastIndex((layer) => layer.type !== 'symbol') + 1;
   const aerial = base === 'aerial';
+  const underPhoto = layers
+    .slice(0, labelsAt)
+    .map((layer) =>
+      aerial && layer.type !== 'background' && layer.type !== 'symbol' ? hidden(layer) : layer,
+    );
 
   style.sources = {
     ...style.sources,
+    // 512-pixel pictures: a quarter as many requests to the photo server as 256-pixel ones, for the same sharpness.
+    // Level 18 of them is 0.2 m per pixel, the photo's own resolution; closer, they are enlarged, not fetched again.
     'ccq-aerial': {
       type: 'raster',
       tiles: [aerialTileUrl()],
-      tileSize: 256,
-      maxzoom: 19,
+      tileSize: 512,
+      maxzoom: 18,
+      bounds: AREA_BOUNDS,
       attribution: AERIAL_ATTRIBUTION,
     },
     'ccq-route': { type: 'geojson', data: collection(route ? [lineOf(route.points)] : []) },
@@ -87,6 +113,14 @@ export function buildStyle(baseStyle, { mapStyle, dark, base, route = null }) {
       type: 'raster',
       source: 'ccq-aerial',
       layout: { visibility: aerial ? 'visible' : 'none' },
+      // A tile shows at once instead of fading in.
+      paint: { 'raster-fade-duration': 0, ...(night && NIGHT_PAINT) },
+    },
+    {
+      id: 'ccq-night',
+      type: 'background',
+      layout: { visibility: aerial && night ? 'visible' : 'none' },
+      paint: { 'background-color': NIGHT_VEIL.colour, 'background-opacity': NIGHT_VEIL.opacity },
     },
     {
       id: 'ccq-buildings',
@@ -95,6 +129,7 @@ export function buildStyle(baseStyle, { mapStyle, dark, base, route = null }) {
       'source-layer': 'building',
       minzoom: MIN_ZOOM_3D,
       filter: ['!', ['has', 'hide_3d']],
+      layout: { visibility: flat ? 'none' : 'visible' },
       paint: {
         // The photo is never themed, so its buildings keep the light default and let the roofs show through.
         'fill-extrusion-color': buildingColour(mapStyle, dark && !aerial),
@@ -126,13 +161,7 @@ export function buildStyle(baseStyle, { mapStyle, dark, base, route = null }) {
     },
   };
 
-  style.layers = [
-    ...layers.slice(0, labelsAt),
-    ...below,
-    ...layers.slice(labelsAt),
-    routeLine,
-    leadLine,
-  ];
+  style.layers = [...underPhoto, ...below, ...layers.slice(labelsAt), routeLine, leadLine];
   return style;
 }
 

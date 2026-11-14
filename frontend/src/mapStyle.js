@@ -5,7 +5,7 @@ import { normalizeColor, readableOn } from './colors.js';
 // at once, and applied to the page as CSS variables that the map styles use.
 const KEY = 'ccq-map-style-v1';
 
-/** How often a sonar wave goes out from the ball and what it looks like (BR48). */
+/** How often a sonar wave goes out from the ball and what it looks like (BR48); soft pulse is the default. */
 export const SONAR_SPEEDS = ['slow', 'normal', 'fast'];
 export const SONAR_LOOKS = ['sova', 'soft'];
 
@@ -18,7 +18,7 @@ export const DEFAULT_MAP_STYLE = {
   route: '#e2001a',
   buildings: '#dcd9d4',
   ball: { body: '#ffffff', lines: '#e2001a' },
-  sonar: { show: true, color: '#e2001a', speed: 'normal', look: 'sova', ping: true },
+  sonar: { show: true, color: '#e2001a', speed: 'normal', look: 'soft', ping: true },
 };
 
 export const PRESETS = {
@@ -32,7 +32,7 @@ export const PRESETS = {
     route: '#0b5cad',
     buildings: '#c5dcef',
     ball: { body: '#ffffff', lines: '#0b5cad' },
-    sonar: { show: true, color: '#0b5cad', speed: 'normal', look: 'sova', ping: true },
+    sonar: { show: true, color: '#0b5cad', speed: 'normal', look: 'soft', ping: true },
   },
   forest: {
     preset: 'forest',
@@ -43,7 +43,7 @@ export const PRESETS = {
     route: '#2f5d34',
     buildings: '#cfe0c4',
     ball: { body: '#f4f9ef', lines: '#2f5d34' },
-    sonar: { show: true, color: '#2f5d34', speed: 'normal', look: 'sova', ping: true },
+    sonar: { show: true, color: '#2f5d34', speed: 'normal', look: 'soft', ping: true },
   },
   sunset: {
     preset: 'sunset',
@@ -54,7 +54,7 @@ export const PRESETS = {
     route: '#d6246e',
     buildings: '#f0d2bd',
     ball: { body: '#fff3e6', lines: '#d6246e' },
-    sonar: { show: true, color: '#d6246e', speed: 'normal', look: 'sova', ping: true },
+    sonar: { show: true, color: '#d6246e', speed: 'normal', look: 'soft', ping: true },
   },
   mono: {
     preset: 'mono',
@@ -65,7 +65,7 @@ export const PRESETS = {
     route: '#000000',
     buildings: '#cccccc',
     ball: { body: '#ffffff', lines: '#000000' },
-    sonar: { show: true, color: '#000000', speed: 'normal', look: 'sova', ping: true },
+    sonar: { show: true, color: '#000000', speed: 'normal', look: 'soft', ping: true },
   },
 };
 
@@ -205,12 +205,6 @@ export async function loadMapStyle(api) {
 /** Saves the one style of the account. Returns what the server stored. */
 export async function saveMapStyle(api, next) {
   const saved = (await api.saveMapStyle(next)).style;
-  publish(saved);
-  return saved;
-}
-
-export async function resetMapStyle(api) {
-  const saved = (await api.resetMapStyle()).style;
   publish(saved);
   return saved;
 }

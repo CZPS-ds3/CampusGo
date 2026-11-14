@@ -113,7 +113,7 @@ test.describe('layout and touch', () => {
       const wide = await page.evaluate(() =>
         [...document.querySelectorAll('body *')]
           .filter((el) => el.getBoundingClientRect().right > window.innerWidth + 1)
-          .filter((el) => !el.closest('.leaflet-container, .scrim, .wipe-root, .sr-only'))
+          .filter((el) => !el.closest('.leaflet-container, .map3d, .scrim, .wipe-root, .sr-only'))
           .slice(0, 5)
           .map(
             (el) =>

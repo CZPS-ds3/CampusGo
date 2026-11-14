@@ -2,6 +2,7 @@
 // in Node, so no MySQL time zone tables are needed. Admins never count: every figure is about students.
 import { displayName } from './auth.js';
 import { countPlaceholders } from './placeholders.js';
+import { realPlayers } from './demo.js';
 import { rankedTeams } from './team-ranking.js';
 
 const DAYS = 14;
@@ -51,7 +52,7 @@ export function berlinDays(nowMs, count = DAYS) {
   return days.slice(0, -1).map((day, i) => ({ ...day, end: days[i + 1].start }));
 }
 
-export function createStatsService({ pool, clock }) {
+export function createStatsService({ pool, clock, settings }) {
   let cache = null;
 
   async function section(errors, name, work) {
@@ -66,7 +67,9 @@ export function createStatsService({ pool, clock }) {
   const bucket = (rows, field, days) =>
     days.map((day) => rows.filter((r) => r[field] >= day.start && r[field] < day.end).length);
 
-  async function build() {
+  async function build(showDemo) {
+    // BR56: the demo seed's invented players count only while they are shown.
+    const real = realPlayers(showDemo);
     const now = clock.now();
     const days = berlinDays(now);
     const since = new Date(days[0].start);
@@ -75,7 +78,7 @@ export function createStatsService({ pool, clock }) {
     const logins = await section(errors, 'daily', async () => {
       const [rows] = await pool.query(
         `SELECT e.created_at FROM audit_events e JOIN students s ON s.student_id = e.student_id
-         WHERE e.event_type = 'login' AND s.role = 'student' AND e.created_at >= ?`,
+         WHERE e.event_type = 'login' AND s.role = 'student' AND ${real} AND e.created_at >= ?`,
         [since],
       );
       return rows.map((r) => ({ at: r.created_at.getTime() }));
@@ -83,7 +86,7 @@ export function createStatsService({ pool, clock }) {
     const attempts = await section(errors, 'daily', async () => {
       const [rows] = await pool.query(
         `SELECT a.start_time, a.status FROM attempts a JOIN students s ON s.student_id = a.student_id
-         WHERE s.role = 'student' AND a.start_time >= ?`,
+         WHERE s.role = 'student' AND ${real} AND a.start_time >= ?`,
         [since],
       );
       return rows.map((r) => ({ at: r.start_time.getTime(), passed: r.status === 'passed' }));
@@ -104,7 +107,7 @@ export function createStatsService({ pool, clock }) {
 
     const usersByStatus = await section(errors, 'usersByStatus', async () => {
       const [rows] = await pool.query(
-        "SELECT status, COUNT(*) AS n FROM students WHERE role = 'student' GROUP BY status",
+        `SELECT status, COUNT(*) AS n FROM students s WHERE role = 'student' AND ${real} GROUP BY status`,
       );
       const counts = Object.fromEntries(rows.map((r) => [r.status, Number(r.n)]));
       return {
@@ -118,7 +121,7 @@ export function createStatsService({ pool, clock }) {
       const [rows] = await pool.query(
         `SELECT s.first_name, s.last_name, s.nickname, x.created_at, x.last_active_at
          FROM sessions x JOIN students s ON s.student_id = x.student_id
-         WHERE x.is_active = 1 AND x.expires_at > ? AND s.role = 'student' AND s.status = 'active'
+         WHERE x.is_active = 1 AND x.expires_at > ? AND s.role = 'student' AND s.status = 'active' AND ${real}
          ORDER BY x.last_active_at DESC`,
         [new Date(now)],
       );
@@ -138,7 +141,7 @@ export function createStatsService({ pool, clock }) {
            COUNT(a.attempt_id) AS attempts, COALESCE(SUM(a.status = 'passed'), 0) AS passed
          FROM checkpoints c
          LEFT JOIN (SELECT x.* FROM attempts x JOIN students s ON s.student_id = x.student_id
-                    WHERE s.role = 'student') a ON a.checkpoint_id = c.checkpoint_id
+                    WHERE s.role = 'student' AND ${real}) a ON a.checkpoint_id = c.checkpoint_id
          WHERE c.archived_at IS NULL
          GROUP BY c.checkpoint_id ORDER BY c.checkpoint_id`,
       );
@@ -154,8 +157,8 @@ export function createStatsService({ pool, clock }) {
 
     const topPlayers = await section(errors, 'topPlayers', async () => {
       const [rows] = await pool.query(
-        `SELECT first_name, last_name, nickname, total_points FROM students
-         WHERE role = 'student' AND status = 'active' AND total_points > 0
+        `SELECT first_name, last_name, nickname, total_points FROM students s
+         WHERE role = 'student' AND status = 'active' AND total_points > 0 AND ${real}
          ORDER BY total_points DESC, points_updated_at ASC, student_id ASC LIMIT 5`,
       );
       return rows.map((r, i) => ({
@@ -166,7 +169,9 @@ export function createStatsService({ pool, clock }) {
     });
 
     const topTeams = await section(errors, 'topTeams', async () => {
-      const teams = (await rankedTeams(pool)).filter((t) => t.team_score > 0).slice(0, 5);
+      const teams = (await rankedTeams(pool, { showDemo }))
+        .filter((t) => t.team_score > 0)
+        .slice(0, 5);
       return teams.map((t) => ({
         rank: t.rank,
         name: t.team_name,
@@ -179,13 +184,14 @@ export function createStatsService({ pool, clock }) {
       const [events] = await pool.query(
         `SELECT e.event_type, e.created_at, e.actor_id, e.student_id, s.first_name, s.last_name, s.nickname, s.status
          FROM audit_events e LEFT JOIN students s ON s.student_id = e.student_id
-         WHERE s.role IS NULL OR s.role = 'student' ORDER BY e.created_at DESC, e.event_id DESC LIMIT 10`,
+         WHERE s.role IS NULL OR (s.role = 'student' AND ${real})
+         ORDER BY e.created_at DESC, e.event_id DESC LIMIT 10`,
       );
       const [passes] = await pool.query(
         `SELECT a.finished_at, a.student_id, c.checkpoint_name, s.first_name, s.last_name, s.nickname, s.status
          FROM attempts a JOIN checkpoints c ON c.checkpoint_id = a.checkpoint_id
          JOIN students s ON s.student_id = a.student_id
-         WHERE a.status = 'passed' AND s.role = 'student' ORDER BY a.finished_at DESC LIMIT 10`,
+         WHERE a.status = 'passed' AND s.role = 'student' AND ${real} ORDER BY a.finished_at DESC LIMIT 10`,
       );
       // Blocked, archived and deleted people are not named in the feed.
       const name = (r) => (r.status === 'active' && r.first_name ? displayName(r) : null);
@@ -240,9 +246,11 @@ export function createStatsService({ pool, clock }) {
    */
   async function getStats() {
     const now = clock.now();
-    const key = berlinDays(now, 1)[0].date;
+    const showDemo = await settings.showDemo();
+    // Showing or hiding the demo players changes the figures at once.
+    const key = `${berlinDays(now, 1)[0].date}:${showDemo}`;
     if (!cache || cache.key !== key || now - cache.at >= CACHE_MS) {
-      cache = { key, at: now, value: await build() };
+      cache = { key, at: now, value: await build(showDemo) };
     }
     // Not cached: the warning must go away as soon as an admin replaces the last placeholder.
     const errors = { ...cache.value.errors };

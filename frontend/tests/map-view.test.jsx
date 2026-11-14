@@ -1,17 +1,18 @@
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MapView } from '../src/components/MapView.jsx';
 import { ToastProvider } from '../src/hooks/useToast.jsx';
 import { setSettings } from '../src/i18n.js';
-import { CHEVRON, accuracyRingPx } from '../src/map-pins.js';
+import { CHEVRON } from '../src/map-pins.js';
 
 // Leaflet draws circles and lines only when the browser says it can draw SVG; jsdom lacks this one method.
 vi.hoisted(() => {
   window.SVGSVGElement.prototype.createSVGRect = () => ({});
 });
 
-// jsdom has no WebGL; the 3D map is only checked for falling back. Playwright covers the real 3D map.
+// jsdom has no WebGL, so the map starts on the Leaflet fallback; MapLibre is only checked for falling back here
+// (map-view-gl.test.jsx fakes WebGL). Playwright covers the real MapLibre map.
 vi.mock('maplibre-gl', () => ({
   LngLatBounds: vi.fn(),
   Map: vi.fn(),
@@ -29,20 +30,23 @@ const renderMap = (props = {}) =>
   );
 const viewSwitch = () => screen.getByRole('switch', { name: '3D map' });
 
+// These tests start on the aerial photo (new accounts start on the street map).
+beforeEach(() => act(() => setSettings({ mapBase: 'aerial' })));
+
 describe('campus map: one set of buttons for the flat and the 3D map', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     act(() => setSettings({ mapView: '2d', mapBase: 'aerial' }));
   });
 
-  it('starts flat with zoom, map type and a 2D/3D switch that shows the view that is on', () => {
+  it('without WebGL starts on the flat Leaflet map with zoom, map type and a 2D/3D switch', () => {
     const { container } = renderMap();
     expect(container.querySelector('.leaflet-container')).not.toBeNull();
     expect(viewSwitch()).toHaveAttribute('aria-checked', 'false');
     expect(viewSwitch()).toHaveTextContent('2D');
     expect(screen.getByRole('button', { name: 'Zoom in' })).toBeInTheDocument();
     expect(screen.getByRole('switch', { name: 'Aerial photo' })).toBeInTheDocument();
-    // The flat map cannot turn, so it has no compass.
+    // The Leaflet fallback cannot turn, so it has no compass.
     expect(screen.queryByRole('button', { name: 'Point the map north' })).toBeNull();
     // Leaflet's own buttons are replaced by the shared set.
     expect(container.querySelector('.leaflet-control-zoom')).toBeNull();
@@ -113,19 +117,18 @@ describe('live location on the map', () => {
       heading: 90,
     });
     expect(container.querySelector('.puck-ground__beam').style.transform).toBe('rotate(90deg)');
-    expect(container.querySelector('.puck-ground')).not.toHaveClass('puck-ground--still');
     // While following, Re-center is the small round button.
     expect(screen.getByTestId('recenter')).toHaveClass('is-following');
   });
 
-  it('draws Re-center with the red chevron and an accuracy circle of a fixed size on screen', () => {
+  it('BR12 draws Re-center with the red chevron and only the sonar range ring under the ball', () => {
     const { container } = renderMap({ me: { lat: 49.148, lng: 9.216, accuracy: 12 } });
     expect(screen.getByTestId('recenter').querySelector('path').getAttribute('d')).toBe(CHEVRON);
-    const ring = container.querySelector('.puck-ground__waves');
-    expect(ring.querySelectorAll('.puck-ground__wave')).toHaveLength(3);
-    const size = `${accuracyRingPx(12, 49.148) * 2}px`;
-    expect(ring.style.width).toBe(size);
-    // A marker, not a circle in metres: it keeps this size at every zoom.
+    // The old red waves of the GPS accuracy are gone; the sonar ring shows the unlock range instead.
+    expect(container.querySelector('.puck-ground__waves')).toBeNull();
+    expect(container.querySelector('.puck-ground__wave')).toBeNull();
+    expect(container.querySelectorAll('.puck-ground .puck-sonar__wave')).toHaveLength(1);
+    // Markers, not circles in metres drawn by Leaflet.
     expect(container.querySelector('.leaflet-overlay-pane path')).toBeNull();
   });
 
@@ -142,8 +145,10 @@ describe('live location on the map', () => {
     );
     expect(drawn.length).toBeGreaterThan(30);
     expect(drawn.length).toBeLessThan(50);
-    // No direction known yet: the wedge on the ground is hidden.
-    expect(container.querySelector('.puck-ground')).toHaveClass('puck-ground--still');
+    // The direction wedge always shows: north until a direction is known.
+    const beam = container.querySelector('.puck-ground__beam');
+    expect(beam).toBeVisible();
+    expect(beam.style.transform).toBe('rotate(0deg)');
   });
 
   it('BR51 does not follow a position outside the map area', async () => {

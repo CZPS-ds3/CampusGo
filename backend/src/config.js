@@ -73,8 +73,9 @@ export function loadConfig(env = process.env) {
     invitationTtlHours: int(env.INVITATION_TTL_HOURS, 24),
     // Geofencing settings (Main Project Document, section 5 "Settings kept in one config file").
     maxAccuracyM: int(env.MAX_ACCURACY_M, 200), // laptops and indoor phones are often 50-200 m off
-    geofenceSlackM: int(env.GEOFENCE_SLACK_M, 30), // grace zone added to every radius
-    accuracyCreditM: int(env.ACCURACY_CREDIT_M, 50), // at most this much of a reading's error margin counts for the student
+    // Grace zone and accuracy credit are small: the campus checkpoints are only 34-127 m apart (BR12, 2026-11-14).
+    geofenceSlackM: int(env.GEOFENCE_SLACK_M, 10), // grace zone added to every radius
+    accuracyCreditM: int(env.ACCURACY_CREDIT_M, 15), // at most this much of a reading's error margin counts for the student
     nearerMarginM: int(env.NEARER_MARGIN_M, 20), // another checkpoint must be this much nearer to win
     maxPositionAgeMs: int(env.MAX_POSITION_AGE_MS, 30_000),
     secondsPerQuestion: int(env.SECONDS_PER_QUESTION, 60), // BR13

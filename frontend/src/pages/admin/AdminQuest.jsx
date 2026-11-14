@@ -31,7 +31,7 @@ const emptyForm = {
   name: '',
   description: '',
   mapLink: '',
-  radius: '80',
+  radius: '35',
   questionCount: '3',
   passThreshold: '2',
   timeLimit: '',

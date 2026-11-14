@@ -10,9 +10,10 @@ import { useToast } from '../../hooks/useToast.jsx';
 import { t } from '../../i18n.js';
 
 /**
- * Run-time settings (BR52, BR55). The code preview shows every login code in a test inbox on the login page
+ * Run-time settings (BR52, BR55, BR56). The code preview shows every login code in a test inbox on the login page
  * (and in the backend terminal) in addition to the e-mail. Handy for testing, but while it is on anyone can log
  * in as anyone, so it must be off for the real pilot. Turning it on asks first; turning it off does not.
+ * The demo players switch shows the invented players of the demo seed in the rankings and lists, for testing.
  */
 export default function AdminSettings() {
   const toast = useToast();
@@ -32,13 +33,13 @@ export default function AdminSettings() {
     load();
   }, [load]);
 
-  const save = async (otpPreview) => {
+  const change = async (patch, done) => {
     setBusy(true);
     setError('');
     try {
-      const result = await api.admin.saveSettings({ otpPreview });
+      const result = await api.admin.saveSettings(patch);
       setSettings(result.settings);
-      toast.info(otpPreview ? t('Code preview is on') : t('Code preview is off'));
+      toast.info(done);
     } catch (failure) {
       setError(errorText(failure));
     } finally {
@@ -46,10 +47,15 @@ export default function AdminSettings() {
       setConfirm(false);
     }
   };
+  const save = (otpPreview) =>
+    change({ otpPreview }, otpPreview ? t('Code preview is on') : t('Code preview is off'));
+  const showDemo = (on) =>
+    change({ showDemo: on }, on ? t('Demo players are shown') : t('Demo players are hidden'));
 
   if (!settings && !error) return <Skeleton rows={2} height={120} />;
 
   const on = Boolean(settings?.otpPreview);
+  const demo = Boolean(settings?.showDemo);
   return (
     <section className="stack" aria-labelledby="settings-title">
       <Display as="h2" size="h2" id="settings-title">
@@ -104,6 +110,35 @@ export default function AdminSettings() {
               className="switch"
               disabled={busy}
               onClick={() => (on ? save(false) : setConfirm(true))}
+            />
+          </div>
+        </article>
+      )}
+      {settings && (
+        <article className="card stack" aria-labelledby="demo-title" data-testid="demo-players">
+          <div className="row row--between row--top">
+            <Display as="h3" size="h3" id="demo-title">
+              {t('Demo players')}
+            </Display>
+            <Chip tone={demo ? 'warn' : 'ok'}>{demo ? t('Shown') : t('Hidden')}</Chip>
+          </div>
+          <p className="muted">
+            {t(
+              'The invented players and teams of the demo seed. While they are hidden they appear nowhere: not in the ranks, the team ranking, player profiles, the dashboard or the admin lists. Show them to test with full rankings.',
+            )}
+          </p>
+          <div className="row row--between">
+            <span className="strong" id="demo-switch">
+              {t('Show demo players')}
+            </span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={demo}
+              aria-labelledby="demo-switch"
+              className="switch"
+              disabled={busy}
+              onClick={() => showDemo(!demo)}
             />
           </div>
         </article>

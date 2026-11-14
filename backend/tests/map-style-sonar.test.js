@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_MAP_STYLE, validateMapStyle } from '../src/services/map-style.js';
 
 describe('BR48 the sonar range ring settings', () => {
-  it('BR48 the sonar is on by default, red, normal speed, scan-line look, with the flash on', () => {
-    const sonar = { show: true, color: '#e2001a', speed: 'normal', look: 'sova', ping: true };
+  it('BR48 the sonar is on by default, red, normal speed, soft-pulse look, with the flash on', () => {
+    const sonar = { show: true, color: '#e2001a', speed: 'normal', look: 'soft', ping: true };
     expect(DEFAULT_MAP_STYLE.sonar).toEqual(sonar);
     expect(validateMapStyle({}).sonar).toEqual(sonar);
   });
@@ -17,16 +17,16 @@ describe('BR48 the sonar range ring settings', () => {
 
   it('BR48 every sonar setting can be changed, and the colour is stored as #rrggbb', () => {
     const style = validateMapStyle({
-      sonar: { show: false, color: 'rgb(0, 92, 173)', speed: 'fast', look: 'soft', ping: false },
+      sonar: { show: false, color: 'rgb(0, 92, 173)', speed: 'fast', look: 'sova', ping: false },
     });
     expect(style.sonar).toEqual({
       show: false,
       color: '#005cad',
       speed: 'fast',
-      look: 'soft',
+      look: 'sova',
       ping: false,
     });
-    expect(validateMapStyle({ sonar: { speed: 'slow' } }).sonar.look).toBe('sova');
+    expect(validateMapStyle({ sonar: { speed: 'slow' } }).sonar.look).toBe('soft');
   });
 
   it('BR48 wrong sonar settings are refused, naming each one', () => {

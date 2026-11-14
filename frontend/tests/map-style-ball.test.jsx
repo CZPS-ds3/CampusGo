@@ -1,5 +1,5 @@
 // The live-position ball's colours on the profile's map style card (BR48).
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MapStyleSettings } from '../src/components/MapStyleSettings.jsx';
@@ -8,7 +8,6 @@ import { DEFAULT_MAP_STYLE, PRESETS, cleanStyle, styleVariables } from '../src/m
 
 const api = vi.hoisted(() => ({
   saveMapStyle: vi.fn(async (style) => ({ style })),
-  resetMapStyle: vi.fn(),
 }));
 vi.mock('../src/api/client.js', () => ({ api }));
 
@@ -50,19 +49,23 @@ describe('BR48 the ball colours in the map style', () => {
         <MapStyleSettings />
       </ToastProvider>,
     );
-    await user.click(screen.getByText('Map style'));
-    await user.click(screen.getByRole('button', { name: /Your position: ball/ }));
-    const field = screen.getByRole('textbox');
+    await user.click(screen.getByText('Customisation'));
+    await user.dblClick(screen.getByRole('button', { name: /Your position: ball/ }));
+    let dialog = screen.getByRole('dialog', { name: 'Your position: ball' });
+    const field = within(dialog).getByRole('textbox');
     await user.clear(field);
     await user.type(field, '#0055aa');
-    const preview = screen.getByRole('img', { name: 'Preview of your map style' });
+    const preview = within(dialog).getByRole('img', { name: 'Preview of your map style' });
     expect(preview.style.getPropertyValue('--puck-body')).toBe('#0055aa');
-    expect(screen.getByTestId('preview-ball')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /Your position: lines/ }));
-    const lines = screen.getByRole('textbox');
+    expect(within(dialog).getByTestId('preview-ball')).toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: 'Done' }));
+    await user.dblClick(screen.getByRole('button', { name: 'Your position: direction indicator' }));
+    dialog = screen.getByRole('dialog', { name: 'Your position: direction indicator' });
+    const lines = within(dialog).getByRole('textbox');
     await user.clear(lines);
     await user.type(lines, 'rgb(0, 128, 0)');
-    await user.click(screen.getByRole('button', { name: 'Save map style' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Done' }));
+    await user.click(screen.getByRole('button', { name: 'Save customisation' }));
     expect(api.saveMapStyle).toHaveBeenCalledWith(
       expect.objectContaining({ ball: { body: '#0055aa', lines: '#008000' } }),
     );

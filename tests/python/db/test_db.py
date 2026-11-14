@@ -176,9 +176,24 @@ def test_a_student_has_one_map_style_and_a_deleted_account_leaves_no_trace(db):
     assert columns == {"map_style": "json", "status": "enum('active','blocked','archived')"}
 
 
-def test_no_checkpoint_circle_is_smaller_than_60_m_br12(db):
-    smallest = query(db, "SELECT MIN(radius) AS smallest FROM checkpoints")[0]["smallest"]
-    assert smallest >= 60
+def test_pilot_checkpoint_circles_are_tight_br12(db):
+    """BR12 (2026-11-14): 35 m buildings, 30 m garden, 25 m small spots; the checkpoints are 34-127 m apart."""
+    expected = {
+        "Mensa": 35,
+        "Library": 35,
+        "Building B": 35,
+        "Building C": 35,
+        "Campus Garden": 30,
+        "CAS Cafe": 25,
+        "Care.box and Shop.box": 25,
+        "Sensoricum": 25,
+    }
+    rows = query(
+        db,
+        "SELECT checkpoint_name, radius FROM checkpoints WHERE checkpoint_name IN %s",
+        (tuple(expected),),
+    )
+    assert {row["checkpoint_name"]: row["radius"] for row in rows} == expected
 
 
 def test_each_checkpoint_has_enough_questions_for_a_fresh_draw(db):

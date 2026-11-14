@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   FOLLOW_ZOOM,
-  accuracyRingPx,
   createFollower,
   metresPerPixel,
   nearestTurn,
@@ -34,14 +33,10 @@ function ball() {
 describe('the live position on the map', () => {
   afterEach(() => vi.useRealTimers());
 
-  it('keeps the accuracy circle one size on screen: as it looks in the following view, capped for a coarse fix', () => {
-    // A sixth of 12 m is 2 m; at zoom 19 x 2.2 one pixel is about 0.09 m here.
+  it('measures the map at the following zoom, which is 1.2 times closer than zoom 19 x 2.2', () => {
+    // At zoom 19 x 2.2 one pixel is about 0.09 m here; the sonar ring is drawn to scale with this.
     expect(metresPerPixel(HERE[0], 19 + Math.log2(2.2))).toBeCloseTo(0.0883, 3);
-    // Re-center on a larger screen is 1.2 times closer than that.
     expect(FOLLOW_ZOOM).toBeCloseTo(19 + Math.log2(2.2) + Math.log2(1.2), 6);
-    expect(accuracyRingPx(12, HERE[0])).toBe(23);
-    expect(accuracyRingPx(1, HERE[0])).toBe(20); // never smaller than the ball
-    expect(accuracyRingPx(500, HERE[0])).toBe(80); // a laptop on Wi-Fi does not fill the screen
   });
 
   it('rolls the ball the way it moves: walking north turns its front up', () => {

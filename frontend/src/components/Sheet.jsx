@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { IconButton } from './icons.jsx';
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -55,6 +56,32 @@ export function Sheet({ title, onClose, locked, children }) {
         tabIndex={-1}
       >
         <div className="sheet__grip" aria-hidden="true" />
+        {children}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+/** A centred dialog with a title and an X that closes it. Escape and a tap beside it close it too. */
+export function Dialog({ title, onClose, closeLabel, className = '', children }) {
+  const box = useRef(null);
+  const onKeyDown = useDialog(box, onClose, false);
+  return createPortal(
+    <div className="dialog-root" onKeyDown={onKeyDown}>
+      <div className="scrim" onClick={onClose} aria-hidden="true" />
+      <div
+        ref={box}
+        className={`card dialog ${className}`.trim()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        tabIndex={-1}
+      >
+        <div className="dialog__head">
+          <h2 className="h3 display dialog__title">{title}</h2>
+          <IconButton icon="close" label={closeLabel} onClick={onClose} />
+        </div>
         {children}
       </div>
     </div>,
