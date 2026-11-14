@@ -15,6 +15,7 @@ import {
   refreshTeamScore,
   repairTeam,
 } from './teams.js';
+import { realPlayers } from './demo.js';
 
 const SETTABLE_STATUSES = ['active', 'blocked', 'archived'];
 const ROLES = ['student', 'admin'];
@@ -46,10 +47,10 @@ const makeUserView = (mainAdminEmails) => (row) => ({
 const duplicateEmail = () =>
   new AppError(409, 'EMAIL_TAKEN', 'This e-mail address already belongs to an account.');
 
-export function createAdminService({ pool, config, clock, nameRules }) {
+export function createAdminService({ pool, config, clock, nameRules, settings }) {
   const userView = makeUserView(config.adminEmails);
   const accounts = createAccountService({ pool, clock });
-  const stats = createStatsService({ pool, clock });
+  const stats = createStatsService({ pool, clock, settings });
 
   const SELECT_USER = `SELECT s.*, t.team_name,
       (SELECT MAX(created_at) FROM sessions WHERE student_id = s.student_id) AS last_login_at,
@@ -77,22 +78,29 @@ export function createAdminService({ pool, config, clock, nameRules }) {
     const now = clock.now();
     const dayStart = new Date(now);
     dayStart.setUTCHours(0, 0, 0, 0);
+    // BR56: the demo seed's invented players count only while they are shown.
+    const real = realPlayers(await settings.showDemo());
     const [byStatus] = await pool.query(
-      "SELECT status, COUNT(*) AS n FROM students WHERE role = 'student' GROUP BY status",
+      `SELECT status, COUNT(*) AS n FROM students s WHERE role = 'student' AND ${real} GROUP BY status`,
     );
     const [[{ sessions }]] = await pool.query(
       'SELECT COUNT(*) AS sessions FROM sessions WHERE is_active = 1 AND expires_at > ?',
       [at(now)],
     );
     const [[{ passedToday }]] = await pool.query(
-      "SELECT COUNT(*) AS passedToday FROM attempts WHERE status = 'passed' AND start_time >= ?",
+      `SELECT COUNT(*) AS passedToday FROM attempts a JOIN students s ON s.student_id = a.student_id
+       WHERE a.status = 'passed' AND a.start_time >= ? AND ${real}`,
       [dayStart],
     );
     const [[{ loginsToday }]] = await pool.query(
-      "SELECT COUNT(*) AS loginsToday FROM audit_events WHERE event_type = 'login' AND created_at >= ?",
+      `SELECT COUNT(*) AS loginsToday FROM audit_events e JOIN students s ON s.student_id = e.student_id
+       WHERE e.event_type = 'login' AND e.created_at >= ? AND ${real}`,
       [dayStart],
     );
-    const [[{ teams }]] = await pool.query('SELECT COUNT(*) AS teams FROM teams');
+    const [[{ teams }]] = await pool.query(
+      `SELECT COUNT(*) AS teams FROM teams t
+       WHERE NOT EXISTS (SELECT 1 FROM students s WHERE s.team_id = t.team_id AND NOT (${real}))`,
+    );
     const [[{ admins }]] = await pool.query(
       "SELECT COUNT(*) AS admins FROM students WHERE role = 'admin'",
     );
@@ -119,7 +127,8 @@ export function createAdminService({ pool, config, clock, nameRules }) {
     limit = 100,
     offset = 0,
   } = {}) {
-    const where = [];
+    // BR56: the demo seed's invented players are listed only while they are shown.
+    const where = [realPlayers(await settings.showDemo())];
     const params = [];
     if (q) {
       where.push(
@@ -140,7 +149,7 @@ export function createAdminService({ pool, config, clock, nameRules }) {
       params.push(status);
     }
     const [rows] = await pool.query(
-      `${SELECT_USER} ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+      `${SELECT_USER} WHERE ${where.join(' AND ')}
        ORDER BY s.created_at DESC, s.student_id DESC LIMIT ? OFFSET ?`,
       [...params, limit, offset],
     );
@@ -440,10 +449,14 @@ export function createAdminService({ pool, config, clock, nameRules }) {
 
   // ----- teams -----
   async function listTeams() {
+    // BR56: a team with an invented player of the demo seed is listed only while demo players are shown.
+    const showDemo = await settings.showDemo();
     const [teams] = await pool.query(
       `SELECT t.team_id, t.team_name, t.team_score, t.created_at, t.leader_id, COUNT(s.student_id) AS size
        FROM teams t LEFT JOIN students s ON s.team_id = t.team_id
-       GROUP BY t.team_id ORDER BY t.team_score DESC, t.team_id`,
+       GROUP BY t.team_id HAVING ? OR COALESCE(SUM(s.is_demo), 0) = 0
+       ORDER BY t.team_score DESC, t.team_id`,
+      [showDemo],
     );
     const [members] = await pool.query(
       `SELECT student_id, team_id, first_name, last_name, nickname, status, team_position

@@ -291,7 +291,7 @@ export function createCheckpointAdminService({ pool, config, clock, uploadDir, f
     const now = clock.now();
     const merged = {
       description: '',
-      radius: 80,
+      radius: 35,
       timeLimitSeconds: null,
       hardQuestionEnabled: false,
       typeMode: 'MCQ_ONLY',

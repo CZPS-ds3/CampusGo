@@ -41,7 +41,7 @@ export const FOLLOW_LOW = 0.2;
 const SMALLEST = 0.3;
 
 /**
- * How large the ball and its waves are drawn at a Leaflet zoom: full size in the following view and closer, smaller
+ * How large the ball is drawn at a Leaflet zoom: full size in the following view and closer, smaller
  * (down to 30 %) when zoomed out, so a visitor who zoomed away is nudged to tap Re-center.
  */
 export const puckScale = (zoom) => Math.min(1, Math.max(SMALLEST, 2 ** (zoom - FOLLOW_ZOOM)));
@@ -50,43 +50,30 @@ export const puckScale = (zoom) => Math.min(1, Math.max(SMALLEST, 2 ** (zoom - F
 export function scalePuck(element, zoom) {
   element?.style.setProperty('--puck-scale', puckScale(zoom).toFixed(3));
 }
-// The accuracy circle keeps the size it had in the following view at zoom 19 x 2.2 (about 20.14).
-const RING_ZOOM = 19 + Math.log2(2.2);
-
 const EARTH_M = 40075016.686;
 const M_PER_DEG = EARTH_M / 360;
-const RING_MIN_PX = 20; // a little wider than the 28 px ball
-const RING_MAX_PX = 80; // a coarse fix (a laptop on Wi-Fi) would otherwise fill the screen
 
 /** Metres on the ground per screen pixel at a Leaflet zoom level (256-pixel tiles). */
 export const metresPerPixel = (lat, zoom) =>
   (EARTH_M * Math.cos((lat * Math.PI) / 180)) / 2 ** (zoom + 8);
 
-/**
- * Radius in pixels of the soft circle round the ball: as large as a sixth of the GPS accuracy looks in the close
- * following view, and that size at every zoom, so it never vanishes when zooming out.
- */
-export function accuracyRingPx(accuracy, lat) {
-  const px = accuracy / 6 / metresPerPixel(lat, RING_ZOOM);
-  return Math.round(Math.min(RING_MAX_PX, Math.max(RING_MIN_PX, px)));
-}
-
 /** Box of the ball marker in pixels (the ball is 28 or 42 px, see --puck-orb); its middle sits on the position. */
 export const PUCK_SIZE = [44, 44];
 export const PUCK_ANCHOR = [22, 22];
-/** Box of the ground marker (sonar waves and direction wedge) in pixels; its middle sits on the position. */
+/** Box of the ground marker (sonar range ring and direction wedge) in pixels; its middle sits on the position. */
 export const GROUND_SIZE = 96;
 
-// A few waves in a loop, one after another, like a submarine's sonar.
-const WAVES = '<span class="puck-ground__wave"></span>'.repeat(3);
-
-// The sonar range ring (like Sova's recon dart, or the range ring of a location game): waves run out from the ball to
-// the real unlock range, drawn to scale, and a faint edge marks the range. Its radius in pixels comes from the map
+// The sonar range ring (like Sova's recon dart, or the range ring of a location game): one wave at a time runs out from
+// the ball to the real unlock range, drawn to scale, and the next starts only once it has faded out; a faint edge marks
+// the range. Its radius in pixels comes from the map
 // (--sonar-r, set by sizeSonar); its look, speed and on/off from the map style's data attributes (BR48).
-const SONAR = `<span class="puck-sonar">${'<span class="puck-sonar__wave"></span>'.repeat(3)}<span class="puck-sonar__edge"></span></span>`;
+const SONAR = `<span class="puck-sonar"><span class="puck-sonar__wave"></span><span class="puck-sonar__edge"></span></span>`;
 
-/** How long one sonar wave takes from the ball to the edge, in ms, for each speed of the map style (screens.css). */
-export const SONAR_WAVE_MS = { slow: 4500, normal: 3000, fast: 1800 };
+/**
+ * How long one sonar wave takes from the ball to the edge, in ms, for each speed of the map style (screens.css); the
+ * same for both looks. Each speed is 1.5 times the next faster one.
+ */
+export const SONAR_WAVE_MS = { slow: 6750, normal: 4500, fast: 3000 };
 
 /** How far away a quest can be unlocked in metres: its radius plus the grace zone (`reachM` from the server). */
 export const reachOf = (checkpoint) => checkpoint.reachM ?? checkpoint.radius;
@@ -177,16 +164,15 @@ export function pingPin(element, delayMs) {
 }
 
 /**
- * What lies on the ground under the ball, below the checkpoint pins: the sonar range ring, waves rolling out to as far
- * as the GPS accuracy reaches (`ringPx` radius) and the soft red wedge that points to the walking or compass direction
- * (`heading`, 0 = north; hidden while unknown).
+ * What lies on the ground under the ball, below the checkpoint pins: the sonar range ring and the soft red wedge that
+ * points to the compass or walking direction (`heading`, 0 = north). The wedge always shows; until a direction is
+ * known it points north.
  */
-export function groundHtml(heading, ringPx) {
-  const known = Number.isFinite(heading);
-  return `<span class="puck-ground${known ? '' : ' puck-ground--still'}" aria-hidden="true">
+export function groundHtml(heading) {
+  const turn = Math.round(Number.isFinite(heading) ? heading : 0);
+  return `<span class="puck-ground" aria-hidden="true">
     ${SONAR}
-    <span class="puck-ground__waves" style="width: ${ringPx * 2}px; height: ${ringPx * 2}px">${WAVES}</span>
-    <span class="puck-ground__beam" data-turn="${Math.round(heading ?? 0)}" style="transform: rotate(${Math.round(heading ?? 0)}deg)"></span>
+    <span class="puck-ground__beam" data-turn="${turn}" style="transform: rotate(${turn}deg)"></span>
   </span>`;
 }
 
@@ -199,18 +185,13 @@ export function nearestTurn(current, heading) {
   return Math.round((current + delta) * 10) / 10;
 }
 
-/** Updates the ground in place: the wedge turned to `heading` (hidden if null) and how far the waves go. */
-export function updateGround(element, heading, ringPx) {
-  const ground = element?.querySelector('.puck-ground');
-  if (!ground) return;
-  ground.classList.toggle('puck-ground--still', !Number.isFinite(heading));
-  const beam = ground.querySelector('.puck-ground__beam');
-  const angle = nearestTurn(Number(beam.dataset.turn ?? 0), heading ?? 0);
+/** Updates the ground in place: the wedge turned to `heading`; without a direction it keeps pointing where it did. */
+export function updateGround(element, heading) {
+  const beam = element?.querySelector('.puck-ground__beam');
+  if (!beam || !Number.isFinite(heading)) return;
+  const angle = nearestTurn(Number(beam.dataset.turn ?? 0), heading);
   beam.dataset.turn = String(angle);
   beam.style.transform = `rotate(${angle}deg)`;
-  const waves = ground.querySelector('.puck-ground__waves').style;
-  waves.width = `${ringPx * 2}px`;
-  waves.height = `${ringPx * 2}px`;
 }
 
 // The ball is low-poly, like a geodesic dome: an icosahedron with each triangle split in four and pushed out onto a

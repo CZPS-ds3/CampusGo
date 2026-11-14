@@ -266,7 +266,7 @@ test.describe('admin: quests', () => {
 });
 
 test.describe('map style', () => {
-  test('BR48 light stays the default; a student picks a preset and a custom RGB colour and saves one style', async ({
+  test('BR48 light stays the default; a student picks a map theme and a custom RGB colour and saves one style', async ({
     page,
   }, testInfo) => {
     await login(page);
@@ -275,10 +275,14 @@ test.describe('map style', () => {
     const settings = page.getByTestId('map-style');
     await settings.locator('summary').click();
     await expect(settings.getByRole('radio', { name: 'Follow the app' })).toBeChecked();
-    await settings.getByRole('button', { name: /Ocean/ }).click();
+    await settings.getByRole('button', { name: 'Next map theme' }).click();
+    await expect(settings.getByTestId('map-theme-name')).toContainText('Ocean');
     await settings.getByRole('radio', { name: 'Dark' }).click();
 
-    const highlight = settings.getByTestId('colour-Highlight (selected checkpoint)');
+    // One click selects an element; a double-click opens its colour in a popup.
+    await settings.getByRole('button', { name: 'Highlight (selected checkpoint)' }).dblclick();
+    const popup = page.getByRole('dialog', { name: 'Highlight (selected checkpoint)' });
+    const highlight = popup.getByTestId('colour-Highlight (selected checkpoint)');
     await highlight.getByLabel('R (0–255)').fill('0');
     await highlight.getByLabel('G (0–255)').fill('128');
     await highlight.getByLabel('B (0–255)').fill('255');
@@ -288,10 +292,14 @@ test.describe('map style', () => {
     await highlight.getByLabel('Colour code').fill('banana');
     await expect(highlight.getByText(/Use a colour like #1a2b3c/)).toBeVisible();
     await highlight.getByLabel('Colour code').fill('#ff00aa');
+    await shot(page, testInfo, '34-map-style-popup');
+    await expectNoHorizontalScroll(page);
+    await popup.getByRole('button', { name: 'Close' }).click();
+    await expect(settings.getByTestId('map-theme-name')).toContainText('Custom');
     await shot(page, testInfo, '34-map-style');
 
-    await settings.getByRole('button', { name: 'Save map style' }).click();
-    await expect(page.getByText('Map style saved')).toBeVisible();
+    await settings.getByRole('button', { name: 'Save customisation' }).click();
+    await expect(page.getByText('Customisation saved')).toBeVisible();
     await expect(page.locator('html')).toHaveAttribute('data-map-base', 'dark');
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
     await expectNoHorizontalScroll(page);
@@ -302,7 +310,7 @@ test.describe('map style', () => {
     await page.getByTestId('map-style').locator('summary').click();
     await expect(page.getByTestId('map-style').getByRole('radio', { name: 'Dark' })).toBeChecked();
     await page.getByTestId('map-style').getByRole('button', { name: 'Reset to default' }).click();
-    await expect(page.getByText('Map style reset')).toBeVisible();
+    await expect(page.getByText('Customisation reset')).toBeVisible();
     await expect(page.locator('html')).toHaveAttribute('data-map-base', 'follow');
   });
 
@@ -313,8 +321,8 @@ test.describe('map style', () => {
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
     await page.getByTestId('map-style').locator('summary').click();
     await page.getByTestId('map-style').getByRole('radio', { name: 'Light' }).click();
-    await page.getByTestId('map-style').getByRole('button', { name: 'Save map style' }).click();
-    await expect(page.getByText('Map style saved')).toBeVisible();
+    await page.getByTestId('map-style').getByRole('button', { name: 'Save customisation' }).click();
+    await expect(page.getByText('Customisation saved')).toBeVisible();
     await page.goto('/map');
     await expect(page.getByRole('region', { name: 'Campus map' })).toBeVisible();
     await expect(page.locator('html')).toHaveAttribute('data-map-base', 'light');
@@ -335,8 +343,9 @@ test.describe('admin: the checkpoint circle', () => {
     await radius.fill('150');
     await expect(page.getByText(/about 300 m across/)).toBeVisible();
     await expect(page.getByLabel('Drag to change the size')).toHaveValue('150');
-    await page.getByRole('radio', { name: '60 m' }).click();
-    await expect(radius).toHaveValue('60');
+    // BR12 tight circles: the quick sizes are 25, 35, 50 and 80 m.
+    await page.getByRole('radio', { name: '35 m' }).click();
+    await expect(radius).toHaveValue('35');
     await radius.fill('900');
     await expect(page.getByRole('alert').filter({ hasText: 'between 10 and 500' })).toBeVisible();
     await radius.fill('100');

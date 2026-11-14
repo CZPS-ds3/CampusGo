@@ -42,6 +42,7 @@ describe('3D map style', () => {
       'building',
       'ccq-tint',
       'ccq-aerial',
+      'ccq-night',
       'ccq-buildings',
       'road-label',
       'ccq-route',
@@ -80,6 +81,7 @@ describe('3D map style', () => {
       'water-name',
       'road',
       'ccq-aerial',
+      'ccq-night',
       'ccq-buildings',
       'road-label',
       'ccq-route',
@@ -95,6 +97,44 @@ describe('3D map style', () => {
     expect(photo.paint['fill-extrusion-opacity']).toBeLessThan(
       street.paint['fill-extrusion-opacity'],
     );
+  });
+
+  it('over the aerial photo only the labels of the street map are drawn; the photo covers the rest', () => {
+    const photo = buildStyle(BASE, options({ base: 'aerial' }));
+    expect(layer(photo, 'building').layout.visibility).toBe('none');
+    expect(layer(photo, 'background').layout?.visibility).toBeUndefined();
+    expect(layer(photo, 'road-label').layout?.visibility).toBeUndefined();
+    expect(layer(buildStyle(BASE, options()), 'building').layout?.visibility).toBeUndefined();
+  });
+
+  it('fetches the aerial photo as 512-pixel pictures, only inside the map area, shown at once', () => {
+    const style = buildStyle(BASE, options({ base: 'aerial' }));
+    expect(style.sources['ccq-aerial']).toMatchObject({
+      tileSize: 512,
+      maxzoom: 18,
+      bounds: [MAP_AREA.west, MAP_AREA.south, MAP_AREA.east, MAP_AREA.north],
+    });
+    expect(aerialTileUrl()).toContain('WIDTH=512&HEIGHT=512');
+    expect(layer(style, 'ccq-aerial').paint['raster-fade-duration']).toBe(0);
+  });
+
+  it('gives the aerial photo a night look after sunset, and only the aerial photo', () => {
+    const night = buildStyle(BASE, options({ base: 'aerial', night: true }));
+    expect(layer(night, 'ccq-aerial').paint['raster-brightness-max']).toBeLessThan(0.5);
+    expect(layer(night, 'ccq-night').layout.visibility).toBe('visible');
+    const day = buildStyle(BASE, options({ base: 'aerial' }));
+    expect(layer(day, 'ccq-aerial').paint['raster-brightness-max']).toBeUndefined();
+    expect(layer(day, 'ccq-night').layout.visibility).toBe('none');
+    // The street map has no night look: it follows light or dark.
+    const street = buildStyle(BASE, options({ night: true }));
+    expect(layer(street, 'ccq-night').layout.visibility).toBe('none');
+  });
+
+  it('the 2D view is the same map without raised buildings; 3D raises them', () => {
+    const flat = layer(buildStyle(BASE, options({ flat: true })), 'ccq-buildings');
+    const tilted = layer(buildStyle(BASE, options()), 'ccq-buildings');
+    expect(flat.layout.visibility).toBe('none');
+    expect(tilted.layout.visibility).toBe('visible');
   });
 
   it('BR48 buildings and route take the colours of the map style', () => {
@@ -136,7 +176,7 @@ describe('3D map style', () => {
     expect(STYLE_URLS.light).not.toBe(STYLE_URLS.dark);
   });
 
-  it('leaves the live position and its accuracy circle to markers, so they can move fluidly', () => {
+  it('leaves the live position and its sonar ring to markers, so they can move fluidly', () => {
     const style = buildStyle(BASE, options());
     expect(style.sources['ccq-me']).toBeUndefined();
     expect(layer(style, 'ccq-accuracy')).toBeUndefined();

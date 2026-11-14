@@ -10,7 +10,8 @@ test('the app starts, a player signs in and sees the map with the checkpoints', 
   await expect(page.getByRole('heading', { name: /Campus/ })).toBeVisible();
   await login(page);
   await expect(page.getByRole('region', { name: 'Campus map' })).toBeVisible();
-  await expect(page.locator('.leaflet-marker-icon').first()).toBeVisible();
+  // The pins of the MapLibre map, or of the Leaflet map where WebGL is missing.
+  await expect(page.locator('.pin-wrap').first()).toBeVisible({ timeout: 25_000 });
   expect(problems).toEqual([]);
 });
 

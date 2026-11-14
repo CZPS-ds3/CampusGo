@@ -1,8 +1,10 @@
-// Settings an administrator changes at run time (BR52, BR55). Stored in `app_settings`, one row per key.
+// Settings an administrator changes at run time (BR52, BR55, BR56). Stored in `app_settings`, one row per key.
 import { at } from '../clock.js';
 import { recordEvent } from './audit.js';
 
 export const OTP_PREVIEW = 'otp_preview';
+/** BR56: the invented players of the demo seed appear in rankings and lists (for testing); off by default. */
+export const SHOW_DEMO = 'show_demo_players';
 export const PILOT_SEEDED = 'pilot_checkpoints_seeded';
 /** The team's question bank (backend/src/db/question-bank.js) was put into the pilot quests once. */
 export const QUESTION_BANK_SEEDED = 'question_bank_v1';
@@ -52,14 +54,31 @@ export function createSettingsService({ pool, config, clock }) {
     return getAll();
   }
 
+  /** BR56: whether the invented players of the demo seed are shown in rankings, profiles, statistics and lists. */
+  async function showDemo() {
+    return (await readSetting(pool, SHOW_DEMO, 'false')) === 'true';
+  }
+
+  async function setShowDemo(actorId, on) {
+    const now = clock.now();
+    await writeSetting(pool, SHOW_DEMO, on ? 'true' : 'false', { now, actorId });
+    await recordEvent(pool, now, {
+      actorId,
+      type: 'setting_changed',
+      detail: `Demo players ${on ? 'shown' : 'hidden'}`,
+    });
+    return getAll();
+  }
+
   /** Everything the admin settings page shows. */
   async function getAll() {
     return {
       otpPreview: await otpPreview(),
+      showDemo: await showDemo(),
       mailConfigured: Boolean(config.smtp.host),
       environment: config.nodeEnv,
     };
   }
 
-  return { otpPreview, setOtpPreview, getAll };
+  return { otpPreview, setOtpPreview, showDemo, setShowDemo, getAll };
 }

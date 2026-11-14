@@ -3,10 +3,11 @@
 import { at } from '../clock.js';
 import { notFound } from '../middleware/errors.js';
 import { displayName } from './auth.js';
+import { realPlayers } from './demo.js';
 import { rankOfTeam } from './team-ranking.js';
 import { MAX_TEAM_SIZE, TEAM_ORDER } from './teams.js';
 
-export function createPlayerService({ pool, clock, boards }) {
+export function createPlayerService({ pool, clock, boards, settings }) {
   const person = (row) => ({
     id: row.student_id,
     displayName: displayName(row),
@@ -34,8 +35,11 @@ export function createPlayerService({ pool, clock, boards }) {
   }
 
   async function getPlayer(viewerId, playerId) {
+    const showDemo = await settings.showDemo();
+    // BR56: a hidden demo player has no profile either.
     const [[row]] = await pool.query(
-      "SELECT * FROM students WHERE student_id = ? AND status = 'active' AND role = 'student'",
+      `SELECT * FROM students s
+       WHERE student_id = ? AND status = 'active' AND role = 'student' AND ${realPlayers(showDemo)}`,
       [playerId],
     );
     if (!row) throw notFound('Player not found.');
@@ -56,7 +60,7 @@ export function createPlayerService({ pool, clock, boards }) {
         name: teamRow.team_name,
         pictureUrl: teamRow.profile_picture,
         score: teamRow.team_score,
-        rank: await rankOfTeam(pool, teamRow.team_id),
+        rank: await rankOfTeam(pool, teamRow.team_id, { showDemo }),
         members: members.map(person),
       };
     }

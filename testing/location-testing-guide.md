@@ -38,14 +38,14 @@ To test another position, change the numbers in Sensors and tap **Try again** on
 
 | Checkpoint | Radius | Questions (pass) | Centre: lat, lng → must unlock | Inside: lat, lng → must unlock | Outside: lat, lng → *Not there yet* |
 |---|---|---|---|---|---|
-| Mensa | 80 m | 5 (4) | 49.148464, 9.215808 | 49.148464, 9.216248 (32 m) | 49.149903, 9.215808 |
-| Library | 80 m | 5 (4) | 49.149493, 9.216467 | 49.149781, 9.216467 (32 m) | 49.150932, 9.216467 |
-| CAS Cafe | 60 m | 3 (2) | 49.148951, 9.216205 | 49.149167, 9.216205 (24 m) | 49.150210, 9.216205 |
-| Campus Garden | 70 m | 3 (2) | 49.147082, 9.217206 | 49.147334, 9.217206 (28 m) | 49.148431, 9.217206 |
-| Care.box and Shop.box | 60 m | 3 (2) | 49.149088, 9.217270 | 49.149304, 9.217270 (24 m) | 49.150347, 9.217270 |
-| Building B | 80 m | 5 (4) | 49.147126, 9.218486 | 49.147414, 9.218486 (32 m) | 49.148565, 9.218486 |
-| Building C | 80 m | 5 (4) | 49.147316, 9.217900 | 49.147028, 9.217900 (32 m) | 49.148755, 9.217900 |
-| Sensoricum | 60 m | 3 (2) | 49.147620, 9.217807 | 49.147836, 9.217807 (24 m) | 49.148879, 9.217807 |
+| Mensa | 35 m | 5 (4) | 49.148464, 9.215808 | 49.148464, 9.216000 (14 m) | 49.149498, 9.215808 |
+| Library | 35 m | 5 (4) | 49.149493, 9.216467 | 49.149619, 9.216467 (14 m) | 49.150527, 9.216467 |
+| CAS Cafe | 25 m | 3 (2) | 49.148951, 9.216205 | 49.149041, 9.216205 (10 m) | 49.149895, 9.216205 |
+| Campus Garden | 30 m | 3 (2) | 49.147082, 9.217206 | 49.147190, 9.217206 (12 m) | 49.148071, 9.217206 |
+| Care.box and Shop.box | 25 m | 3 (2) | 49.149088, 9.217270 | 49.149178, 9.217270 (10 m) | 49.150032, 9.217270 |
+| Building B | 35 m | 5 (4) | 49.147126, 9.218486 | 49.147252, 9.218486 (14 m) | 49.148160, 9.218486 |
+| Building C | 35 m | 5 (4) | 49.147316, 9.217900 | 49.147190, 9.217900 (14 m) | 49.148350, 9.217900 |
+| Sensoricum | 25 m | 3 (2) | 49.147620, 9.217807 | 49.147710, 9.217807 (10 m) | 49.148564, 9.217807 |
 
 Expected for **Centre** and **Inside**: "Locked on!", then the quiz opens and the timer starts at `questions × 60 s`
 (5 questions = 5:00, 3 questions = 3:00).
@@ -53,18 +53,18 @@ Expected for **Outside**: "Not there yet. You are not at *name* yet. No attempt 
 
 ## 4. Overlapping circles: one spot never unlocks two checkpoints
 
-Some circles overlap. A position inside several circles unlocks **only the checkpoint with the nearest centre**.
-Stand at the centre of the first checkpoint, then try to start the second one:
+The circles are small (BR12, 2026-11-14: 25-35 m), so only close neighbours still overlap. A position inside
+several circles unlocks **only the checkpoint whose centre is clearly nearer** (by 20 m, `NEARER_MARGIN_M`).
+Stand at the spot, then try to start the second checkpoint:
 
 | Stand at (lat, lng) | Tap this checkpoint | Expected |
 |---|---|---|
-| Building C: 49.147316, 9.217900 | Sensoricum (34 m apart) | "You are at Building C, not at Sensoricum." No attempt, no timer |
-| Sensoricum: 49.147620, 9.217807 | Building C (34 m apart) | "You are at Sensoricum, not at Building C." No attempt, no timer |
-| Building C: 49.147316, 9.217900 | Building B (48 m apart) | "You are at Building C, not at Building B." |
-| Building B: 49.147126, 9.218486 | Building C (48 m apart) | "You are at Building B, not at Building C." |
-| Campus Garden: 49.147082, 9.217206 | Building C (57 m apart) | "You are at Campus Garden, not at Building C." |
+| Sensoricum centre: 49.147620, 9.217807 | Building C (34 m apart) | "You are at Sensoricum, not at Building C." No attempt, no timer |
+| 14 m from Building B towards Building C: 49.147180, 9.218320 | Building C (48 m apart) | "You are at Building B, not at Building C." No attempt, no timer |
+| 14 m from Building C towards Building B: 49.147262, 9.218066 | Building B (48 m apart) | "You are at Building C, not at Building B." No attempt, no timer |
 
-Then tap the checkpoint you are really standing at: it must unlock.
+Then tap the checkpoint you are really standing at: it must unlock. Neighbours further apart (for example the Mensa
+and Care.box and Shop.box, 127 m) no longer reach each other at all: from one, the other answers *Not there yet*.
 
 ## 5. Failure cases (none may use an attempt or start a timer)
 

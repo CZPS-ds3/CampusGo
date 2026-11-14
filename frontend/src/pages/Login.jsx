@@ -11,7 +11,7 @@ import { Chip, Display, Input, LangSwitch, Logo } from '../components/ui.jsx';
 import { useSession } from '../hooks/useSession.jsx';
 import { formatClock } from '../hooks/useServerTimer.js';
 import { useToast } from '../hooks/useToast.jsx';
-import { t } from '../i18n.js';
+import { applyNewAccountMapDefaults, t } from '../i18n.js';
 
 const RESEND_SECONDS = USE_MOCKS ? 0 : 30;
 const CODE_LIFETIME_SECONDS = 600;
@@ -159,6 +159,8 @@ export default function Login() {
           setStep('profile');
           return;
         }
+        // The account was just created: it starts with the map defaults that suit this device.
+        if (withProfile) applyNewAccountMapDefaults();
         await finish(result);
       } catch (failure) {
         if (failure.code === 'INVALID_CODE') {

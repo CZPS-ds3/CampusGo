@@ -1,4 +1,5 @@
 import L from 'leaflet';
+import { MAP_AREA } from './api/mapLink.js';
 import { getMapBase, t } from './i18n.js';
 
 const STREET_URL =
@@ -22,16 +23,20 @@ export const AERIAL_ATTRIBUTION =
  * on a phone; the tiles are enlarged above the servers' own levels.
  */
 export const MAX_ZOOM = 21 + Math.log2(1.2);
-const PREVIEW_CENTRE = { lat: 49.1476, lng: 9.2172 };
-const PREVIEW_ZOOM = 17;
+/** Middle and zoom (Leaflet's numbers) of the small map previews in the preferences. */
+export const PREVIEW_CENTRE = { lat: 49.1476, lng: 9.2172 };
+export const PREVIEW_ZOOM = 17;
 const EARTH_RADIUS_M = 6378137;
 
 /**
  * The aerial photo and the street map as two Leaflet layers. Only the street tiles get the `map-tiles--street`
- * class, so the dark theme's CSS filter and the street-map style never turn the photo into a negative.
+ * class, so the dark theme's CSS filter and the street-map style never turn the photo into a negative; the photo's
+ * `map-tiles--aerial` class carries its night look. Tiles are only fetched inside the map area.
  */
 export function createBaseLayers({ minZoom }) {
-  // Beyond the last level a server delivers, its tiles are enlarged instead of the layer disappearing.
+  const area = L.latLngBounds([MAP_AREA.south, MAP_AREA.west], [MAP_AREA.north, MAP_AREA.east]);
+  // Beyond the last level a server delivers, its tiles are enlarged instead of the layer disappearing. 512-pixel
+  // pictures: a quarter as many requests to the photo server as 256-pixel ones, for the same sharpness.
   const aerial = L.tileLayer.wms(AERIAL_URL, {
     layers: AERIAL_LAYER,
     format: 'image/jpeg',
@@ -39,8 +44,12 @@ export function createBaseLayers({ minZoom }) {
     attribution: AERIAL_ATTRIBUTION,
     minZoom,
     maxZoom: MAX_ZOOM,
-    maxNativeZoom: 20,
+    // Level 19 is 0.2 m per pixel, the photo's own resolution (DOP20); closer, its pictures are enlarged.
+    maxNativeZoom: 19,
+    tileSize: 512,
+    bounds: area,
     crossOrigin: true,
+    className: 'map-tiles--aerial',
   });
   const street = L.tileLayer(STREET_URL, {
     attribution: STREET_ATTRIBUTION,
@@ -48,6 +57,7 @@ export function createBaseLayers({ minZoom }) {
     maxZoom: MAX_ZOOM,
     maxNativeZoom: 19,
     subdomains: 'abcd',
+    bounds: area,
     crossOrigin: true,
     className: 'map-tiles--street',
   });
@@ -79,8 +89,8 @@ export function aerialTileUrl() {
     'STYLES=',
     'CRS=EPSG:3857',
     'BBOX={bbox-epsg-3857}',
-    'WIDTH=256',
-    'HEIGHT=256',
+    'WIDTH=512',
+    'HEIGHT=512',
     'FORMAT=image/jpeg',
   ];
   return `${AERIAL_URL}?${params.join('&')}`;

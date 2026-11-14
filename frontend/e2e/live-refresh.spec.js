@@ -52,18 +52,17 @@ test('BR48 the student colours the ball and the map shows it in those colours', 
   await open(page, '/profile');
   const settings = page.getByTestId('map-style');
   await settings.locator('summary').click();
-  await settings.getByRole('button', { name: /Your position: ball/ }).click();
-  await settings
-    .getByTestId('colour-Your position: ball')
-    .getByLabel('Colour code')
-    .fill('#0055aa');
-  await settings.getByRole('button', { name: /Your position: lines/ }).click();
-  await settings
-    .getByTestId('colour-Your position: lines and direction')
+  await settings.getByRole('button', { name: 'Your position: ball' }).dblclick();
+  await page.getByTestId('colour-Your position: ball').getByLabel('Colour code').fill('#0055aa');
+  await page.getByRole('button', { name: 'Done' }).click();
+  await settings.getByRole('button', { name: 'Your position: direction indicator' }).dblclick();
+  await page
+    .getByTestId('colour-Your position: direction indicator')
     .getByLabel('Colour code')
     .fill('rgb(255, 200, 0)');
-  await settings.getByRole('button', { name: 'Save map style' }).click();
-  await expect(page.getByText('Map style saved')).toBeVisible();
+  await page.getByRole('button', { name: 'Done' }).click();
+  await settings.getByRole('button', { name: 'Save customisation' }).click();
+  await expect(page.getByText('Customisation saved')).toBeVisible();
   await page.goto('/map');
   const facet = page.locator('.puck__facet').first();
   await expect(facet).toBeAttached();
