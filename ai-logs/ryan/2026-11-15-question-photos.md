@@ -18,3 +18,5 @@
 - Synchronized `frontend/src/api/question-bank.json` with the backend question bank.
 - Updated the related README, question-bank, and photo-credit documentation.
 - Verified the photo URLs, linting, formatting, and frontend tests. Backend tests were not run successfully because MySQL was unavailable at `127.0.0.1:3307`.
+- After the pipeline reported an unused-photo failure, removed the obsolete duplicate `frontend/public/quests` assets, updated the static photo test to use the canonical `CampusGO_Photos` folder, and compressed the oversized CAS Cafe image below the 400 KB test limit.
+- Re-ran the Python unit tests, Black, and Pylint successfully; the Python unit suite passed with 58 tests passed and 6 platform-specific skips.
