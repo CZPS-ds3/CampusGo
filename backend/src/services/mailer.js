@@ -20,15 +20,18 @@ function withQueue(deliver) {
 
 /** Parses "Display Name <email@example.com>" or plain "email@example.com" into Brevo's sender object. */
 function parseSender(from) {
-  const match = String(from || '').match(/^\s*(.*?)\s*<([^>]+)>\s*$/);
-  if (match) {
-    const name = match[1].replace(/^["']|["']$/g, '').trim();
+  const raw = String(from || '').trim();
+  const open = raw.indexOf('<');
+  const close = raw.indexOf('>');
+  if (open !== -1 && close > open) {
+    const name = raw.slice(0, open).replace(/^["']|["']$/g, '').trim();
+    const email = raw.slice(open + 1, close).trim();
     return {
       ...(name ? { name } : {}),
-      email: match[2].trim(),
+      email,
     };
   }
-  return { email: String(from || '').trim() };
+  return { email: raw };
 }
 
 /** HTTPS API mailer via Brevo (works on cloud hosts like Render Free Tier that block outbound SMTP ports). */
