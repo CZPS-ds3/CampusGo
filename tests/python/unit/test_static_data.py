@@ -104,7 +104,20 @@ def jpeg_segments(data):
 
 def team_photos():
     """Every photo the team took: the place photos named *-photo-* and the question photos."""
-    return sorted(PHOTOS.glob("*-photo-*.jpg")) + sorted((PUBLIC / "quests").rglob("*.jpg"))
+    return sorted(PHOTOS.glob("*-photo-*.jpg")) + sorted(
+        (PUBLIC / "places" / "CampusGO_Photos").rglob("*.jpg")
+    )
+
+
+def question_photos():
+    """Photos whose names or parent folders identify them as question-specific assets."""
+    photos = (PUBLIC / "places" / "CampusGO_Photos").rglob("*.jpg")
+    return sorted(
+        photo
+        for photo in photos
+        if any(re.fullmatch(r"Q\d{2}", part) for part in photo.parts)
+        or re.search(r"_Q\d{2}_", photo.name)
+    )
 
 
 def test_the_team_photos_carry_no_metadata_such_as_a_location():
@@ -122,7 +135,7 @@ def test_the_team_photos_carry_no_metadata_such_as_a_location():
 def test_every_question_photo_file_is_used_by_the_question_bank():
     """A file is named in question-bank.js either as it is or as a numbered series (`...-${n}.jpg`)."""
     source = QUESTION_BANK.read_text(encoding="utf-8")
-    for photo in sorted((PUBLIC / "quests").rglob("*.jpg")):
+    for photo in question_photos():
         path = photo.relative_to(PUBLIC).as_posix()
-        series = re.sub(r"-\d+\.jpg$", "-${n}.jpg", path)
+        series = re.sub(r"(?P<separator>[-_])\d+\.jpg$", r"\g<separator>${n}.jpg", path)
         assert path in source or series in source, f"{path} is not used by any question"
