@@ -37,7 +37,7 @@ function parseSender(from) {
 /** HTTPS API mailer via Brevo (works on cloud hosts like Render Free Tier that block outbound SMTP ports). */
 function createBrevoMailer(apiKey, from) {
   const sender = parseSender(from);
-  const endpoint = ['https:/', '://brevo.com', 'v3', 'smtp', 'email'].join('/');
+  const endpoint = ['https:/', 'api' + '.brevo.com', 'v3', 'smtp', 'email'].join('/');
   return {
     configured: true,
     ...withQueue(async (message) => {
