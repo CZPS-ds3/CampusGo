@@ -26,3 +26,6 @@
 - Restored the third “Leave without saving” action, with green save, neutral keep-editing, and dark-red discard styling.
 - Re-ran the focused customisation tests (10 passed), ESLint, Prettier, and diff checks successfully.
 - Prepared the commit message, merge-request title, summary, testing notes, and checklist wording for this change.
+- Diagnosed the frontend pipeline failure: the German translation completeness test found five new confirmation strings without translations.
+- Added German translations for “Unsaved changes”, the confirmation message, and all three exit actions.
+- Re-ran the full frontend suite (31 files, 248 tests), lint, formatting, and production build successfully.
