@@ -1,5 +1,5 @@
 // The pilot question bank from the "Main Project Document" (pages 7 to 14, questions written and checked on site by
-// the team), with the team's photos (frontend/public/quests). The seed puts it into the database once (BR11,
+// the team), with the team's photos (frontend/public/places/CampusGO_Photos). The seed puts it into the database once (BR11,
 // seed.js: seedQuestionBank); after that admins edit the questions in the admin area. Change texts here only for
 // new databases.
 //
@@ -26,20 +26,31 @@ const q = (difficulty, text, options, right, photos = []) => ({
 /** A photo of a question. `file` is relative to frontend/public. */
 const photo = (file, alt, shown = 'answer') => ({ url: `/${file}`, alt, shown });
 
-const PARTNER_WALL = [
+const BUILDING_B_Q04_PHOTOS = [
   photo(
-    'quests/building-b/partner-wall-1.jpg',
+    'places/CampusGO_Photos/Building_B/Q04/Building_B_Q04_NYP-FEN-wall-position_1.jpg',
     'Wall with the logos of the international partner universities',
   ),
   photo(
-    'quests/building-b/partner-wall-2.jpg',
+    'places/CampusGO_Photos/Building_B/Q04/Building_B_Q04_NYP-FEN-wall-position_2.jpg',
     'Sign "Semester im Ausland?" above the partner university logos',
+  ),
+];
+
+const BUILDING_B_Q05_PHOTOS = [
+  photo(
+    'places/CampusGO_Photos/Building_B/Q05/Building_B_Q05_overseas-partners-count_1.jpg',
+    'Wall with the logos of the international partner universities',
+  ),
+  photo(
+    'places/CampusGO_Photos/Building_B/Q05/Building_B_Q05_overseas-partners-count_2.jpg',
+    'Wall with the logos of the international partner universities',
   ),
 ];
 
 const CAS_PRICES = [1, 2, 3, 4, 5, 6].map((n) =>
   photo(
-    `quests/cas-cafe/q02-price-difference-${n}.jpg`,
+    `places/CampusGO_Photos/CAS_Cafe/Q02/CAS_Cafe_Q02_price-difference_${n}.jpg`,
     'Muffin price tags at the CAS Cafe showing two prices',
   ),
 );
@@ -119,7 +130,12 @@ export const QUESTION_BANK = {
       'How many steps are there on the Mensa staircase?',
       ['27', '28', '29', '30'],
       [1],
-      [photo('quests/mensa/q09-staircase.jpg', 'Hall with the staircase up to the Mensa')],
+      [
+        photo(
+          'places/CampusGO_Photos/Mensa/Mensa_Q09_staircase-steps.jpg',
+          'Hall with the staircase up to the Mensa',
+        ),
+      ],
     ),
     q(
       H,
@@ -128,7 +144,7 @@ export const QUESTION_BANK = {
       [2],
       [
         photo(
-          'quests/mensa/q10-tray-stations.jpg',
+          'places/CampusGO_Photos/Mensa/Mensa_Q10_tray-stations.jpg',
           'Stacks of trays and cutlery at a tray station',
         ),
       ],
@@ -138,7 +154,12 @@ export const QUESTION_BANK = {
       'How many trash bins are in the tray return area?',
       ['1', '2', '3', '4'],
       [2],
-      [photo('quests/mensa/q11-trash-bins.jpg', 'Tray return counter with openings for waste')],
+      [
+        photo(
+          'places/CampusGO_Photos/Mensa/Mensa_Q11_trash-bins.jpg',
+          'Tray return counter with openings for waste',
+        ),
+      ],
     ),
   ],
 
@@ -151,11 +172,11 @@ export const QUESTION_BANK = {
       [1],
       [
         photo(
-          'quests/building-b/q02-building-number-1.jpg',
+          'places/CampusGO_Photos/Building_B/Q02/Building_B_Q02_building-number_1.jpg',
           'Entrance of Building B with its building number',
         ),
         photo(
-          'quests/building-b/q02-building-number-2.jpg',
+          'places/CampusGO_Photos/Building_B/Q02/Building_B_Q02_building-number_2.jpg',
           'Glass doors of Building B with the number beside them',
         ),
       ],
@@ -176,14 +197,14 @@ export const QUESTION_BANK = {
       'What position is NYP and FEN UChile located on the wall?',
       ['11 and 21', '10 and 20', '10 and 21', '11 and 20'],
       [2],
-      PARTNER_WALL,
+      BUILDING_B_Q04_PHOTOS,
     ),
     q(
       N,
       'How many overseas university partners are on the wall?',
       ['20', '21', '22', '23'],
       [1],
-      PARTNER_WALL,
+      BUILDING_B_Q05_PHOTOS,
     ),
     q(
       N,
@@ -285,7 +306,7 @@ export const QUESTION_BANK = {
       [0],
       [
         photo(
-          'quests/library/q01-shelf-number.jpg',
+          'places/CampusGO_Photos/Library/Library_Q01_shelf-number.jpg',
           'Library shelf with the label "3 11 2 3" under the books',
           'question',
         ),
@@ -296,7 +317,12 @@ export const QUESTION_BANK = {
       'How many rows are there on one bookshelf?',
       ['4', '5', '6', '7'],
       [2],
-      [photo('quests/library/q02-shelf-rows.jpg', 'A full library bookshelf seen from the aisle')],
+      [
+        photo(
+          'places/CampusGO_Photos/Library/Library_Q02_shelf-rows.jpg',
+          'A full library bookshelf seen from the aisle',
+        ),
+      ],
     ),
     q(
       N,
@@ -305,7 +331,7 @@ export const QUESTION_BANK = {
       [2],
       [1, 2, 3].map((n) =>
         photo(
-          `quests/library/q03-category-floor-${n}.jpg`,
+          `places/CampusGO_Photos/Library/Q03/Library_Q03_category-floor_${n}.jpg`,
           'Shelf sign of the LIV library naming the floor and the categories',
         ),
       ),
@@ -328,7 +354,7 @@ export const QUESTION_BANK = {
       [2],
       [1, 2].map((n) =>
         photo(
-          `quests/library/q05-book-return-trolley-${n}.jpg`,
+          `places/CampusGO_Photos/Library/Q05/Library_Q05_book-return-trolley_${n}.jpg`,
           'Library floor with a book return trolley beside the shelves',
         ),
       ),
@@ -363,10 +389,13 @@ export const QUESTION_BANK = {
       [0],
       [
         photo(
-          'quests/library/q09-sap-erp-shelf-1.jpg',
+          'places/CampusGO_Photos/Library/Q09/Library_Q09_SAP-ERP-shelf_1.jpg',
           'SAP ERP books on a shelf labelled "5 13 10 3"',
         ),
-        photo('quests/library/q09-sap-erp-shelf-2.jpg', 'Shelf sign for row 13 on the fifth floor'),
+        photo(
+          'places/CampusGO_Photos/Library/Q09/Library_Q09_SAP-ERP-shelf_2.jpg',
+          'Shelf sign for row 13 on the fifth floor',
+        ),
       ],
     ),
     q(
@@ -380,7 +409,12 @@ export const QUESTION_BANK = {
       'What does the R in R.1.40 stand for?',
       ['Meeting room', 'Restroom', 'Bookshelf', 'Computer room'],
       [1],
-      [photo('quests/library/q11-restroom-sign.jpg', 'Restroom doors with R room number signs')],
+      [
+        photo(
+          'places/CampusGO_Photos/Library/Library_Q11_R-restroom-sign.jpg',
+          'Restroom doors with R room number signs',
+        ),
+      ],
     ),
   ],
 
@@ -392,7 +426,7 @@ export const QUESTION_BANK = {
       [2],
       [1, 2].map((n) =>
         photo(
-          `quests/sensoricum/q01-lights-${n}.jpg`,
+          `places/CampusGO_Photos/Sensoricum/Q01/Sensoricum_Q01_lights_${n}.jpg`,
           'Ceiling lights below the glass roof of the Sensoricum',
           'question',
         ),
@@ -449,7 +483,7 @@ export const QUESTION_BANK = {
       [2],
       [
         photo(
-          'quests/cas-cafe/q01-lights.jpg',
+          'places/CampusGO_Photos/CAS_Cafe/CAS_Cafe_Q01_lights.jpg',
           'Orange pendant light hanging from the ceiling of the CAS Cafe',
           'question',
         ),
@@ -478,7 +512,12 @@ export const QUESTION_BANK = {
       'Where is the CAS Cafe located?',
       ['Building 13', 'Building 12', 'Building 11', "There's no number"],
       [0],
-      [photo('quests/cas-cafe/q04-location.jpg', 'CAS letters in front of the CAS Cafe building')],
+      [
+        photo(
+          'places/CampusGO_Photos/CAS_Cafe/CAS_Cafe_Q04_location.jpg',
+          'CAS letters in front of the CAS Cafe building',
+        ),
+      ],
     ),
     q(N, 'How many types of tea are available at the cafeteria?', ['9', '10', '11', '12'], [3]),
     q(
@@ -542,7 +581,7 @@ export const QUESTION_BANK = {
       [1],
       [1, 2, 3].map((n) =>
         photo(
-          `quests/carebox-shopbox/q06-carebox-location-${n}.jpg`,
+          `places/CampusGO_Photos/Care.box_and_Shop.box/Q06/Care.box_and_Shop.box_Q06_care.box-location_${n}.jpg`,
           'The care.box and the shop.box side by side on the campus square',
         ),
       ),

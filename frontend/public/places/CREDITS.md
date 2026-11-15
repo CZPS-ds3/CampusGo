@@ -1,6 +1,6 @@
 # Place photo credits
 
-Photos named `*-photo-*.jpg` were taken on site by the DHBW campusGO team (November 2026) and show the named place; they were resized to max 1600 px and their metadata (including any location) removed. The question photos in `../quests/` come from the same set.
+Photos named `*-photo-*.jpg` were taken on site by the DHBW campusGO team (November 2026) and show the named place; they were resized to max 1600 px and their metadata (including any location) removed. The source photos in `CampusGO_Photos/` come from the same set; see its `manifest.csv` for the sanitized filenames.
 
 The other images are from Wikimedia Commons, resized to max 1200 px. None shows the named place specifically: they are general Bildungscampus Heilbronn photos used as fallbacks where the team has no photo yet. CC BY-SA requires attribution and share-alike; CC BY requires attribution.
 

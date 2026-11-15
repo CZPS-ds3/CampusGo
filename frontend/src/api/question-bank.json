@@ -109,7 +109,7 @@
         "type": "MCQ",
         "photos": [
           {
-            "url": "/quests/mensa/q09-staircase.jpg",
+            "url": "/places/CampusGO_Photos/Mensa/Mensa_Q09_staircase-steps.jpg",
             "alt": "Hall with the staircase up to the Mensa",
             "shown": "answer"
           }
@@ -123,7 +123,7 @@
         "type": "MCQ",
         "photos": [
           {
-            "url": "/quests/mensa/q10-tray-stations.jpg",
+            "url": "/places/CampusGO_Photos/Mensa/Mensa_Q10_tray-stations.jpg",
             "alt": "Stacks of trays and cutlery at a tray station",
             "shown": "answer"
           }
@@ -137,7 +137,7 @@
         "type": "MCQ",
         "photos": [
           {
-            "url": "/quests/mensa/q11-trash-bins.jpg",
+            "url": "/places/CampusGO_Photos/Mensa/Mensa_Q11_trash-bins.jpg",
             "alt": "Tray return counter with openings for waste",
             "shown": "answer"
           }
@@ -161,12 +161,12 @@
         "type": "MCQ",
         "photos": [
           {
-            "url": "/quests/building-b/q02-building-number-1.jpg",
+            "url": "/places/CampusGO_Photos/Building_B/Q02/Building_B_Q02_building-number_1.jpg",
             "alt": "Entrance of Building B with its building number",
             "shown": "answer"
           },
           {
-            "url": "/quests/building-b/q02-building-number-2.jpg",
+            "url": "/places/CampusGO_Photos/Building_B/Q02/Building_B_Q02_building-number_2.jpg",
             "alt": "Glass doors of Building B with the number beside them",
             "shown": "answer"
           }
@@ -193,12 +193,12 @@
         "type": "MCQ",
         "photos": [
           {
-            "url": "/quests/building-b/partner-wall-1.jpg",
+            "url": "/places/CampusGO_Photos/Building_B/Q04/Building_B_Q04_NYP-FEN-wall-position_1.jpg",
             "alt": "Wall with the logos of the international partner universities",
             "shown": "answer"
           },
           {
-            "url": "/quests/building-b/partner-wall-2.jpg",
+            "url": "/places/CampusGO_Photos/Building_B/Q04/Building_B_Q04_NYP-FEN-wall-position_2.jpg",
             "alt": "Sign \"Semester im Ausland?\" above the partner university logos",
             "shown": "answer"
           }
@@ -212,13 +212,13 @@
         "type": "MCQ",
         "photos": [
           {
-            "url": "/quests/building-b/partner-wall-1.jpg",
+            "url": "/places/CampusGO_Photos/Building_B/Q05/Building_B_Q05_overseas-partners-count_1.jpg",
             "alt": "Wall with the logos of the international partner universities",
             "shown": "answer"
           },
           {
-            "url": "/quests/building-b/partner-wall-2.jpg",
-            "alt": "Sign \"Semester im Ausland?\" above the partner university logos",
+            "url": "/places/CampusGO_Photos/Building_B/Q05/Building_B_Q05_overseas-partners-count_2.jpg",
+            "alt": "Wall with the logos of the international partner universities",
             "shown": "answer"
           }
         ]
@@ -381,7 +381,7 @@
         "type": "MCQ",
         "photos": [
           {
-            "url": "/quests/library/q01-shelf-number.jpg",
+            "url": "/places/CampusGO_Photos/Library/Library_Q01_shelf-number.jpg",
             "alt": "Library shelf with the label \"3 11 2 3\" under the books",
             "shown": "question"
           }
@@ -395,7 +395,7 @@
         "type": "MCQ",
         "photos": [
           {
-            "url": "/quests/library/q02-shelf-rows.jpg",
+            "url": "/places/CampusGO_Photos/Library/Library_Q02_shelf-rows.jpg",
             "alt": "A full library bookshelf seen from the aisle",
             "shown": "answer"
           }
@@ -409,17 +409,17 @@
         "type": "MCQ",
         "photos": [
           {
-            "url": "/quests/library/q03-category-floor-1.jpg",
+            "url": "/places/CampusGO_Photos/Library/Q03/Library_Q03_category-floor_1.jpg",
             "alt": "Shelf sign of the LIV library naming the floor and the categories",
             "shown": "answer"
           },
           {
-            "url": "/quests/library/q03-category-floor-2.jpg",
+            "url": "/places/CampusGO_Photos/Library/Q03/Library_Q03_category-floor_2.jpg",
             "alt": "Shelf sign of the LIV library naming the floor and the categories",
             "shown": "answer"
           },
           {
-            "url": "/quests/library/q03-category-floor-3.jpg",
+            "url": "/places/CampusGO_Photos/Library/Q03/Library_Q03_category-floor_3.jpg",
             "alt": "Shelf sign of the LIV library naming the floor and the categories",
             "shown": "answer"
           }
@@ -446,12 +446,12 @@
         "type": "MCQ",
         "photos": [
           {
-            "url": "/quests/library/q05-book-return-trolley-1.jpg",
+            "url": "/places/CampusGO_Photos/Library/Q05/Library_Q05_book-return-trolley_1.jpg",
             "alt": "Library floor with a book return trolley beside the shelves",
             "shown": "answer"
           },
           {
-            "url": "/quests/library/q05-book-return-trolley-2.jpg",
+            "url": "/places/CampusGO_Photos/Library/Q05/Library_Q05_book-return-trolley_2.jpg",
             "alt": "Library floor with a book return trolley beside the shelves",
             "shown": "answer"
           }
@@ -499,12 +499,12 @@
         "type": "MCQ",
         "photos": [
           {
-            "url": "/quests/library/q09-sap-erp-shelf-1.jpg",
+            "url": "/places/CampusGO_Photos/Library/Q09/Library_Q09_SAP-ERP-shelf_1.jpg",
             "alt": "SAP ERP books on a shelf labelled \"5 13 10 3\"",
             "shown": "answer"
           },
           {
-            "url": "/quests/library/q09-sap-erp-shelf-2.jpg",
+            "url": "/places/CampusGO_Photos/Library/Q09/Library_Q09_SAP-ERP-shelf_2.jpg",
             "alt": "Shelf sign for row 13 on the fifth floor",
             "shown": "answer"
           }
@@ -526,7 +526,7 @@
         "type": "MCQ",
         "photos": [
           {
-            "url": "/quests/library/q11-restroom-sign.jpg",
+            "url": "/places/CampusGO_Photos/Library/Library_Q11_R-restroom-sign.jpg",
             "alt": "Restroom doors with R room number signs",
             "shown": "answer"
           }
@@ -542,12 +542,12 @@
         "type": "MCQ",
         "photos": [
           {
-            "url": "/quests/sensoricum/q01-lights-1.jpg",
+            "url": "/places/CampusGO_Photos/Sensoricum/Q01/Sensoricum_Q01_lights_1.jpg",
             "alt": "Ceiling lights below the glass roof of the Sensoricum",
             "shown": "question"
           },
           {
-            "url": "/quests/sensoricum/q01-lights-2.jpg",
+            "url": "/places/CampusGO_Photos/Sensoricum/Q01/Sensoricum_Q01_lights_2.jpg",
             "alt": "Ceiling lights below the glass roof of the Sensoricum",
             "shown": "question"
           }
@@ -621,7 +621,7 @@
         "type": "MCQ",
         "photos": [
           {
-            "url": "/quests/cas-cafe/q01-lights.jpg",
+            "url": "/places/CampusGO_Photos/CAS_Cafe/CAS_Cafe_Q01_lights.jpg",
             "alt": "Orange pendant light hanging from the ceiling of the CAS Cafe",
             "shown": "question"
           }
@@ -635,32 +635,32 @@
         "type": "MCQ",
         "photos": [
           {
-            "url": "/quests/cas-cafe/q02-price-difference-1.jpg",
+            "url": "/places/CampusGO_Photos/CAS_Cafe/Q02/CAS_Cafe_Q02_price-difference_1.jpg",
             "alt": "Muffin price tags at the CAS Cafe showing two prices",
             "shown": "answer"
           },
           {
-            "url": "/quests/cas-cafe/q02-price-difference-2.jpg",
+            "url": "/places/CampusGO_Photos/CAS_Cafe/Q02/CAS_Cafe_Q02_price-difference_2.jpg",
             "alt": "Muffin price tags at the CAS Cafe showing two prices",
             "shown": "answer"
           },
           {
-            "url": "/quests/cas-cafe/q02-price-difference-3.jpg",
+            "url": "/places/CampusGO_Photos/CAS_Cafe/Q02/CAS_Cafe_Q02_price-difference_3.jpg",
             "alt": "Muffin price tags at the CAS Cafe showing two prices",
             "shown": "answer"
           },
           {
-            "url": "/quests/cas-cafe/q02-price-difference-4.jpg",
+            "url": "/places/CampusGO_Photos/CAS_Cafe/Q02/CAS_Cafe_Q02_price-difference_4.jpg",
             "alt": "Muffin price tags at the CAS Cafe showing two prices",
             "shown": "answer"
           },
           {
-            "url": "/quests/cas-cafe/q02-price-difference-5.jpg",
+            "url": "/places/CampusGO_Photos/CAS_Cafe/Q02/CAS_Cafe_Q02_price-difference_5.jpg",
             "alt": "Muffin price tags at the CAS Cafe showing two prices",
             "shown": "answer"
           },
           {
-            "url": "/quests/cas-cafe/q02-price-difference-6.jpg",
+            "url": "/places/CampusGO_Photos/CAS_Cafe/Q02/CAS_Cafe_Q02_price-difference_6.jpg",
             "alt": "Muffin price tags at the CAS Cafe showing two prices",
             "shown": "answer"
           }
@@ -687,7 +687,7 @@
         "type": "MCQ",
         "photos": [
           {
-            "url": "/quests/cas-cafe/q04-location.jpg",
+            "url": "/places/CampusGO_Photos/CAS_Cafe/CAS_Cafe_Q04_location.jpg",
             "alt": "CAS letters in front of the CAS Cafe building",
             "shown": "answer"
           }
@@ -784,17 +784,17 @@
         "type": "MCQ",
         "photos": [
           {
-            "url": "/quests/carebox-shopbox/q06-carebox-location-1.jpg",
+            "url": "/places/CampusGO_Photos/Care.box_and_Shop.box/Q06/Care.box_and_Shop.box_Q06_care.box-location_1.jpg",
             "alt": "The care.box and the shop.box side by side on the campus square",
             "shown": "answer"
           },
           {
-            "url": "/quests/carebox-shopbox/q06-carebox-location-2.jpg",
+            "url": "/places/CampusGO_Photos/Care.box_and_Shop.box/Q06/Care.box_and_Shop.box_Q06_care.box-location_2.jpg",
             "alt": "The care.box and the shop.box side by side on the campus square",
             "shown": "answer"
           },
           {
-            "url": "/quests/carebox-shopbox/q06-carebox-location-3.jpg",
+            "url": "/places/CampusGO_Photos/Care.box_and_Shop.box/Q06/Care.box_and_Shop.box_Q06_care.box-location_3.jpg",
             "alt": "The care.box and the shop.box side by side on the campus square",
             "shown": "answer"
           }

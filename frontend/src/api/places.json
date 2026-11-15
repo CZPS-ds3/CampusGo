@@ -1,54 +1,54 @@
 {
   "mensa": [
     {
-      "file": "mensa-photo-1.jpg",
+      "file": "CampusGO_Photos/Mensa/Mensa_General.jpg",
       "alt": "Mensa dining hall with long tables and a glass front",
       "credit": "DHBW campusGO team"
     }
   ],
   "library": [
     {
-      "file": "library-photo-1.jpg",
+      "file": "CampusGO_Photos/Library/General/Library_General_1.jpg",
       "alt": "Library aisle between tall white bookshelves",
       "credit": "DHBW campusGO team"
     },
     {
-      "file": "library-photo-2.jpg",
+      "file": "CampusGO_Photos/Library/General/Library_General_2.jpg",
       "alt": "Library aisle between tall white bookshelves, seen from the other end",
       "credit": "DHBW campusGO team"
     },
     {
-      "file": "library-photo-3.jpg",
+      "file": "CampusGO_Photos/Library/General/Library_General_3.jpg",
       "alt": "Open library floor with orange seats and a red information desk",
       "credit": "DHBW campusGO team"
     },
     {
-      "file": "library-photo-4.jpg",
+      "file": "CampusGO_Photos/Library/General/Library_General_4.jpg",
       "alt": "Open library floor with orange seats and the red information desk",
       "credit": "DHBW campusGO team"
     },
     {
-      "file": "library-photo-5.jpg",
+      "file": "CampusGO_Photos/Library/General/Library_General_5.jpg",
       "alt": "LIV library building lit up in the evening",
       "credit": "DHBW campusGO team"
     },
     {
-      "file": "library-photo-6.jpg",
+      "file": "CampusGO_Photos/Library/General/Library_General_6.jpg",
       "alt": "LIV library building lit up in the evening, seen from the corner",
       "credit": "DHBW campusGO team"
     },
     {
-      "file": "library-photo-7.jpg",
+      "file": "CampusGO_Photos/Library/General/Library_General_7.jpg",
       "alt": "LIV library building at dusk, seen across the square",
       "credit": "DHBW campusGO team"
     },
     {
-      "file": "library-photo-8.jpg",
+      "file": "CampusGO_Photos/Library/General/Library_General_8.jpg",
       "alt": "LIV library building at dusk with autumn trees",
       "credit": "DHBW campusGO team"
     },
     {
-      "file": "library-photo-9.jpg",
+      "file": "CampusGO_Photos/Library/General/Library_General_9.jpg",
       "alt": "LIV library building at dusk, front view",
       "credit": "DHBW campusGO team"
     }
@@ -79,12 +79,12 @@
   ],
   "carebox-shopbox": [
     {
-      "file": "carebox-shopbox-photo-1.jpg",
+      "file": "CampusGO_Photos/Care.box_and_Shop.box/General/Care.box_and_Shop.box_General_1.jpg",
       "alt": "The care.box: a silver building with the care.box lettering",
       "credit": "DHBW campusGO team"
     },
     {
-      "file": "carebox-shopbox-photo-2.jpg",
+      "file": "CampusGO_Photos/Care.box_and_Shop.box/General/Care.box_and_Shop.box_General_2.jpg",
       "alt": "The shop.box: a silver building with glass doors",
       "credit": "DHBW campusGO team"
     }

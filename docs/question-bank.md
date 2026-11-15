@@ -10,7 +10,9 @@ Building C 8 normal + 3 hard each, Sensoricum 7, CAS Cafe, Care.box and Shop.box
 db:seed` puts it into the database once (marker `question_bank_v1`); in an older database it switches off the
 PLACEHOLDER questions nobody edited. After that the questions are edited in the admin area (Quests), not here.
 
-Photos taken on site by the team are attached to 17 questions (`frontend/public/quests`, table `question_images`).
+Photos taken on site by the team are attached to the questions (`frontend/public/places/CampusGO_Photos`, table
+`question_images`). The source folder includes the manifest that maps the original camera filenames to the
+sanitized asset names.
 A photo the question needs ("how many of these lights", "the number on the shelf shown") is shown **with the
 question**; a photo that would give the answer away (a room sign, a price tag, a building number) is shown only
 **after answering**, next to the right answer, as "Where to find it".
