@@ -1,7 +1,5 @@
 // Admin management of quests: the checkpoints, their photos, information and questions (BR49-BR51).
 // Students only ever see what is active and ready; the quiz engine reads the same tables.
-import { rm } from 'node:fs/promises';
-import { basename, join } from 'node:path';
 import { z } from 'zod';
 import { at } from '../clock.js';
 import { withTransaction } from '../db/pool.js';
@@ -9,7 +7,7 @@ import { AppError, notFound } from '../middleware/errors.js';
 import { recordEvent } from './audit.js';
 import { readMapLink } from './map-link.js';
 import { typesOfMode } from './quiz.js';
-import { storeQuestPhoto } from './pictures.js';
+import { deleteUpload, storeQuestPhoto } from './pictures.js';
 
 const MAX_PHOTOS = 5;
 const MAX_FACTS = 5;
@@ -172,8 +170,9 @@ export function createCheckpointAdminService({ pool, config, clock, uploadDir, f
       `SELECT (SELECT COUNT(*) FROM questions WHERE checkpoint_id = ?) AS questions,
               (SELECT COUNT(*) FROM checkpoint_images WHERE checkpoint_id = ?) AS photos,
               (SELECT COUNT(*) FROM checkpoint_facts WHERE checkpoint_id = ?) AS facts,
-              (SELECT COUNT(*) FROM attempts WHERE checkpoint_id = ?) AS attempts`,
-      [quest.id, quest.id, quest.id, quest.id],
+              (SELECT COUNT(*) FROM attempts WHERE checkpoint_id = ?) AS attempts,
+              (SELECT COUNT(*) FROM location_checks WHERE checkpoint_id = ?) AS checks`,
+      [quest.id, quest.id, quest.id, quest.id, quest.id],
     );
     return {
       ...quest,
@@ -183,7 +182,8 @@ export function createCheckpointAdminService({ pool, config, clock, uploadDir, f
         photos: Number(counts.photos),
         facts: Number(counts.facts),
       },
-      hasHistory: Number(counts.attempts) > 0,
+      // The same test as remove(): any attempt or location check keeps the quest (archived, not erased).
+      hasHistory: Number(counts.attempts) + Number(counts.checks) > 0,
     };
   }
 
@@ -227,6 +227,12 @@ export function createCheckpointAdminService({ pool, config, clock, uploadDir, f
        ORDER BY o.question_id, o.option_position`,
       [id],
     );
+    const [questionImages] = await pool.query(
+      `SELECT i.question_id, i.position, i.url, i.alt_text, i.shown FROM question_images i
+       JOIN questions q ON q.question_id = i.question_id WHERE q.checkpoint_id = ?
+       ORDER BY i.question_id, i.position`,
+      [id],
+    );
     return {
       quest,
       facts: facts.map((f) => f.fact_text),
@@ -250,6 +256,9 @@ export function createCheckpointAdminService({ pool, config, clock, uploadDir, f
             text: o.option_text,
             isCorrect: Boolean(o.is_correct),
           })),
+        images: questionImages
+          .filter((i) => i.question_id === q.question_id)
+          .map((i) => ({ position: i.position, url: i.url, alt: i.alt_text, shown: i.shown })),
       })),
     };
   }
@@ -282,7 +291,7 @@ export function createCheckpointAdminService({ pool, config, clock, uploadDir, f
     const now = clock.now();
     const merged = {
       description: '',
-      radius: 80,
+      radius: 35,
       timeLimitSeconds: null,
       hardQuestionEnabled: false,
       typeMode: 'MCQ_ONLY',
@@ -395,7 +404,11 @@ export function createCheckpointAdminService({ pool, config, clock, uploadDir, f
         [id, id],
       );
       let result = 'archived';
+      let photos = [];
       if (Number(used.attempts) + Number(used.checks) === 0) {
+        [photos] = await conn.query('SELECT url FROM checkpoint_images WHERE checkpoint_id = ?', [
+          id,
+        ]);
         await conn.query(
           'DELETE o FROM options o JOIN questions q ON q.question_id = o.question_id WHERE q.checkpoint_id = ?',
           [id],
@@ -414,9 +427,11 @@ export function createCheckpointAdminService({ pool, config, clock, uploadDir, f
         type: result === 'erased' ? 'quest_erased' : 'quest_archived',
         detail: `Quest "${row.checkpoint_name}" (#${id}) ${result}.`,
       });
-      return result;
+      return { result, photos };
     });
-    return { result: outcome };
+    // The rows went with the quest (ON DELETE CASCADE); the uploaded files go once the deletion is committed.
+    for (const photo of outcome.photos) await deleteFile(photo.url);
+    return { result: outcome.result };
   }
 
   async function restore(actorId, id) {
@@ -541,14 +556,7 @@ export function createCheckpointAdminService({ pool, config, clock, uploadDir, f
   }
 
   /** Removes an uploaded file. A file that is already gone is fine; any other failure is reported. */
-  async function deleteFile(url) {
-    if (!url.startsWith('/uploads/')) return;
-    try {
-      await rm(join(uploadDir, basename(url)), { force: true });
-    } catch (error) {
-      console.error('[quests] could not delete an unused photo file:', error.code ?? error.message);
-    }
-  }
+  const deleteFile = (url) => deleteUpload(uploadDir, url);
 
   /** Questions that students are answering right now cannot change under them. */
   async function assertNotBeingAnswered(conn, questionId) {

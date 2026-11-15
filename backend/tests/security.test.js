@@ -108,7 +108,7 @@ describe('BR01 OTP e-mail delivery', () => {
     expect(transport.sendMail).toHaveBeenCalledTimes(1);
     const sent = transport.sendMail.mock.calls[0][0];
     expect(sent).toMatchObject({
-      from: 'Campus & City Quest <no-reply@localhost>',
+      from: 'DHBW campusGO <no-reply@localhost>',
       to: 'ada@heilbronn.dhbw.de',
     });
     expect(sent.text).toContain('042137');
@@ -134,13 +134,20 @@ describe('BR01 OTP e-mail delivery', () => {
     errors.mockRestore();
   });
 
-  it('without SMTP, codes are only printed in development, never silently dropped elsewhere', async () => {
+  it('without SMTP, codes are never printed, only an error is logged, in every environment', async () => {
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const staging = createMailer(loadConfig({ NODE_ENV: 'staging' }));
-    staging.send(otpEmail('ada@heilbronn.dhbw.de', '042137', 10));
-    await staging.idle();
+    const logs = vi.spyOn(console, 'log').mockImplementation(() => {});
+    for (const NODE_ENV of ['development', 'staging']) {
+      const mailer = createMailer(loadConfig({ NODE_ENV }));
+      mailer.send(otpEmail('ada@heilbronn.dhbw.de', '042137', 10));
+      await mailer.idle();
+      expect(mailer.lastTo).toBeUndefined();
+      expect((await mailer.verify()).ok).toBe(false);
+    }
     expect(errors.mock.calls[0][0]).toContain('no SMTP_HOST configured');
-    expect((await staging.verify()).ok).toBe(false);
+    expect(logs).not.toHaveBeenCalled();
+    expect(errors.mock.calls.flat().join(' ')).not.toContain('042137');
     errors.mockRestore();
+    logs.mockRestore();
   });
 });

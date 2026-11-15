@@ -3,7 +3,7 @@
 import pytest
 import pymysql
 
-from conftest import ADMIN_EMAIL, query
+from conftest import ADMIN_EMAILS, MAIN_ADMIN_EMAIL, query
 
 pytestmark = pytest.mark.db
 
@@ -16,6 +16,7 @@ TABLES = {
     "checkpoints",
     "checkpoint_facts",
     "checkpoint_images",
+    "question_images",
     "questions",
     "options",
     "attempts",
@@ -59,11 +60,13 @@ def test_one_e_mail_can_belong_to_one_account_only(db):
     query(db, "DELETE FROM students WHERE email = 'duplicate-check@heilbronn.dhbw.de'")
 
 
-def test_the_administrator_exists_from_the_start_as_id_one(db):
-    rows = query(db, "SELECT student_id, role, status FROM students WHERE role = 'admin'")
-    assert rows == [{"student_id": 1, "role": "admin", "status": "active"}]
+def test_the_administrators_exist_from_the_start_the_main_one_as_id_one(db):
+    """BR37: every pre-seeded admin exists; the study office is id 1."""
+    rows = query(db, "SELECT email, role, status FROM students WHERE role = 'admin'")
+    assert {row["email"] for row in rows} == ADMIN_EMAILS
+    assert all(row["status"] == "active" for row in rows)
     mail = query(db, "SELECT email FROM students WHERE student_id = 1")[0]["email"]
-    assert mail == ADMIN_EMAIL
+    assert mail == MAIN_ADMIN_EMAIL
 
 
 def test_the_eight_pilot_checkpoints_have_sensible_geofences(db):
@@ -173,9 +176,24 @@ def test_a_student_has_one_map_style_and_a_deleted_account_leaves_no_trace(db):
     assert columns == {"map_style": "json", "status": "enum('active','blocked','archived')"}
 
 
-def test_no_checkpoint_circle_is_smaller_than_60_m_br12(db):
-    smallest = query(db, "SELECT MIN(radius) AS smallest FROM checkpoints")[0]["smallest"]
-    assert smallest >= 60
+def test_pilot_checkpoint_circles_are_tight_br12(db):
+    """BR12 (2026-11-14): 35 m buildings, 30 m garden, 25 m small spots; the checkpoints are 34-127 m apart."""
+    expected = {
+        "Mensa": 35,
+        "Library": 35,
+        "Building B": 35,
+        "Building C": 35,
+        "Campus Garden": 30,
+        "CAS Cafe": 25,
+        "Care.box and Shop.box": 25,
+        "Sensoricum": 25,
+    }
+    rows = query(
+        db,
+        "SELECT checkpoint_name, radius FROM checkpoints WHERE checkpoint_name IN %s",
+        (tuple(expected),),
+    )
+    assert {row["checkpoint_name"]: row["radius"] for row in rows} == expected
 
 
 def test_each_checkpoint_has_enough_questions_for_a_fresh_draw(db):
@@ -235,3 +253,22 @@ def test_only_one_active_session_per_student_is_possible(db):
         "WHERE table_schema = DATABASE() AND table_name = 'sessions' AND column_name = 'active_student_id'",
     )
     assert any(index["non_unique"] == 0 for index in indexes)
+
+
+def test_question_photos_belong_to_one_question_and_say_when_they_are_shown(db):
+    """BR11: question photos live in the database; `shown` is 'question' or 'answer' (migration 013)."""
+    columns = {
+        row["name"]: row["type"]
+        for row in query(
+            db,
+            "SELECT COLUMN_NAME AS name, COLUMN_TYPE AS type FROM information_schema.columns "
+            "WHERE table_schema = DATABASE() AND table_name = 'question_images'",
+        )
+    }
+    assert columns["shown"] == "enum('question','answer')"
+    rules = query(
+        db,
+        "SELECT DELETE_RULE AS rule FROM information_schema.referential_constraints "
+        "WHERE constraint_schema = DATABASE() AND table_name = 'question_images'",
+    )
+    assert [rule["rule"] for rule in rules] == ["CASCADE"]

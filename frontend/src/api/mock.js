@@ -2,20 +2,27 @@
 // kept deliberately small: the real rules live in backend/. State survives a page refresh (sessionStorage).
 
 import places from './places.json';
+import questionBank from './question-bank.json';
 import { DEFAULT_MAP_STYLE, cleanStyle } from '../mapStyle.js';
 import { normalizeColor } from '../colors.js';
 import { parseMapLink } from './mapLink.js';
+import { distanceM } from '../geo.js';
 
-const STORAGE_KEY = 'cq-mock-v2';
+const STORAGE_KEY = 'cq-mock-v3';
 const SECOND = 1000;
+// R-66: the 3-2-1 countdown after the unlock, like the server's QUIZ_COUNTDOWN_SECONDS.
+const COUNTDOWN_MS = 3 * SECOND;
 const OTP = '123456';
 const DOMAIN = 'heilbronn.dhbw.de';
 const MAX_ACCURACY_M = 200;
-const GEOFENCE_SLACK_M = 30; // grace zone added to every radius
-const ACCURACY_CREDIT_M = 50; // at most this much of a reading's error margin counts for the student
+const GEOFENCE_SLACK_M = 10; // grace zone added to every radius
+const ACCURACY_CREDIT_M = 15; // at most this much of a reading's error margin counts for the student
 const NEARER_MARGIN_M = 20; // another checkpoint must be this much nearer to win
 const MAX_POSITION_AGE_MS = 30_000;
-const ADMIN_EMAIL = `sekretariat.dski@${DOMAIN}`;
+// The pre-seeded administrators, as on the server (BR26): they may be outside the school domain.
+const ADMIN_EMAILS = [`sekretariat.dski@${DOMAIN}`, 'dhbw.campusgo@gmail.com'];
+const mayLogIn = (email) =>
+  (email.endsWith(DOMAIN) && email.split('@').length === 2) || ADMIN_EMAILS.includes(email);
 const PLACE_SLUGS = {
   Mensa: 'mensa',
   Library: 'library',
@@ -51,14 +58,14 @@ const bannedWord = (text, extra = []) => {
 
 // Same centres, radii and status as backend/src/db/seed.js (Bildungscampus Heilbronn).
 const CHECKPOINTS = [
-  ['Mensa', 49.148464, 9.215808, 80, 5, 4, true, true],
-  ['Library', 49.149493, 9.216467, 80, 5, 4, true, true],
-  ['CAS Cafe', 49.148951, 9.216205, 60, 3, 2, false, true],
-  ['Campus Garden', 49.147082, 9.217206, 70, 3, 2, false, true],
-  ['Care.box and Shop.box', 49.149088, 9.21727, 60, 3, 2, false, true],
-  ['Building B', 49.147126, 9.218486, 80, 5, 4, true, true],
-  ['Building C', 49.147316, 9.2179, 80, 5, 4, true, true],
-  ['Sensoricum', 49.14762, 9.217807, 60, 3, 2, false, true],
+  ['Mensa', 49.148464, 9.215808, 35, 5, 4, true, true],
+  ['Library', 49.149493, 9.216467, 35, 5, 4, true, true],
+  ['CAS Cafe', 49.148951, 9.216205, 25, 3, 2, false, true],
+  ['Campus Garden', 49.147082, 9.217206, 30, 3, 2, false, true],
+  ['Care.box and Shop.box', 49.149088, 9.21727, 25, 3, 2, false, true],
+  ['Building B', 49.147126, 9.218486, 35, 5, 4, true, true],
+  ['Building C', 49.147316, 9.2179, 35, 5, 4, true, true],
+  ['Sensoricum', 49.14762, 9.217807, 25, 3, 2, false, true],
 ].map(([name, latitude, longitude, radius, questionCount, passThreshold, hard, isActive], i) => ({
   id: i + 1,
   name,
@@ -76,57 +83,65 @@ const CHECKPOINTS = [
   })),
 }));
 
-const mockQuestion = (id, difficulty, type, text, correctPositions) => ({
+/** One question of the team's bank (question-bank.json, a copy of backend/src/db/question-bank.js). */
+const bankQuestion = (id, question) => ({
   id,
-  difficulty,
-  type,
-  text,
+  difficulty: question.difficulty,
+  type: question.type,
+  text: question.text,
   isActive: true,
-  options: [0, 1, 2, 3].map((p) => ({
+  options: question.options.map((text, p) => ({
     id: id * 10 + p,
     position: p + 1,
-    text: `Option ${'ABCD'[p]}${correctPositions.includes(p) ? ' (placeholder answer)' : ''}`,
-    isCorrect: correctPositions.includes(p),
+    text,
+    isCorrect: question.right.includes(p),
   })),
+  photos: question.photos,
 });
 
-const seedBank = (c) => {
-  const bank = Array.from({ length: 10 }, (_, n) =>
-    mockQuestion(
-      c.id * 100 + n + 1,
-      'NORMAL',
-      'MCQ',
-      `Practice question ${n + 1} about ${c.name}?`,
-      [(c.id + n) % 4],
-    ),
+const seedBank = (c) =>
+  (questionBank.bank[c.name] ?? []).map((question, n) =>
+    bankQuestion(c.id * 100 + n + 1, question),
   );
-  if (c.hardQuestionEnabled) {
-    for (const n of [0, 1]) {
-      bank.push(
-        mockQuestion(
-          c.id * 100 + 90 + n,
-          'HARD',
-          'MCQ',
-          `Hard practice question ${n + 1} about ${c.name}?`,
-          [(c.id + n) % 4],
-        ),
-      );
-    }
-  }
-  return bank;
-};
 
-// The quests an admin can change live in the state (like the database on the server).
-const BASE_QUESTS = CHECKPOINTS.map((c) => ({
-  ...c,
-  description: `PLACEHOLDER description for ${c.name}.`,
-  mapUrl: null,
-  timeLimitSeconds: null,
-  typeMode: 'MCQ_ONLY',
-  archived: false,
-  facts: [1, 2, 3].map((n) => `PLACEHOLDER fact ${n} about ${c.name}.`),
-  bank: seedBank(c),
-}));
+// The quests an admin can change live in the state (like the database on the server). As after the seed: the bank's
+// description and facts, and mixed where the bank has a multi-select question (so every question can be drawn).
+const BASE_QUESTS = CHECKPOINTS.map((c) => {
+  const bank = seedBank(c);
+  const info = questionBank.info[c.name] ?? { description: null, facts: [] };
+  return {
+    ...c,
+    description: info.description,
+    mapUrl: null,
+    timeLimitSeconds: null,
+    typeMode: bank.some((q) => q.type === 'MULTI' && q.difficulty === 'NORMAL')
+      ? 'MIXED'
+      : 'MCQ_ONLY',
+    archived: false,
+    facts: [...info.facts],
+    bank,
+  };
+});
+
+const isPlaceholder = (text) => String(text ?? '').startsWith('PLACEHOLDER');
+
+/** Like the server (services/placeholders.js): seed texts still live in quests that are not archived. */
+function placeholderCountsOf(quests) {
+  const live = quests.filter((q) => !q.archived);
+  const questions = live.flatMap((q) => q.bank.filter((b) => b.isActive && isPlaceholder(b.text)));
+  const facts = live.flatMap((q) => q.facts.filter(isPlaceholder));
+  const named = live.filter(
+    (q) =>
+      isPlaceholder(q.description) ||
+      q.facts.some(isPlaceholder) ||
+      q.bank.some((b) => b.isActive && isPlaceholder(b.text)),
+  );
+  return {
+    questions: questions.length,
+    facts: facts.length,
+    quests: named.slice(0, 20).map((q) => q.name),
+  };
+}
 
 const TYPES_OF_MODE = { MCQ_ONLY: ['MCQ'], MULTI_ONLY: ['MULTI'], MIXED: ['MCQ', 'MULTI'] };
 const typesOf = (mode) => TYPES_OF_MODE[mode] ?? TYPES_OF_MODE.MCQ_ONLY;
@@ -167,6 +182,9 @@ const fresh = () => ({
     },
   ],
   lastOtpEmail: null,
+  // BR52: the admin switch of the code preview (the mock has no real e-mail, so it starts on). BR56: the mock's
+  // other players are all invented demo players, so they start shown; the switch hides them as on the server.
+  settings: { otpPreview: true, showDemo: true },
   admin: {
     nextId: 200,
     users: [
@@ -189,30 +207,28 @@ const fresh = () => ({
       role: 'student',
       status,
       statusReason: status === 'blocked' ? 'Repeated misuse (demo)' : null,
+      demo: true,
       reported: false,
       reportReason: null,
       teamId: teamName ? 1 : null,
       teamName,
       totalPoints,
       questsPassed,
+      questsTotal: 8,
       createdAt: new Date(Date.now() - (9 - i) * 86400e3).toISOString(),
       lastLoginAt: new Date(Date.now() - (i + 1) * 5 * 3600e3).toISOString(),
     })),
+    // `members` is the team order (BR54); the leader is the first member unless an admin chose another one.
     teams: [
-      { id: 1, name: 'Bildungscampus Bandits', score: 6800, members: [100, 101] },
-      { id: 2, name: 'Mensa Mavericks', score: 3100, members: [102] },
+      { id: 1, name: 'Bildungscampus Bandits', score: 6800, members: [100, 101], leaderId: 100 },
+      { id: 2, name: 'Mensa Mavericks', score: 3100, members: [102], leaderId: 102 },
     ],
     terms: [],
   },
 });
 
-const distance = (la1, lo1, la2, lo2) => {
-  const rad = (d) => (d * Math.PI) / 180;
-  const a =
-    Math.sin(rad(la2 - la1) / 2) ** 2 +
-    Math.cos(rad(la1)) * Math.cos(rad(la2)) * Math.sin(rad(lo2 - lo1) / 2) ** 2;
-  return 2 * 6371008.8 * Math.asin(Math.min(1, Math.sqrt(a)));
-};
+// The same WGS84 distance as the server, so the mock unlocks exactly where the real API does.
+const distance = (la1, lo1, la2, lo2) => distanceM([la1, lo1], [la2, lo2]);
 
 export function createMockApi(ApiError, getUnauthorized) {
   let state = fresh();
@@ -241,7 +257,12 @@ export function createMockApi(ApiError, getUnauthorized) {
   const copy = (value) => JSON.parse(JSON.stringify(value));
   const checkpoint = (id) => state.quests.find((c) => c.id === Number(id));
 
-  const rankFor = (total) => 1 + OTHERS.filter((o) => o.points > total).length;
+  // BR56: the invented players of the demo seed, and the teams they are in, only while an admin shows them.
+  const showDemo = () => state.settings?.showDemo ?? true;
+  const others = () => (showDemo() ? OTHERS : []);
+  const realUser = (user) => showDemo() || !user.demo;
+  const realTeam = (team) => showDemo() || team.members.every((m) => !adminUser(m).demo);
+  const rankFor = (total) => 1 + others().filter((o) => o.points > total).length;
   const publicStudent = () => ({
     ...state.student,
     totalPoints: totalPoints(),
@@ -262,6 +283,12 @@ export function createMockApi(ApiError, getUnauthorized) {
       position,
       text,
       correct: isCorrect,
+    })),
+    photos: (q.photos ?? []).map(({ url, alt, shown }) => ({
+      url,
+      alt,
+      credit: questionBank.credit,
+      shown,
     })),
     number,
     selected: null,
@@ -355,8 +382,13 @@ export function createMockApi(ApiError, getUnauthorized) {
       hardUnlocked: a.hardUnlocked,
       hardAccepted: Boolean(a.slots[a.slots.length - 1]?.replaced),
       currentQuestion: a.status === 'active' && next ? next.number : null,
-      questions: a.slots.map((s) => {
+      // R-66: no questions during the countdown, like the server.
+      questions: (Date.now() < a.startMs ? [] : a.slots).map((s) => {
         const wrong = s.selected !== null && !isRight(s);
+        const photosShown = (shown) =>
+          (s.photos ?? [])
+            .filter((p) => p.shown === shown)
+            .map(({ url, alt, credit }) => ({ url, alt, credit }));
         const q = {
           number: s.number,
           id: s.id,
@@ -367,6 +399,8 @@ export function createMockApi(ApiError, getUnauthorized) {
           selectedOptionId: s.selected?.[0] ?? null,
           selectedOptionIds: s.selected ?? [],
           answered: s.selected !== null,
+          images: photosShown('question'),
+          answerImages: s.selected !== null ? photosShown('answer') : [],
         };
         if (wrong) {
           q.correctOptionIds = s.options.filter((o) => o.correct).map((o) => o.id);
@@ -459,15 +493,17 @@ export function createMockApi(ApiError, getUnauthorized) {
   const startAttempt = (cp) => {
     const used = state.attempts.filter((a) => a.checkpointId === cp.id).length;
     const now = Date.now();
+    // R-66: the quiz and its time start after the countdown.
+    const startMs = now + COUNTDOWN_MS;
     const attempt = {
       id: state.nextId,
       checkpointId: cp.id,
       attemptNumber: used + 1,
-      startMs: now,
+      startMs,
       // The attempt keeps the count and pass mark it started with (BR21).
       questionCount: cp.questionCount,
       passThreshold: cp.passThreshold,
-      expiresMs: now + (cp.timeLimitSeconds ?? cp.questionCount * 60) * SECOND,
+      expiresMs: startMs + (cp.timeLimitSeconds ?? cp.questionCount * 60) * SECOND,
       status: 'active',
       hardUnlocked: false,
       slots: slotsFor(cp, now % 10),
@@ -484,7 +520,7 @@ export function createMockApi(ApiError, getUnauthorized) {
   const methods = {
     async requestOtp(email) {
       const clean = String(email).trim().toLowerCase();
-      if (!clean.endsWith(DOMAIN) || clean.split('@').length !== 2) {
+      if (!mayLogIn(clean)) {
         throw fail(
           400,
           'INVALID_EMAIL',
@@ -505,7 +541,7 @@ export function createMockApi(ApiError, getUnauthorized) {
         if (rude) throw fail(400, 'NAME_NOT_ALLOWED', 'Please choose a different name.');
         state.student = {
           id: 1,
-          role: clean === ADMIN_EMAIL ? 'admin' : 'student',
+          role: ADMIN_EMAILS.includes(clean) ? 'admin' : 'student',
           email: clean,
           firstName,
           lastName,
@@ -542,7 +578,14 @@ export function createMockApi(ApiError, getUnauthorized) {
       save();
       return null;
     },
-    async devLastOtp() {
+    async authConfig() {
+      return { otpPreview: state.settings?.otpPreview ?? true, mailConfigured: false };
+    },
+    // BR52: the test inbox shows the same code the e-mail would carry, only while the switch is on.
+    async otpPreview() {
+      if (!(state.settings?.otpPreview ?? true))
+        throw fail(404, 'PREVIEW_OFF', 'The code preview is switched off.');
+      if (!state.lastOtpEmail) throw fail(404, 'NO_CODE', 'No code was sent yet.');
       return { otp: OTP };
     },
     async me() {
@@ -592,6 +635,7 @@ export function createMockApi(ApiError, getUnauthorized) {
               latitude: c.latitude,
               longitude: c.longitude,
               radius: c.radius,
+              reachM: c.radius + GEOFENCE_SLACK_M,
               isActive: c.isActive,
               questionCount: c.questionCount,
               passThreshold: c.passThreshold,
@@ -690,6 +734,8 @@ export function createMockApi(ApiError, getUnauthorized) {
           'This attempt is finished.',
         );
       }
+      if (Date.now() < a.startMs)
+        throw fail(409, 'QUIZ_NOT_STARTED', 'The quiz starts in a moment.');
       const slot = a.slots.find((s) => s.selected === null);
       const chosen = [...new Set(Array.isArray(optionIds) ? optionIds : [optionIds])];
       if (!chosen.length || chosen.some((x) => !slot.options.some((o) => o.id === x)))
@@ -835,7 +881,7 @@ export function createMockApi(ApiError, getUnauthorized) {
     async player(id) {
       needLogin();
       const isYou = Number(id) === 1;
-      const other = OTHERS.find((o) => o.id === Number(id));
+      const other = others().find((o) => o.id === Number(id));
       if (!isYou && !other) throw fail(404, 'NOT_FOUND', 'Player not found.');
       const points = isYou ? totalPoints() : other.points;
       const teamName = isYou ? (state.team?.name ?? null) : (TEAM_OF[other.id] ?? null);
@@ -920,6 +966,14 @@ export function createMockApi(ApiError, getUnauthorized) {
       save();
       return { team: teamView() };
     },
+    // BR54: any member leaves; a leader who leaves hands over to the next member in the team order.
+    async leaveTeam() {
+      needLogin();
+      if (!state.team) throw fail(409, 'NO_TEAM', 'You are not in a team.');
+      state.team = null;
+      save();
+      return { team: null };
+    },
     async removeFromTeam(studentId) {
       needLogin();
       if (!state.team) throw fail(403, 'NO_TEAM', 'You are not in a team.');
@@ -974,7 +1028,7 @@ export function createMockApi(ApiError, getUnauthorized) {
         isYou: true,
       };
       const ranked = rank(
-        [...OTHERS.map((o) => ({ ...o, pictureUrl: null, isYou: false })), you].sort(
+        [...others().map((o) => ({ ...o, pictureUrl: null, isYou: false })), you].sort(
           (a, b) => b.points - a.points,
         ),
       );
@@ -988,7 +1042,7 @@ export function createMockApi(ApiError, getUnauthorized) {
       if (!state.team)
         throw fail(403, 'NO_TEAM', 'Join or create a team to see the team leaderboard.');
       const mine = teamView();
-      const others = [
+      const demoTeams = [
         {
           id: 11,
           name: 'Campus Crew',
@@ -1006,9 +1060,10 @@ export function createMockApi(ApiError, getUnauthorized) {
           isYourTeam: false,
         },
       ];
+      const shown = showDemo() ? demoTeams : [];
       const entries = mine.ranked
         ? [
-            ...others,
+            ...shown,
             {
               id: 1,
               name: mine.name,
@@ -1018,12 +1073,19 @@ export function createMockApi(ApiError, getUnauthorized) {
               isYourTeam: true,
             },
           ]
-        : others;
+        : shown;
       const ranked = rank(entries.sort((a, b) => b.points - a.points));
       const own = ranked.find((e) => e.isYourTeam);
       return { entries: ranked, yourTeam: own ? { rank: own.rank, points: own.points } : null };
     },
   };
+
+  const settingsView = () => ({
+    otpPreview: state.settings?.otpPreview ?? true,
+    showDemo: showDemo(),
+    mailConfigured: false,
+    environment: 'mock',
+  });
 
   const needAdmin = () => {
     needLogin();
@@ -1039,7 +1101,7 @@ export function createMockApi(ApiError, getUnauthorized) {
     state.admin.users.some((u) => u.email === email && u.id !== ignoreId);
   const checkAdminEmail = (raw, ignoreId) => {
     const email = String(raw).trim().toLowerCase();
-    if (!email.endsWith(DOMAIN) || email.split('@').length !== 2)
+    if (!mayLogIn(email))
       throw fail(
         400,
         'INVALID_EMAIL',
@@ -1208,7 +1270,7 @@ export function createMockApi(ApiError, getUnauthorized) {
       needAdmin();
       const q = {
         description: '',
-        radius: 80,
+        radius: 35,
         timeLimitSeconds: null,
         hardQuestionEnabled: false,
         typeMode: 'MCQ_ONLY',
@@ -1446,7 +1508,8 @@ export function createMockApi(ApiError, getUnauthorized) {
         errors: {},
         tiles: {
           signedInNow: 3,
-          activeStudents: state.admin.users.filter((u) => u.status === 'active').length,
+          activeStudents: state.admin.users.filter((u) => u.status === 'active' && realUser(u))
+            .length,
           loginsToday: daily[13].logins,
           loginsYesterday: daily[12].logins,
           questsPassedToday: daily[13].passed,
@@ -1462,12 +1525,13 @@ export function createMockApi(ApiError, getUnauthorized) {
           passed: Math.max(0, 9 - i),
           passRate: (9 - i > 0 ? 9 - i : 0) / (12 - i),
         })),
-        topPlayers: OTHERS.map((o, i) => ({
+        topPlayers: others().map((o, i) => ({
           rank: i + 1,
           displayName: o.displayName,
           points: o.points,
         })),
-        topTeams: [{ rank: 1, name: 'Campus Crew', members: 3, points: 4100 }],
+        topTeams: showDemo() ? [{ rank: 1, name: 'Campus Crew', members: 3, points: 4100 }] : [],
+        placeholders: placeholderCountsOf(state.quests),
         signedIn: [
           {
             displayName: 'Mia K.',
@@ -1502,7 +1566,7 @@ export function createMockApi(ApiError, getUnauthorized) {
     },
     async overview() {
       needAdmin();
-      const count = (s) => state.admin.users.filter((u) => u.status === s).length;
+      const count = (s) => state.admin.users.filter((u) => u.status === s && realUser(u)).length;
       return {
         users: {
           active: count('active'),
@@ -1513,7 +1577,7 @@ export function createMockApi(ApiError, getUnauthorized) {
         activeSessions: 3,
         questsPassedToday: 11,
         loginsToday: 17,
-        teams: state.admin.teams.length,
+        teams: state.admin.teams.filter(realTeam).length,
       };
     },
     async users({ q = '', status = '', role = '', noTeam = false } = {}) {
@@ -1522,6 +1586,7 @@ export function createMockApi(ApiError, getUnauthorized) {
       return {
         users: state.admin.users.filter(
           (u) =>
+            realUser(u) &&
             (!noTeam || (!u.teamId && u.status === 'active' && u.role === 'student')) &&
             (!needle ||
               `${u.email} ${u.firstName} ${u.lastName} ${u.nickname}`
@@ -1558,6 +1623,7 @@ export function createMockApi(ApiError, getUnauthorized) {
         teamName: null,
         totalPoints: 0,
         questsPassed: 0,
+        questsTotal: 8,
         createdAt: new Date().toISOString(),
         lastLoginAt: null,
       };
@@ -1663,15 +1729,62 @@ export function createMockApi(ApiError, getUnauthorized) {
     async teams() {
       needAdmin();
       return {
-        teams: state.admin.teams.map((t) => ({
+        teams: state.admin.teams.filter(realTeam).map((t) => ({
           id: t.id,
           name: t.name,
           score: t.score,
           size: t.members.length,
           createdAt: new Date().toISOString(),
-          members: t.members.map((m) => ({ id: m, displayName: adminUser(m).displayName })),
+          leaderId: t.leaderId ?? t.members[0] ?? null,
+          members: t.members.map((m, index) => ({
+            id: m,
+            displayName: adminUser(m).displayName,
+            position: index + 1,
+            status: adminUser(m).status,
+          })),
         })),
       };
+    },
+    async setTeamLeader(teamId, studentId) {
+      needAdmin();
+      const team = state.admin.teams.find((t) => t.id === Number(teamId));
+      if (!team) throw fail(404, 'NOT_FOUND', 'Team not found.');
+      if (!team.members.includes(Number(studentId)))
+        throw fail(404, 'NOT_A_MEMBER', 'This person is not in this team.');
+      if (adminUser(studentId).status !== 'active')
+        throw fail(409, 'STUDENT_NOT_ACTIVE', 'Only an active member can lead the team.');
+      team.leaderId = Number(studentId);
+      save();
+      return null;
+    },
+    async reorderTeam(teamId, studentIds) {
+      needAdmin();
+      const team = state.admin.teams.find((t) => t.id === Number(teamId));
+      if (!team) throw fail(404, 'NOT_FOUND', 'Team not found.');
+      const wanted = studentIds.map(Number);
+      const same =
+        new Set(wanted).size === wanted.length &&
+        wanted.length === team.members.length &&
+        wanted.every((id) => team.members.includes(id));
+      if (!same)
+        throw fail(400, 'ORDER_MISMATCH', 'The new order must list every member exactly once.');
+      team.members = wanted;
+      save();
+      return null;
+    },
+    async settings() {
+      needAdmin();
+      return { settings: settingsView() };
+    },
+    async saveSettings({ otpPreview, showDemo: shown }) {
+      needAdmin();
+      state.settings = {
+        ...(state.settings ?? {}),
+        ...(otpPreview !== undefined && { otpPreview: Boolean(otpPreview) }),
+        ...(shown !== undefined && { showDemo: Boolean(shown) }),
+      };
+      save();
+      return { settings: settingsView() };
     },
     async renameTeam(id, name) {
       needAdmin();
@@ -1685,6 +1798,10 @@ export function createMockApi(ApiError, getUnauthorized) {
       needAdmin();
       const team = state.admin.teams.find((t) => t.id === Number(teamId));
       team.members = team.members.filter((m) => m !== Number(studentId));
+      // BR44: the next member in the team order takes over from a leader who was removed.
+      if (team.leaderId === Number(studentId)) team.leaderId = team.members[0] ?? null;
+      if (team.members.length === 0)
+        state.admin.teams = state.admin.teams.filter((t) => t.id !== team.id);
       const user = adminUser(studentId);
       user.teamId = null;
       user.teamName = null;

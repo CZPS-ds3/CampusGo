@@ -84,15 +84,29 @@ async function loadRules(conn) {
   };
 }
 
+/**
+ * BR56: marks the invented players as demo players, so rankings and lists leave them out until an admin shows them.
+ * Also marks those of a run before the mark existed.
+ */
+async function markDemoPlayers(conn) {
+  await conn.query('UPDATE students SET is_demo = TRUE WHERE email IN (?)', [
+    PEOPLE.map(([first, last]) => emailOf(first, last)),
+  ]);
+}
+
 /** Writes the demo world. Returns false when it already exists. */
 export async function seedDemo(conn, now = Date.now()) {
   const [[existing]] = await conn.query('SELECT student_id FROM students WHERE email = ?', [
     emailOf(PEOPLE[0][0], PEOPLE[0][1]),
   ]);
-  if (existing) return false;
+  if (existing) {
+    await markDemoPlayers(conn);
+    return false;
+  }
   const rules = await loadRules(conn);
+  // Only quests students can play now: an archived or closed quest gets no invented history.
   const [checkpoints] = await conn.query(
-    'SELECT checkpoint_id, question_count, pass_threshold FROM checkpoints ORDER BY checkpoint_id',
+    'SELECT checkpoint_id, question_count, pass_threshold FROM checkpoints WHERE archived_at IS NULL AND is_active = 1 ORDER BY checkpoint_id',
   );
   const random = rng(20261027);
   const pick = (min, max) => min + Math.floor(random() * (max - min + 1));
@@ -102,8 +116,8 @@ export async function seedDemo(conn, now = Date.now()) {
     const joined = now - pick(3, 9) * DAY - pick(0, 20) * 3600 * 1000;
     const [inserted] = await conn.query(
       `INSERT INTO students (email, first_name, last_name, nickname, avatar_preset, total_points, points_exact_x100,
-         points_updated_at, created_at, location_consent_at)
-       VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?, ?)`,
+         points_updated_at, created_at, location_consent_at, is_demo)
+       VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?, ?, TRUE)`,
       [
         emailOf(first, last),
         first,
@@ -213,16 +227,27 @@ export async function seedDemo(conn, now = Date.now()) {
   for (const [name, members] of TEAMS) {
     const created = Math.min(...members.map((m) => people[m].joined)) + 3600 * 1000;
     const score = teamScore(members.map((m) => people[m].totalPoints));
+    // The first member created the team, so they lead it (BR44); the others follow in team order (BR54).
     const [team] = await conn.query(
-      'INSERT INTO teams (team_name, created_at, team_score, score_updated_at) VALUES (?, ?, ?, ?)',
-      [name, new Date(created), score, new Date(now - pick(1, 40) * 3600 * 1000)],
+      'INSERT INTO teams (team_name, leader_id, created_at, team_score, score_updated_at) VALUES (?, ?, ?, ?, ?)',
+      [
+        name,
+        people[members[0]].id,
+        new Date(created),
+        score,
+        new Date(now - pick(1, 40) * 3600 * 1000),
+      ],
     );
     for (const [position, member] of members.entries()) {
-      await conn.query('UPDATE students SET team_id = ?, team_joined_at = ? WHERE student_id = ?', [
-        team.insertId,
-        new Date(created + position * 1800 * 1000),
-        people[member].id,
-      ]);
+      await conn.query(
+        'UPDATE students SET team_id = ?, team_joined_at = ?, team_position = ? WHERE student_id = ?',
+        [
+          team.insertId,
+          new Date(created + position * 1800 * 1000),
+          position + 1,
+          people[member].id,
+        ],
+      );
     }
     if (TEAMS[PENDING_INVITE.team][0] === name) {
       await conn.query(

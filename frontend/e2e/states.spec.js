@@ -3,7 +3,7 @@ import {
   expectNoHorizontalScroll,
   login,
   openCheckpoint,
-  rightOption,
+  answerRight,
   shot,
   startQuiz,
 } from './helpers.js';
@@ -19,8 +19,8 @@ async function startLibrary(page, context) {
 
 async function answerFourRight(page) {
   for (let i = 0; i < 4; i += 1) {
-    await rightOption(page).click();
-    await page.getByRole('button', { name: 'Next' }).click();
+    await answerRight(page);
+    await page.getByRole('button', { name: 'Next', exact: true }).click();
   }
 }
 

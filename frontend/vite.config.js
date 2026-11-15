@@ -5,8 +5,13 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   return {
     plugins: [react()],
+    // MapLibre 6 starts its web worker from a file next to its own module; Vite's dependency pre-bundling would
+    // move the module away from that file, so the dev server serves MapLibre as it is.
+    optimizeDeps: { exclude: ['maplibre-gl'] },
     server: {
       port: 5173,
+      // In Docker on Windows (docker-compose.yml) file events do not cross into the container, so Vite polls.
+      watch: env.CHOKIDAR_USEPOLLING === 'true' ? { usePolling: true, interval: 300 } : undefined,
       proxy: {
         '/api': { target: env.BACKEND_URL || 'http://localhost:3000', changeOrigin: false },
         '/uploads': { target: env.BACKEND_URL || 'http://localhost:3000', changeOrigin: false },

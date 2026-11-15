@@ -1,9 +1,14 @@
 // One map style per student account (BR48): base (light, dark or follow the app theme), a colour tint over the
-// map, the colours of the checkpoint pins, the highlight and the walking route. Colours are validated and stored
+// map, the colours of the checkpoint pins, the highlight, the walking route, the buildings of the 3D map and the
+// live-position ball (its body and its lines) and the sonar range ring under it (on/off, colour, pulse speed, look,
+// flash for quests in range). Colours are validated and stored
 // as #RRGGBB, so the page can use them in CSS without any further checking.
 import { AppError } from '../middleware/errors.js';
 
 export const MAP_BASES = ['follow', 'light', 'dark'];
+// Calmer since 2026-11-14: fast is the old normal pace, normal the old slow one, slow slower still.
+export const SONAR_SPEEDS = ['slow', 'normal', 'fast'];
+export const SONAR_LOOKS = ['sova', 'soft'];
 
 /** The default style: follows the app theme (light unless the student chose dark) and keeps the DHBW colours. */
 export const DEFAULT_MAP_STYLE = {
@@ -13,6 +18,9 @@ export const DEFAULT_MAP_STYLE = {
   pins: { open: '#4d5861', done: '#137a4e', locked: '#8a949c' },
   highlight: '#e2001a',
   route: '#e2001a',
+  buildings: '#dcd9d4',
+  ball: { body: '#ffffff', lines: '#e2001a' },
+  sonar: { show: true, color: '#e2001a', speed: 'normal', look: 'soft', ping: true },
 };
 
 const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
@@ -42,6 +50,22 @@ function exactKeys(object, keys, path, problems) {
     if (!keys.includes(key)) problems.push(`${path}.${key} is not a known setting`);
   }
   return true;
+}
+
+/** Copies the given sonar settings into `sonar`, naming every wrong one in `problems`. */
+function validateSonar(input, sonar, colour, problems) {
+  for (const key of ['show', 'ping']) {
+    if (input[key] === undefined) continue;
+    if (typeof input[key] === 'boolean') sonar[key] = input[key];
+    else problems.push(`sonar.${key} must be true or false`);
+  }
+  if (input.color !== undefined) sonar.color = colour(input.color, 'sonar.color');
+  const choices = { speed: SONAR_SPEEDS, look: SONAR_LOOKS };
+  for (const [key, allowed] of Object.entries(choices)) {
+    if (input[key] === undefined) continue;
+    if (allowed.includes(input[key])) sonar[key] = input[key];
+    else problems.push(`sonar.${key} must be one of ${allowed.join(', ')}`);
+  }
 }
 
 /** Returns the clean style or throws a 400 that names every problem. Missing settings take the default. */
@@ -81,7 +105,17 @@ export function validateMapStyle(input) {
     for (const key of Object.keys(input.pins))
       style.pins[key] = colour(input.pins[key], `pins.${key}`);
   }
-  for (const key of ['highlight', 'route']) {
+  if (input.ball !== undefined && exactKeys(input.ball, ['body', 'lines'], 'ball', problems)) {
+    for (const key of Object.keys(input.ball))
+      style.ball[key] = colour(input.ball[key], `ball.${key}`);
+  }
+  if (
+    input.sonar !== undefined &&
+    exactKeys(input.sonar, ['show', 'color', 'speed', 'look', 'ping'], 'sonar', problems)
+  ) {
+    validateSonar(input.sonar, style.sonar, colour, problems);
+  }
+  for (const key of ['highlight', 'route', 'buildings']) {
     if (input[key] !== undefined) style[key] = colour(input[key], key);
   }
   if (problems.length > 0) throw new AppError(400, 'INVALID_MAP_STYLE', problems.join('; '));

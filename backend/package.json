@@ -12,6 +12,7 @@
     "prestart": "node ../scripts/ensure-db.mjs",
     "db:up": "node ../scripts/ensure-db.mjs",
     "dev": "node --watch --env-file=.env index.js",
+    "watch": "node --watch --env-file=.env index.js",
     "start": "node --env-file=.env index.js",
     "migrate": "node --env-file=.env src/db/migrate.js",
     "migrate:test": "node --env-file=.env src/db/migrate.js --test",

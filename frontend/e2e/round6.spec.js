@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { OTP, expectNoHorizontalScroll, login, shot } from './helpers.js';
+import { OTP, expectNoHorizontalScroll, login, open, shot } from './helpers.js';
 
 const ADMIN = { first: 'Study', last: 'Office', email: 'sekretariat.dski@heilbronn.dhbw.de' };
 const LINK = 'https://www.google.com/maps/@49.1502,9.2201,19z';
@@ -22,14 +22,17 @@ async function fillQuestion(page, { text, type, options, right }) {
   await expect(dialog).toHaveCount(0);
 }
 
-test.describe('login in development', () => {
-  test('a wrong code gets a new code at once, so nobody has to press resend', async ({ page }) => {
+test.describe('login code', () => {
+  test('BR01 a wrong code is refused with a message and sends no new code by itself', async ({
+    page,
+  }) => {
     await page.goto('/login');
     await page.getByLabel('School email').fill('ada@heilbronn.dhbw.de');
     await page.getByRole('button', { name: 'Send code' }).click();
     await page.getByLabel('Digit 1 of 6').click();
     await page.keyboard.insertText('000000');
-    await expect(page.getByText(/A new code was sent/)).toBeVisible();
+    await expect(page.getByText('That code is wrong or has expired.')).toBeVisible();
+    await expect(page.getByText(/A new code was sent/)).toHaveCount(0);
     await page.getByLabel('Digit 1 of 6').click();
     await page.keyboard.insertText(OTP);
     await page.getByLabel('First name *').fill('Ada');
@@ -44,7 +47,7 @@ test.describe('teams: leader and invitations', () => {
     page,
   }) => {
     await login(page);
-    await page.goto('/team');
+    await open(page, '/team');
     await page.getByLabel('Team name *').fill('Night Owls');
     await page.getByRole('button', { name: 'Create team' }).click();
     await expect(page.getByRole('heading', { name: 'Night Owls' })).toBeVisible();
@@ -63,7 +66,7 @@ test.describe('teams: leader and invitations', () => {
     page,
   }) => {
     await login(page);
-    await page.goto('/team');
+    await open(page, '/team');
     await page.getByRole('button', { name: 'Accept' }).click();
     await expect(page.getByText('Campus Crew').first()).toBeVisible();
     await expect(page.getByText('Leader')).toBeVisible();
@@ -76,7 +79,7 @@ test.describe('admin: students, teams and deleted accounts', () => {
     page,
   }, testInfo) => {
     await login(page, ADMIN);
-    await page.goto('/admin/teams');
+    await open(page, '/admin/teams');
     await page.getByRole('button', { name: 'Add a student' }).first().click();
     const dialog = page.getByRole('alertdialog');
     await expect(dialog.getByRole('list', { name: 'Students without a team' })).toBeVisible();
@@ -93,7 +96,7 @@ test.describe('admin: students, teams and deleted accounts', () => {
     page,
   }, testInfo) => {
     await login(page, ADMIN);
-    await page.goto('/admin/users');
+    await open(page, '/admin/users');
     await expect(page.getByLabel('Status').locator('option', { hasText: 'Deleted' })).toHaveCount(
       0,
     );
@@ -114,7 +117,7 @@ test.describe('admin: students, teams and deleted accounts', () => {
     page,
   }, testInfo) => {
     await login(page, ADMIN);
-    await page.goto('/admin/users');
+    await open(page, '/admin/users');
     await page.getByLabel('Search').fill('Aiko');
     await page.getByRole('link', { name: /Aiko/ }).first().click();
     const card = page.getByTestId('role-card');
@@ -127,7 +130,7 @@ test.describe('admin: students, teams and deleted accounts', () => {
     await expect(card.getByRole('radio', { name: 'Admin' })).toBeChecked();
     await expect(page.getByRole('heading', { name: 'Account actions' })).toHaveCount(0);
 
-    await page.goto('/admin/users');
+    await open(page, '/admin/users');
     await page.getByLabel('Role').selectOption('admin');
     await expect(page.getByRole('link', { name: /Aiko/ })).toBeVisible();
     await page.getByRole('link', { name: /Aiko/ }).first().click();
@@ -144,7 +147,7 @@ test.describe('admin: quests', () => {
     page,
   }, testInfo) => {
     await login(page, ADMIN);
-    await page.goto('/admin/quests');
+    await open(page, '/admin/quests');
     await expect(page.getByTestId('quest-card')).toHaveCount(8);
     await page.getByRole('link', { name: 'New quest' }).click();
     await page.getByLabel('Title').fill('Sports Hall');
@@ -175,7 +178,7 @@ test.describe('admin: quests', () => {
     context,
   }, testInfo) => {
     await login(page, ADMIN);
-    await page.goto('/admin/quests/new');
+    await open(page, '/admin/quests/new');
     await page.getByLabel('Title').fill('Sports Hall');
     await page.getByLabel('Google Maps link').fill(LINK);
     await page.getByLabel('Question types').selectOption('MIXED');
@@ -209,13 +212,14 @@ test.describe('admin: quests', () => {
 
     // A student sees the question types before the quiz and answers a multi-select question.
     await page.evaluate(() => {
-      const saved = JSON.parse(sessionStorage.getItem('cq-mock-v2'));
+      const saved = JSON.parse(sessionStorage.getItem('cq-mock-v3'));
       saved.student.role = 'student';
       saved.student.email = 'ada@heilbronn.dhbw.de';
-      sessionStorage.setItem('cq-mock-v2', JSON.stringify(saved));
+      sessionStorage.setItem('cq-mock-v3', JSON.stringify(saved));
     });
     await context.setGeolocation(CAMPUS);
-    await page.goto('/quests');
+    await page.reload(); // the mock app reads the changed account again (and starts on the map)
+    await open(page, '/quests');
     await page.getByRole('link', { name: /Sports Hall/ }).click();
     await expect(page.getByTestId('quest-types')).toContainText('Multiple choice');
     await expect(page.getByTestId('quest-types')).toContainText('Multi-select');
@@ -239,14 +243,14 @@ test.describe('admin: quests', () => {
         await page.getByRole('button', { name: /Tennis|Volleyball/ }).click();
         await expect(page.getByText('Correct!')).toBeVisible();
       }
-      await page.getByRole('button', { name: i === 2 ? 'Finish' : 'Next' }).click();
+      await page.getByRole('button', { name: i === 2 ? 'Finish' : 'Next', exact: true }).click();
     }
     expect(sawMulti).toBe(true);
   });
 
   test('BR49 deleting a quest asks first and removes a quest nobody played', async ({ page }) => {
     await login(page, ADMIN);
-    await page.goto('/admin/quests/new');
+    await open(page, '/admin/quests/new');
     await page.getByLabel('Title').fill('Temp Quest');
     await page.getByLabel('Google Maps link').fill(LINK);
     await page.getByRole('button', { name: 'Create quest' }).click();
@@ -262,19 +266,23 @@ test.describe('admin: quests', () => {
 });
 
 test.describe('map style', () => {
-  test('BR48 light stays the default; a student picks a preset and a custom RGB colour and saves one style', async ({
+  test('BR48 light stays the default; a student picks a map theme and a custom RGB colour and saves one style', async ({
     page,
   }, testInfo) => {
     await login(page);
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-    await page.goto('/profile');
+    await open(page, '/profile');
     const settings = page.getByTestId('map-style');
     await settings.locator('summary').click();
     await expect(settings.getByRole('radio', { name: 'Follow the app' })).toBeChecked();
-    await settings.getByRole('button', { name: /Ocean/ }).click();
+    await settings.getByRole('button', { name: 'Next map theme' }).click();
+    await expect(settings.getByTestId('map-theme-name')).toContainText('Ocean');
     await settings.getByRole('radio', { name: 'Dark' }).click();
 
-    const highlight = settings.getByTestId('colour-Highlight (selected checkpoint)');
+    // One click selects an element; a double-click opens its colour in a popup.
+    await settings.getByRole('button', { name: 'Highlight (selected checkpoint)' }).dblclick();
+    const popup = page.getByRole('dialog', { name: 'Highlight (selected checkpoint)' });
+    const highlight = popup.getByTestId('colour-Highlight (selected checkpoint)');
     await highlight.getByLabel('R (0–255)').fill('0');
     await highlight.getByLabel('G (0–255)').fill('128');
     await highlight.getByLabel('B (0–255)').fill('255');
@@ -284,32 +292,37 @@ test.describe('map style', () => {
     await highlight.getByLabel('Colour code').fill('banana');
     await expect(highlight.getByText(/Use a colour like #1a2b3c/)).toBeVisible();
     await highlight.getByLabel('Colour code').fill('#ff00aa');
+    await shot(page, testInfo, '34-map-style-popup');
+    await expectNoHorizontalScroll(page);
+    await popup.getByRole('button', { name: 'Close' }).click();
+    await expect(settings.getByTestId('map-theme-name')).toContainText('Custom');
     await shot(page, testInfo, '34-map-style');
 
-    await settings.getByRole('button', { name: 'Save map style' }).click();
-    await expect(page.getByText('Map style saved')).toBeVisible();
+    await settings.getByRole('button', { name: 'Save customisation' }).click();
+    await expect(page.getByText('Customisation saved')).toBeVisible();
     await expect(page.locator('html')).toHaveAttribute('data-map-base', 'dark');
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
     await expectNoHorizontalScroll(page);
 
     // The one saved style comes back after a reload; reset returns to the default.
     await page.reload();
+    await open(page, '/profile'); // a reload starts on the map
     await page.getByTestId('map-style').locator('summary').click();
     await expect(page.getByTestId('map-style').getByRole('radio', { name: 'Dark' })).toBeChecked();
     await page.getByTestId('map-style').getByRole('button', { name: 'Reset to default' }).click();
-    await expect(page.getByText('Map style reset')).toBeVisible();
+    await expect(page.getByText('Customisation reset')).toBeVisible();
     await expect(page.locator('html')).toHaveAttribute('data-map-base', 'follow');
   });
 
   test('BR48 the dark theme and the map style work together', async ({ page }) => {
     await login(page);
-    await page.goto('/profile');
+    await open(page, '/profile');
     await page.getByRole('switch', { name: 'Dark mode' }).click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
     await page.getByTestId('map-style').locator('summary').click();
     await page.getByTestId('map-style').getByRole('radio', { name: 'Light' }).click();
-    await page.getByTestId('map-style').getByRole('button', { name: 'Save map style' }).click();
-    await expect(page.getByText('Map style saved')).toBeVisible();
+    await page.getByTestId('map-style').getByRole('button', { name: 'Save customisation' }).click();
+    await expect(page.getByText('Customisation saved')).toBeVisible();
     await page.goto('/map');
     await expect(page.getByRole('region', { name: 'Campus map' })).toBeVisible();
     await expect(page.locator('html')).toHaveAttribute('data-map-base', 'light');
@@ -321,7 +334,7 @@ test.describe('admin: the checkpoint circle', () => {
     page,
   }, testInfo) => {
     await login(page, ADMIN);
-    await page.goto('/admin/quests');
+    await open(page, '/admin/quests');
     await page.getByTestId('quest-card').first().getByRole('link').first().click();
     const map = page.locator('.geo-preview__map');
     await expect(map).toBeVisible();
@@ -330,8 +343,9 @@ test.describe('admin: the checkpoint circle', () => {
     await radius.fill('150');
     await expect(page.getByText(/about 300 m across/)).toBeVisible();
     await expect(page.getByLabel('Drag to change the size')).toHaveValue('150');
-    await page.getByRole('radio', { name: '60 m' }).click();
-    await expect(radius).toHaveValue('60');
+    // BR12 tight circles: the quick sizes are 25, 35, 50 and 80 m.
+    await page.getByRole('radio', { name: '35 m' }).click();
+    await expect(radius).toHaveValue('35');
     await radius.fill('900');
     await expect(page.getByRole('alert').filter({ hasText: 'between 10 and 500' })).toBeVisible();
     await radius.fill('100');

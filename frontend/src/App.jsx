@@ -1,5 +1,7 @@
-import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { OfflineBanner } from './components/OfflineBanner.jsx';
+import { PageClose } from './components/PageClose.jsx';
 import { QuestMenu } from './components/QuestMenu.jsx';
 import { RouteWipe } from './components/RouteWipe.jsx';
 import { Skeleton } from './components/Screen.jsx';
@@ -23,16 +25,31 @@ import AdminNames from './pages/admin/AdminNames.jsx';
 import AdminOverview from './pages/admin/AdminOverview.jsx';
 import AdminQuest from './pages/admin/AdminQuest.jsx';
 import AdminQuests from './pages/admin/AdminQuests.jsx';
+import AdminSettings from './pages/admin/AdminSettings.jsx';
 import AdminTeams from './pages/admin/AdminTeams.jsx';
 import AdminTestQuests from './pages/admin/AdminTestQuests.jsx';
 import AdminUser from './pages/admin/AdminUser.jsx';
 import AdminUsers from './pages/admin/AdminUsers.jsx';
 
-/** Everything behind the login. The GO badge menu is hidden while a quiz runs. */
+/** Whether a page opened at the start of the app should give way to the map: every page but the map itself and a running
+ * quiz, which must survive a refresh (BR25). */
+const startsOnMap = (path) => path !== '/map' && !path.startsWith('/quiz/');
+
+/**
+ * Everything behind the login. The GO badge menu is hidden while a quiz runs. Whenever the app starts with an active
+ * session (a reload, a bookmark, a tab the browser brings back), it opens on the map, not on the page it was on.
+ */
 function Protected() {
   const { student, ready } = useSession();
   const location = useLocation();
-  if (!ready) {
+  const navigate = useNavigate();
+  const [landing, setLanding] = useState(() => startsOnMap(location.pathname));
+  useEffect(() => {
+    if (!landing) return;
+    navigate('/map', { replace: true });
+    setLanding(false);
+  }, [landing, navigate]);
+  if (!ready || landing) {
     return (
       <main className="page page--narrow">
         <Skeleton rows={3} />
@@ -40,12 +57,13 @@ function Protected() {
     );
   }
   if (!student) {
-    return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
+    return <Navigate to="/login" replace />;
   }
   const inQuiz = location.pathname.startsWith('/quiz');
   return (
     <>
       <OfflineBanner />
+      <PageClose />
       <Outlet />
       {!inQuiz && <QuestMenu />}
     </>
@@ -85,6 +103,7 @@ export default function App() {
             <Route path="quests" element={<AdminQuests />} />
             <Route path="quests/:id" element={<AdminQuest />} />
             <Route path="test-quests" element={<AdminTestQuests />} />
+            <Route path="settings" element={<AdminSettings />} />
           </Route>
         </Route>
         <Route path="*" element={<NotFound />} />

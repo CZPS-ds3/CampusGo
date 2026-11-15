@@ -10,6 +10,7 @@ const TABS = [
   ['/admin/quests', 'Quests', false],
   ['/admin/names', 'Names', false],
   ['/admin/test-quests', 'Test quests', false],
+  ['/admin/settings', 'Settings', false],
 ];
 
 /** Frame of the admin area: heading, a tab row that scrolls sideways on phones, and the chosen section. */

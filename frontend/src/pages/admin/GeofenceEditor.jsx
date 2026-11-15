@@ -3,6 +3,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { api } from '../../api/client.js';
 import { Icon } from '../../components/icons.jsx';
 import { formatNumber, t } from '../../i18n.js';
+import { addBaseLayers } from '../../map-layers.js';
 import {
   DEFAULT_GRACE_M,
   RADIUS_MAX,
@@ -17,9 +18,6 @@ import {
   radiusProblem,
 } from './geofence.js';
 
-const TILE_URL =
-  import.meta.env.VITE_MAP_TILE_URL || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-const ATTRIBUTION = import.meta.env.VITE_MAP_ATTRIBUTION || '&copy; OpenStreetMap contributors';
 const RED = '#e2001a';
 const GREY = '#6b7780';
 
@@ -40,13 +38,7 @@ function GeofenceMap({ centre, radius, graceM, others, selfId }) {
       scrollWheelZoom: false,
       minZoom: 14,
     }).setView([centre.lat, centre.lng], 18);
-    L.tileLayer(TILE_URL, {
-      attribution: ATTRIBUTION,
-      minZoom: 14,
-      maxZoom: 19,
-      subdomains: 'abcd',
-      crossOrigin: true,
-    }).addTo(map.current);
+    addBaseLayers(map.current, { minZoom: 14 });
     L.control.scale({ imperial: false, position: 'bottomleft' }).addTo(map.current);
     return () => {
       map.current.remove();
@@ -194,7 +186,7 @@ export function GeofenceEditor({
             max={SLIDER_MAX}
             step={SLIDER_STEP}
             value={
-              Number.isFinite(radius) ? Math.min(SLIDER_MAX, Math.max(SLIDER_MIN, radius)) : 80
+              Number.isFinite(radius) ? Math.min(SLIDER_MAX, Math.max(SLIDER_MIN, radius)) : 35
             }
             aria-valuetext={Number.isFinite(radius) ? `${radius} m` : undefined}
             onChange={(event) => set(event.target.value)}

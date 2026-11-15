@@ -3,11 +3,13 @@ import { at } from '../clock.js';
 import { withTransaction } from '../db/pool.js';
 import { AppError, notFound } from '../middleware/errors.js';
 import { recordEvent } from './audit.js';
-import { displayName, isSchoolEmail, normalizeEmail } from './auth.js';
+import { displayName, mayLogIn, normalizeEmail } from './auth.js';
 import { teamScore } from './scoring.js';
 import { unrankedReason } from './team-ranking.js';
 
 export const MAX_TEAM_SIZE = 5;
+/** BR54: the order of a team (the admin can change it); the leader hand-over follows it. */
+export const TEAM_ORDER = 'team_position, team_joined_at, student_id';
 export const GENERIC_INVITE_MESSAGE =
   'If the user exists and can be invited, an invitation has been sent.';
 
@@ -35,9 +37,33 @@ export async function refreshTeamScore(conn, teamId, eventMs) {
   ]);
 }
 
+/** BR54: the place a new member takes, at the end of the team order. */
+export async function nextTeamPosition(conn, teamId) {
+  const [[{ last }]] = await conn.query(
+    'SELECT COALESCE(MAX(team_position), 0) AS `last` FROM students WHERE team_id = ?',
+    [teamId],
+  );
+  return Number(last) + 1;
+}
+
+/** BR54: closes the gaps after someone left, so the order is always 1, 2, 3 ... without changing who is first. */
+export async function renumberTeam(conn, teamId) {
+  const [members] = await conn.query(
+    `SELECT student_id FROM students WHERE team_id = ? ORDER BY ${TEAM_ORDER}`,
+    [teamId],
+  );
+  for (const [index, member] of members.entries()) {
+    await conn.query('UPDATE students SET team_position = ? WHERE student_id = ?', [
+      index + 1,
+      member.student_id,
+    ]);
+  }
+}
+
 /**
  * A team always has a leader while it has members. The leader stays as long as they are still an active member;
- * otherwise the earliest active member takes over (BR44). Runs inside the transaction that changed the members.
+ * otherwise the first active member in the team order takes over (BR44, BR54). Runs inside the transaction that
+ * changed the members. Returns the leader id (or null).
  */
 export async function ensureLeader(conn, teamId) {
   const [[team]] = await conn.query('SELECT leader_id FROM teams WHERE team_id = ?', [teamId]);
@@ -47,16 +73,35 @@ export async function ensureLeader(conn, teamId) {
       'SELECT team_id, status FROM students WHERE student_id = ?',
       [team.leader_id],
     );
-    if (leader?.team_id === teamId && leader.status === 'active') return;
+    if (leader?.team_id === teamId && leader.status === 'active') return team.leader_id;
   }
   const [heirs] = await conn.query(
-    "SELECT student_id FROM students WHERE team_id = ? AND status = 'active' ORDER BY team_joined_at, student_id LIMIT 1",
+    `SELECT student_id FROM students WHERE team_id = ? AND status = 'active' ORDER BY ${TEAM_ORDER} LIMIT 1`,
     [teamId],
   );
-  await conn.query('UPDATE teams SET leader_id = ? WHERE team_id = ?', [
-    heirs[0]?.student_id ?? null,
-    teamId,
-  ]);
+  const heir = heirs[0]?.student_id ?? null;
+  await conn.query('UPDATE teams SET leader_id = ? WHERE team_id = ?', [heir, teamId]);
+  return heir;
+}
+
+/**
+ * Repairs a team after someone left it (left, removed, deleted, made an admin): the score, the order and the
+ * leader, or deletes the team with its invitations when nobody is left. Runs inside that transaction.
+ * Returns { deleted, leaderId }.
+ */
+export async function repairTeam(conn, teamId, now) {
+  const [[{ left }]] = await conn.query(
+    'SELECT COUNT(*) AS `left` FROM students WHERE team_id = ?',
+    [teamId],
+  );
+  if (Number(left) === 0) {
+    await conn.query('DELETE FROM team_invitations WHERE team_id = ?', [teamId]);
+    await conn.query('DELETE FROM teams WHERE team_id = ?', [teamId]);
+    return { deleted: true, leaderId: null };
+  }
+  await refreshTeamScore(conn, teamId, now);
+  await renumberTeam(conn, teamId);
+  return { deleted: false, leaderId: await ensureLeader(conn, teamId) };
 }
 
 export function createTeamService({ pool, config, clock, nameRules }) {
@@ -74,7 +119,8 @@ export function createTeamService({ pool, config, clock, nameRules }) {
     if (!student?.team_id) return null;
     const [[team]] = await pool.query('SELECT * FROM teams WHERE team_id = ?', [student.team_id]);
     const [members] = await pool.query(
-      'SELECT student_id, first_name, last_name, nickname, profile_picture, avatar_preset, total_points FROM students WHERE team_id = ? ORDER BY team_joined_at, student_id',
+      `SELECT student_id, first_name, last_name, nickname, profile_picture, avatar_preset, total_points, team_position
+       FROM students WHERE team_id = ? ORDER BY ${TEAM_ORDER}`,
       [team.team_id],
     );
     // Teammates see who is invited: the address the inviter typed, or the player's display name when the
@@ -95,6 +141,7 @@ export function createTeamService({ pool, config, clock, nameRules }) {
         pictureUrl: m.profile_picture,
         avatarPreset: m.avatar_preset,
         totalPoints: m.total_points,
+        position: m.team_position,
       })),
       leaderId: team.leader_id,
       pending: pending.map((p) => ({
@@ -127,11 +174,10 @@ export function createTeamService({ pool, config, clock, nameRules }) {
         'INSERT INTO teams (team_name, leader_id, created_at, team_score, score_updated_at) VALUES (?, ?, ?, ?, ?)',
         [name, studentId, at(now), student.total_points, at(now)],
       );
-      await conn.query('UPDATE students SET team_id = ?, team_joined_at = ? WHERE student_id = ?', [
-        inserted.insertId,
-        at(now),
-        studentId,
-      ]);
+      await conn.query(
+        'UPDATE students SET team_id = ?, team_joined_at = ?, team_position = 1 WHERE student_id = ?',
+        [inserted.insertId, at(now), studentId],
+      );
       // R-44: the invitee joined a team, so all their other pending invitations become invalid.
       await conn.query(
         "UPDATE team_invitations SET status = 'invalid', responded_at = ? WHERE invitee_id = ? AND status = 'pending'",
@@ -141,21 +187,26 @@ export function createTeamService({ pool, config, clock, nameRules }) {
     return getMyTeam(studentId);
   }
 
+  /** Sets the team picture and returns the previous one (its file can then be deleted). */
   async function setTeamPicture(studentId, url) {
     const [[student]] = await pool.query('SELECT team_id FROM students WHERE student_id = ?', [
       studentId,
     ]);
     if (!student?.team_id) throw new AppError(403, 'NO_TEAM', 'You are not in a team.');
+    const [[team]] = await pool.query('SELECT profile_picture FROM teams WHERE team_id = ?', [
+      student.team_id,
+    ]);
     await pool.query('UPDATE teams SET profile_picture = ? WHERE team_id = ?', [
       url,
       student.team_id,
     ]);
+    return team?.profile_picture ?? null;
   }
 
   /** R-43: always the same outcome for the caller; invitations are only created when everything fits. */
   async function invite(inviterId, rawEmail) {
     const email = normalizeEmail(rawEmail);
-    if (!isSchoolEmail(email, config.allowedEmailDomain)) {
+    if (!mayLogIn(email, config)) {
       throw new AppError(
         400,
         'INVALID_EMAIL',
@@ -292,11 +343,10 @@ export function createTeamService({ pool, config, clock, nameRules }) {
         [invitation.team_id],
       );
       if (size >= MAX_TEAM_SIZE) return invalidate('invalid');
-      await conn.query('UPDATE students SET team_id = ?, team_joined_at = ? WHERE student_id = ?', [
-        invitation.team_id,
-        at(now),
-        studentId,
-      ]);
+      await conn.query(
+        'UPDATE students SET team_id = ?, team_joined_at = ?, team_position = ? WHERE student_id = ?',
+        [invitation.team_id, at(now), await nextTeamPosition(conn, invitation.team_id), studentId],
+      );
       await conn.query(
         "UPDATE team_invitations SET status = 'accepted', responded_at = ? WHERE invitation_id = ?",
         [at(now), invitationId],
@@ -353,11 +403,11 @@ export function createTeamService({ pool, config, clock, nameRules }) {
         throw new AppError(400, 'CANNOT_REMOVE_LEADER', 'The leader cannot remove themselves.');
       }
       const [res] = await conn.query(
-        'UPDATE students SET team_id = NULL, team_joined_at = NULL WHERE student_id = ? AND team_id = ?',
+        'UPDATE students SET team_id = NULL, team_joined_at = NULL, team_position = NULL WHERE student_id = ? AND team_id = ?',
         [targetId, me.team_id],
       );
       if (res.affectedRows === 0) throw notFound('Member not found.');
-      await refreshTeamScore(conn, me.team_id, now);
+      await repairTeam(conn, me.team_id, now);
       await recordEvent(conn, now, {
         studentId: targetId,
         actorId: leaderId,
@@ -366,6 +416,44 @@ export function createTeamService({ pool, config, clock, nameRules }) {
       });
     });
     return getMyTeam(leaderId);
+  }
+
+  /**
+   * BR54: any member leaves their team. When the leader leaves, the next member in the team order becomes the
+   * leader; when the last member leaves, the team is deleted. Lock order: team, then student (as everywhere).
+   */
+  async function leave(studentId) {
+    const now = clock.now();
+    await withTransaction(pool, async (conn) => {
+      const [[preview]] = await conn.query('SELECT team_id FROM students WHERE student_id = ?', [
+        studentId,
+      ]);
+      if (!preview?.team_id) throw new AppError(409, 'NO_TEAM', 'You are not in a team.');
+      const [[team]] = await conn.query(
+        'SELECT team_id, team_name, leader_id FROM teams WHERE team_id = ? FOR UPDATE',
+        [preview.team_id],
+      );
+      const [res] = await conn.query(
+        'UPDATE students SET team_id = NULL, team_joined_at = NULL, team_position = NULL WHERE student_id = ? AND team_id = ?',
+        [studentId, team.team_id],
+      );
+      if (res.affectedRows === 0) throw new AppError(409, 'NO_TEAM', 'You are not in a team.');
+      const { deleted, leaderId } = await repairTeam(conn, team.team_id, now);
+      await recordEvent(conn, now, {
+        studentId,
+        actorId: studentId,
+        type: 'left_team',
+        detail: deleted ? `${team.team_name} (team deleted, nobody left)` : team.team_name,
+      });
+      if (!deleted && team.leader_id === studentId && leaderId) {
+        await recordEvent(conn, now, {
+          studentId: leaderId,
+          type: 'team_leader_changed',
+          detail: `${team.team_name}: the leader left`,
+        });
+      }
+    });
+    return null;
   }
 
   /** BR45: any member of the inviting team cancels a pending invitation. */
@@ -394,6 +482,7 @@ export function createTeamService({ pool, config, clock, nameRules }) {
   }
 
   return {
+    leave,
     removeMember,
     cancelInvitation,
     getMyTeam,

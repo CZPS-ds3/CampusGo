@@ -6,8 +6,10 @@ import { Avatar, PRESET_COUNT } from '../components/Avatar.jsx';
 import { Button } from '../components/Button.jsx';
 import { Icon } from '../components/icons.jsx';
 import { MapStyleSettings } from '../components/MapStyleSettings.jsx';
+import { MapTypePicker } from '../components/MapTypePicker.jsx';
 import { Page } from '../components/Screen.jsx';
 import { Modal } from '../components/Sheet.jsx';
+import { SonarSettings } from '../components/SonarSettings.jsx';
 import { Display, Logo } from '../components/ui.jsx';
 import { useSession } from '../hooks/useSession.jsx';
 import { useToast } from '../hooks/useToast.jsx';
@@ -44,6 +46,25 @@ function Preferences() {
         />
       </div>
       <div>
+        <p className="strong">{t('Language')}</p>
+        <div className="seg seg--2 mt-s" role="radiogroup" aria-label={t('Language')}>
+          {[
+            ['de', 'Deutsch'],
+            ['en', 'English'],
+          ].map(([id, name]) => (
+            <button
+              key={id}
+              type="button"
+              role="radio"
+              aria-checked={lang === id}
+              onClick={() => setSettings({ lang: id })}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div>
         <div className="row row--between">
           <p className="strong">{t('Font size')}</p>
           <span className="small muted">
@@ -65,25 +86,8 @@ function Preferences() {
           ))}
         </div>
       </div>
-      <div>
-        <p className="strong">{t('Language')}</p>
-        <div className="seg seg--2 mt-s" role="radiogroup" aria-label={t('Language')}>
-          {[
-            ['de', 'Deutsch'],
-            ['en', 'English'],
-          ].map(([id, name]) => (
-            <button
-              key={id}
-              type="button"
-              role="radio"
-              aria-checked={lang === id}
-              onClick={() => setSettings({ lang: id })}
-            >
-              {name}
-            </button>
-          ))}
-        </div>
-      </div>
+      <MapTypePicker />
+      <SonarSettings />
     </section>
   );
 }

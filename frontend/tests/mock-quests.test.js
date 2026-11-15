@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMockApi } from '../src/api/mock.js';
 
 class ApiError extends Error {
@@ -33,9 +33,11 @@ async function signInAsAdmin() {
 }
 
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
   sessionStorage.clear();
   api = createMockApi(ApiError, () => () => {});
 });
+afterEach(() => vi.useRealTimers());
 
 describe('BR49 BR50 the mock keeps the quest rules of the server', () => {
   it('BR49 only administrators reach the quest endpoints', async () => {
@@ -98,7 +100,8 @@ describe('BR49 BR50 the mock keeps the quest rules of the server', () => {
     }
     await api.admin.updateQuest(quest.id, { isActive: true });
     const started = await api.verifyLocation(quest.id, {});
-    const attempt = started.attempt;
+    vi.setSystemTime(Date.now() + 3000); // R-66: the questions come after the 3-2-1 countdown
+    const { attempt } = await api.attempt(started.attempt.id);
     const current = attempt.questions.find((q) => q.number === attempt.currentQuestion);
     expect(current.type).toBe('MULTI');
     const bank = (await api.admin.quest(quest.id)).questions.find((q) => q.id === current.id);

@@ -1,7 +1,9 @@
 # GitLab pipeline for Campus & City Quest. It replaces Auto DevOps, which cannot build this npm
 # workspaces project and caused failing pipelines. The same checks run locally with `npm run check`.
 #
-# Jobs: lint (ESLint + Prettier), backend tests (real MySQL 8.4 service), frontend tests, build.
+# Jobs on every pipeline: lint (ESLint + Prettier), node config tests, the Docker compose check, Python lint and
+# Python unit tests, backend tests (real MySQL 8.4 service), frontend tests, the integration tests (database, API,
+# security and regression suites through tests/run-all.mjs) and the build.
 # The browser tests (Playwright, phone/tablet/laptop sizes) are a manual job: start them from the pipeline page.
 
 stages:
@@ -42,6 +44,31 @@ lint:
   script:
     - npm run lint
     - npm run format:check
+
+# Start-up rules that need no database: production config, start-up errors, no route hands out a login code (BR52).
+node-config:
+  stage: check
+  script:
+    - node --test tests/node/config.test.mjs
+
+# docker-compose.yml must stay valid for `npm run docker:up` and `npm run dev` (which starts only its mysql service).
+# `docker compose config` only reads the file, so no Docker daemon is needed on the runner.
+docker-config:
+  stage: check
+  image: docker:27-cli
+  cache: {}
+  before_script: []
+  script:
+    - docker compose config --quiet
+    - docker compose config --services | grep -qx mysql
+    - docker compose config --services | grep -qx backend
+    - docker compose config --services | grep -qx frontend
+    # Production stack: dummy values only to check the file (the real ones live in .env.production on the server).
+    # Every ${NAME:?...} of docker-compose.prod.yml needs a value here, or `config` fails (regression test).
+    - printf 'PUBLIC_URL=https://ci.invalid\nMYSQL_ROOT_PASSWORD=ci\nMYSQL_PASSWORD=ci\nSESSION_SECRET=ci\nOTP_SECRET=ci\nSMTP_HOST=ci.invalid\nSMTP_FROM=ci@ci.invalid\nTRUSTED_PROXIES=127.0.0.1\n' > .env.production
+    - docker compose --env-file .env.production -f docker-compose.prod.yml config --quiet
+    - docker compose --env-file .env.production -f docker-compose.prod.yml config --services | grep -qx web
+    - rm .env.production
 
 backend-tests:
   stage: test
@@ -97,7 +124,7 @@ e2e-mock:
     paths:
       - frontend/test-results/
 
-# Python tests: formatting and lint run on every pipeline, the stack tests are a manual job.
+# Python tests: formatting, lint and the unit tests run here; the stack tests run in integration-tests.
 python-lint:
   stage: check
   image: python:3.11
@@ -107,13 +134,19 @@ python-lint:
   script:
     - python -m black --check --config tests/pyproject.toml tests/conftest.py tests/python tests/regression
     - python -m pylint --rcfile tests/.pylintrc tests/conftest.py tests/python tests/regression
+    # Data files, reference rules and the Docker files: no stack needed.
+    - python -m pytest -c tests/pyproject.toml tests/python/unit
 
-# Database, integration, security and regression tests through tests/run-all.mjs (restarts everything once on a failure).
+# Database, integration, security and regression tests through tests/run-all.mjs (restarts everything once on a
+# failure). Runs on every pipeline, so a change that breaks the API, the database or a fixed bug cannot be merged.
 integration-tests:
   stage: test
   image: node:24-bookworm
-  when: manual
-  allow_failure: true
+  retry:
+    max: 1
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
   services:
     - name: mysql:8.4
       command:

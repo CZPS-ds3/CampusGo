@@ -12,7 +12,8 @@ import { useToast } from '../hooks/useToast.jsx';
 import { t } from '../i18n.js';
 
 const FAKE_ALLOWED = import.meta.env.DEV && import.meta.env.VITE_DEV_FAKE_LOCATION === 'true';
-const SUCCESS_PAUSE_MS = 900;
+// Short: the 3-2-1 countdown of the quiz page already runs on the server clock (R-66).
+const SUCCESS_PAUSE_MS = 300;
 
 /**
  * Location check and unlock (BR12). One fresh position sample is sent to the server when the player
@@ -24,7 +25,7 @@ export default function Locate() {
   const navigate = useNavigate();
   const toast = useToast();
   const { student, refresh } = useSession();
-  const { locate } = useGeolocation();
+  const { locate, accuracy } = useGeolocation();
   const isAdmin = student?.role === 'admin';
   const [checkpoint, setCheckpoint] = useState(null);
   const [phase, setPhase] = useState('idle');
@@ -79,7 +80,8 @@ export default function Locate() {
       return;
     }
     try {
-      // Inside the circle the server unlocks the quiz right away: this is when the timer starts (BR13).
+      // Inside the circle the server unlocks the quiz right away; the quiz page then counts 3-2-1 and the timer
+      // starts when the countdown ends (BR13, R-66). The countdown screen says "Locked on!" as well.
       const result = await api.verifyLocation(checkpoint.id, sample);
       if (result.status === 'OK') {
         setPhase('success');
@@ -205,7 +207,8 @@ export default function Locate() {
         </Display>
       </div>
       <p className="small muted mt">
-        {checkpoint?.name} · {t('the timer starts once your location is confirmed')}
+        {checkpoint?.name} ·{' '}
+        {t('once your location is confirmed, a 3-second countdown runs, then the timer starts')}
       </p>
       {isAdmin && (
         <p className="card card--flat small" role="note">
@@ -236,6 +239,11 @@ export default function Locate() {
           {COPY.title}
         </Display>
         <p className="muted">{COPY.body}</p>
+        {phase === 'scan' && accuracy !== null && (
+          <p className="small muted" data-testid="scan-accuracy">
+            {t('Accuracy so far: ±{metres} m', { metres: accuracy })}
+          </p>
+        )}
         {phase === 'weak' && (
           <p className="small muted">
             {t('Tip: go outside or next to a window, and switch on location and Wi-Fi.')}

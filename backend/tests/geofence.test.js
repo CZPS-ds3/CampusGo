@@ -81,15 +81,16 @@ describe('Figure 3: freshness, then accuracy, then distance', () => {
 });
 
 describe('BR07 BR08 seeded checkpoints are on the Bildungscampus Heilbronn', () => {
+  // BR12 (2026-11-14): tight circles, because the checkpoints are only 34-127 m apart.
   const RADIUS = {
-    Mensa: 80,
-    Library: 80,
-    'Building B': 80,
-    'Building C': 80,
-    'Campus Garden': 70,
+    Mensa: 35,
+    Library: 35,
+    'Building B': 35,
+    'Building C': 35,
+    'Campus Garden': 30,
   };
 
-  it('has the eight pilot checkpoints with lenient starting radii (60-80 m) and the question counts of section 5', () => {
+  it('BR12 has the eight pilot checkpoints with tight starting radii (25-35 m) and the question counts of section 5', () => {
     expect(CHECKPOINTS.map(([name]) => name).sort()).toEqual(
       [
         'Building B',
@@ -103,8 +104,8 @@ describe('BR07 BR08 seeded checkpoints are on the Bildungscampus Heilbronn', () 
       ].sort(),
     );
     for (const [name, , , radius, count, threshold] of CHECKPOINTS) {
-      expect(radius).toBe(RADIUS[name] ?? 60);
-      expect(count).toBe(RADIUS[name] === 80 ? 5 : 3); // BR09
+      expect(radius).toBe(RADIUS[name] ?? 25);
+      expect(count).toBe(RADIUS[name] === 35 ? 5 : 3); // BR09
       expect(threshold).toBe(count === 5 ? 4 : 2); // BR15
     }
   });
@@ -139,6 +140,14 @@ describe('overlapping circles: one spot never unlocks two checkpoints (Building 
         ).outcome === 'inside',
     );
   const here = (zone) => [Number(zone.latitude), Number(zone.longitude)];
+  /** The spot `metres` from zone `a` on the straight line to zone `b` (flat enough at this scale). */
+  const between = (a, b, metres) => {
+    const share = metres / distanceMeters(...here(a), ...here(b));
+    return {
+      lat: a.latitude + (b.latitude - a.latitude) * share,
+      lng: a.longitude + (b.longitude - a.longitude) * share,
+    };
+  };
 
   it('the two circles really do overlap, so the rule is needed', () => {
     const c = byName('Building C');
@@ -146,13 +155,14 @@ describe('overlapping circles: one spot never unlocks two checkpoints (Building 
     expect(distanceMeters(...here(c), ...here(s))).toBeLessThan(c.radius + s.radius);
   });
 
-  it('standing in Building C unlocks Building C only, and the Sensoricum says so', () => {
+  it('BR12 standing in Building C, inside both circles, unlocks Building C only, and the Sensoricum says so', () => {
     const c = byName('Building C');
     const s = byName('Sensoricum');
-    const reading = { lat: c.latitude, lng: c.longitude, accuracy: 5, ageMs: 0 };
-    expect(verifiedAt(c.latitude, c.longitude).map((z) => z.checkpoint_name)).toEqual([
-      'Building C',
-    ]);
+    // 10 m from Building C towards the Sensoricum: also 24 m from the Sensoricum, inside its 25 m circle.
+    const spot = between(c, s, 10);
+    const reading = { ...spot, accuracy: 5, ageMs: 0 };
+    expect(distanceMeters(spot.lat, spot.lng, ...here(s))).toBeLessThan(s.radius);
+    expect(verifiedAt(spot.lat, spot.lng).map((z) => z.checkpoint_name)).toEqual(['Building C']);
     const refused = evaluateLocation(reading, s, LIMITS, [c]);
     expect(refused.outcome).toBe('elsewhere');
     expect(refused.elsewhere).toBe('Building C');

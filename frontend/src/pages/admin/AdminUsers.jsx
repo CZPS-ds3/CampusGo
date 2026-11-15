@@ -200,8 +200,9 @@ export default function AdminUsers() {
               </div>
               <p className="small muted">
                 <span className="mono">{formatNumber(user.totalPoints)}</span> {t('PTS')} ·{' '}
-                {user.questsPassed}/8 {t('quests')} · {user.teamName ?? t('No team yet')} ·{' '}
-                {t('Last login')} {formatDateTime(user.lastLoginAt)}
+                {user.questsPassed}/{user.questsTotal} {t('quests')} ·{' '}
+                {user.teamName ?? t('No team yet')} · {t('Last login')}{' '}
+                {formatDateTime(user.lastLoginAt)}
               </p>
             </Link>
           </li>

@@ -1,3 +1,34 @@
+/* The DHBW font of dhbw.de, Generis Sans (Monotype web font, public/fonts), used in this DHBW project during its
+   testing phase while the team settles the licence with DHBW (decision D54). Source Sans 3 stands in if it fails. */
+@font-face {
+  font-family: 'Generis Sans';
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/generis-sans-regular.woff') format('woff');
+}
+@font-face {
+  font-family: 'Generis Sans';
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+  src: url('/fonts/generis-sans-italic.woff') format('woff');
+}
+@font-face {
+  font-family: 'Generis Sans';
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/generis-sans-medium.woff') format('woff');
+}
+@font-face {
+  font-family: 'Generis Sans';
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/generis-sans-bold.woff') format('woff');
+}
+
 *,
 *::before,
 *::after {
@@ -55,6 +86,15 @@ textarea {
 
 button {
   cursor: pointer;
+}
+/* Every tap counts at once: no waiting for a possible double-tap zoom, and two quick taps (zoom in twice) are two
+   presses, not a zoom of the page that swallows the second. */
+button,
+a,
+summary,
+label,
+[role='button'] {
+  touch-action: manipulation;
 }
 
 a {

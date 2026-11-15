@@ -1,0 +1,141 @@
+import { t } from '../i18n.js';
+import { CHEVRON } from '../map-pins.js';
+
+const LAYERS_ICON = 'M12 3 2 8l10 5 10-5-10-5ZM2 13l10 5 10-5M2 17.5l10 5 10-5';
+
+/**
+ * Aerial photo or street map in one tap, a switch like the 2D/3D one: on (darker grey) = aerial photo,
+ * off = street map.
+ */
+function BaseSwitch({ base, onBase }) {
+  const aerial = base === 'aerial';
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={aerial}
+      aria-label={t('Aerial photo')}
+      title={aerial ? t('Aerial photo') : t('Street map')}
+      className="mapctl__btn mapctl__base"
+      onClick={() => onBase(aerial ? 'street' : 'aerial')}
+    >
+      <svg
+        className="mapctl__layers-icon"
+        viewBox="0 0 24 24"
+        width="24"
+        height="24"
+        aria-hidden="true"
+      >
+        <path d={LAYERS_ICON} />
+      </svg>
+    </button>
+  );
+}
+
+/** A compass needle that turns and tilts with the map; a tap turns the map back to north. */
+function Compass({ bearing, pitch, onNorth }) {
+  return (
+    <button
+      type="button"
+      className="mapctl__btn"
+      aria-label={t('Point the map north')}
+      title={t('Point the map north')}
+      onClick={onNorth}
+    >
+      <svg
+        className="mapctl__needle"
+        viewBox="0 0 24 24"
+        width="26"
+        height="26"
+        aria-hidden="true"
+        style={{ transform: `rotateX(${pitch}deg) rotateZ(${-bearing}deg)` }}
+      >
+        <path className="mapctl__needle-north" d="M12 2 16 12H8Z" />
+        <path className="mapctl__needle-south" d="M12 22 8 12h8Z" />
+      </svg>
+    </button>
+  );
+}
+
+/**
+ * The one set of map buttons on the map page, the same in 2D and 3D: compass (whenever the map can turn), zoom,
+ * the aerial/street switch and the 2D/3D switch. The Leaflet fallback cannot turn, so it keeps an empty slot where
+ * the compass goes and the buttons below stay in place. The 2D/3D switch shows the view that is on, so students
+ * can turn 3D off on a slow phone.
+ */
+export function MapControls({ view, turnable, onToggleView, base, onBase, camera, map }) {
+  return (
+    <div className="mapctl" data-testid="map-controls">
+      {turnable ? (
+        <div className="mapctl__group">
+          <Compass
+            bearing={camera.bearing}
+            pitch={camera.pitch}
+            onNorth={() => map.current?.north()}
+          />
+        </div>
+      ) : (
+        <div className="mapctl__slot" aria-hidden="true" />
+      )}
+      <div className="mapctl__group">
+        <button
+          type="button"
+          className="mapctl__btn"
+          aria-label={t('Zoom in')}
+          title={t('Zoom in')}
+          onClick={() => map.current?.zoomIn()}
+        >
+          <span aria-hidden="true">+</span>
+        </button>
+        <button
+          type="button"
+          className="mapctl__btn"
+          aria-label={t('Zoom out')}
+          title={t('Zoom out')}
+          onClick={() => map.current?.zoomOut()}
+        >
+          <span aria-hidden="true">−</span>
+        </button>
+      </div>
+      <div className="mapctl__group">
+        <BaseSwitch base={base} onBase={onBase} />
+      </div>
+      <div className="mapctl__group">
+        <button
+          type="button"
+          role="switch"
+          aria-checked={view === '3d'}
+          aria-label={t('3D map')}
+          title={t('3D map')}
+          className="mapctl__btn mapctl__view"
+          onClick={onToggleView}
+        >
+          {view === '3d' ? '3D' : '2D'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Bottom-left button with the puck's red chevron: a small red square while the map follows the visitor, a
+ * "Re-center" button in the map buttons' colours (white, or black on a dark map) once they have moved the map away
+ * (or before the live location is on).
+ */
+export function RecenterButton({ following, onClick }) {
+  return (
+    <button
+      type="button"
+      className={`recenter${following ? ' is-following' : ''}`}
+      aria-label={t('Re-center')}
+      title={t('Re-center')}
+      onClick={onClick}
+      data-testid="recenter"
+    >
+      <svg className="recenter__icon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+        <path d={CHEVRON} />
+      </svg>
+      <span className="recenter__text">{t('Re-center')}</span>
+    </button>
+  );
+}
