@@ -2,6 +2,39 @@
 
 Source of truth for the quiz content (BR09, BR10, BR11). The questions are loaded into the database by a seed script (see [data-model.md](data-model.md) §4); this file is where the team writes and reviews them first. Rules: [business-rules.md](business-rules.md) (R-16, R-17).
 
+## Current bank (2026-11-12)
+
+The team's bank from the *Main Project Document* (pages 7 to 14) is in the seed:
+[backend/src/db/question-bank.js](../backend/src/db/question-bank.js), **69 questions**: Mensa, Library, Building B and
+Building C 8 normal + 3 hard each, Sensoricum 7, CAS Cafe, Care.box and Shop.box and Campus Garden 6 each. `npm run
+db:seed` puts it into the database once (marker `question_bank_v1`); in an older database it switches off the
+PLACEHOLDER questions nobody edited. After that the questions are edited in the admin area (Quests), not here.
+
+Photos taken on site by the team are attached to the questions (`frontend/public/places/CampusGO_Photos`, table
+`question_images`). The source folder includes the manifest that maps the original camera filenames to the
+sanitized asset names.
+A photo the question needs ("how many of these lights", "the number on the shelf shown") is shown **with the
+question**; a photo that would give the answer away (a room sign, a price tag, a building number) is shown only
+**after answering**, next to the right answer, as "Where to find it".
+
+Still to check by the team:
+
+- Two questions have two right answers in the document (Building B "IT support rooms", Library "quiet floors"), so
+  they are multi-select (MULTI, BR50). Since 2026-11-13 the seed sets Library and Building B to *mixed* once (marker
+  `quest_content_v1`, only where an admin has not changed the type), so all 69 questions can be drawn; every
+  attempt there holds that one multi-select question.
+- Large checkpoints have 8 normal questions, R-16 below asks for 10, so repeated attempts see repeats sooner.
+- Library: "What can you do on the third floor?" (answer: study in a quiet environment) and "Which floors are the
+  quiet floors?" (4 and 5) seem to contradict each other.
+- Building C "How many steps": the document lettered the options e to h; the first option (40-45) is the right one.
+- Small wording fixes were made (for example "p.m." and "€0.40"); the meaning is unchanged.
+- The quest descriptions and "read first" facts (`QUEST_INFO` in question-bank.js, 2026-11-13) are written only
+  from the questions above: every normal question can be answered from them. Hard questions (2,000 points) are about
+  what you see on site (steps, shelves, rooms), so their fact says where to look, not the number. The seed replaces
+  the PLACEHOLDER texts once; after that admins edit them. `backend/tests/quest-content.test.js` checks that each
+  normal question has its answer in the texts. After editing the bank, run `npm run questions:sync` (copy for the
+  in-browser mock).
+
 ## Rules for authors
 
 - Every question belongs to **exactly one checkpoint** and has **four options (A-D) with exactly one correct answer** (BR10). Mark the correct option in the `Correct` column.

@@ -1,27 +1,32 @@
 // One definition of "a team that is ranked" for every place that ranks teams (BR42, BR43).
 // A ranked team has at least two active student members and no administrator member. Its score is the
-// average of the active students' totals, rounded up to the next whole number.
+// average of the active students' totals, rounded up to the next whole number. A team with an invented player of
+// the demo seed is ranked only while demo players are shown (BR56).
 import { assignRanks } from './scoring.js';
 
 const MIN_RANKED_MEMBERS = 2;
 
-/** All ranked teams, best first (equal scores: the team that reached the score earlier comes first). */
-export async function rankedTeams(conn) {
+/**
+ * All ranked teams, best first (equal scores: the team that reached the score earlier comes first). `showDemo`
+ * includes the teams of the demo seed's invented players (BR56).
+ */
+export async function rankedTeams(conn, { showDemo = false } = {}) {
   const [rows] = await conn.query(
     `SELECT t.team_id, t.team_name, t.profile_picture, t.team_score, t.score_updated_at,
             SUM(s.status = 'active' AND s.role = 'student') AS size
      FROM teams t JOIN students s ON s.team_id = t.team_id
      GROUP BY t.team_id
      HAVING SUM(s.role = 'admin') = 0 AND SUM(s.status = 'active' AND s.role = 'student') >= ?
+       AND (? OR SUM(s.is_demo) = 0)
      ORDER BY t.team_score DESC, t.score_updated_at ASC, t.team_id ASC`,
-    [MIN_RANKED_MEMBERS],
+    [MIN_RANKED_MEMBERS, showDemo],
   );
   return assignRanks(rows.map((r) => ({ ...r, size: Number(r.size), points: r.team_score })));
 }
 
 /** Rank of one team among the ranked teams, or null when the team is not ranked. */
-export async function rankOfTeam(conn, teamId) {
-  const entry = (await rankedTeams(conn)).find((team) => team.team_id === teamId);
+export async function rankOfTeam(conn, teamId, { showDemo = false } = {}) {
+  const entry = (await rankedTeams(conn, { showDemo })).find((team) => team.team_id === teamId);
   return entry ? entry.rank : null;
 }
 
@@ -40,13 +45,13 @@ export async function unrankedReason(conn, teamId) {
  * Team standing around one student's result: the team score and rank before and after the student's last
  * attempt. Null when the student is not a student or the team is not ranked.
  */
-export async function teamStandingAround(conn, studentId, totalBefore) {
+export async function teamStandingAround(conn, studentId, totalBefore, { showDemo = false } = {}) {
   const [[me]] = await conn.query(
     'SELECT team_id, role, total_points FROM students WHERE student_id = ?',
     [studentId],
   );
   if (!me?.team_id || me.role !== 'student') return null;
-  const teams = await rankedTeams(conn);
+  const teams = await rankedTeams(conn, { showDemo });
   const own = teams.find((team) => team.team_id === me.team_id);
   if (!own) return null;
   const [members] = await conn.query(

@@ -1,9 +1,12 @@
 import { expect, test } from '@playwright/test';
 import {
   expectNoHorizontalScroll,
+  LOCK_ON_TIMEOUT,
   login,
+  open,
   openCheckpoint,
-  rightOption,
+  answerRight,
+  answerWrong,
   shot,
   startQuiz,
 } from './helpers.js';
@@ -44,7 +47,7 @@ test.describe('full player journey (mock API)', () => {
     // One fresh reading inside the circle unlocks the quiz and starts the timer.
     await page.getByRole('button', { name: "I'm ready" }).click();
     await page.getByRole('button', { name: 'I agree' }).click();
-    await expect(page.getByText('Locked on!')).toBeVisible();
+    await expect(page.getByText('Locked on!')).toBeVisible({ timeout: LOCK_ON_TIMEOUT });
     await shot(page, testInfo, '05-locked-on');
     await expect(page.getByRole('timer')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Open menu' })).toHaveCount(0);
@@ -52,10 +55,10 @@ test.describe('full player journey (mock API)', () => {
     await shot(page, testInfo, '07-quiz');
 
     for (let i = 0; i < 3; i += 1) {
-      await rightOption(page).click();
+      await answerRight(page);
       await expect(page.getByText('Correct!')).toBeVisible();
       if (i === 0) await shot(page, testInfo, '08-correct');
-      await page.getByRole('button', { name: i === 2 ? 'Finish' : 'Next' }).click();
+      await page.getByRole('button', { name: i === 2 ? 'Finish' : 'Next', exact: true }).click();
     }
 
     await expect(page.getByText('Checkpoint cleared')).toBeVisible();
@@ -64,7 +67,7 @@ test.describe('full player journey (mock API)', () => {
     await expectNoHorizontalScroll(page);
     await shot(page, testInfo, '09-result');
 
-    await page.goto('/ranks');
+    await open(page, '/ranks');
     await expect(page.getByRole('heading', { name: 'Ranks' })).toBeVisible();
     await expect(page.locator('.ranks__you')).toBeVisible();
     await expectNoHorizontalScroll(page);
@@ -77,7 +80,7 @@ test.describe('full player journey (mock API)', () => {
     await openCheckpoint(page, 'Library');
     await startQuiz(page);
 
-    await page.locator('.opt').filter({ hasNotText: 'placeholder answer' }).first().click();
+    await answerWrong(page);
     await expect(page.getByText(/Not quite/)).toBeVisible();
     await expect(page.locator('.opt.is-correct')).toHaveCount(1);
     await expect(page.locator('.opt.is-wrong')).toHaveCount(1);
@@ -90,8 +93,8 @@ test.describe('full player journey (mock API)', () => {
     await openCheckpoint(page, 'Library');
     await startQuiz(page);
     const question = await page.locator('.quiz__question').innerText();
-    await rightOption(page).click();
-    await page.getByRole('button', { name: 'Next' }).click();
+    await answerRight(page);
+    await page.getByRole('button', { name: 'Next', exact: true }).click();
     await page.reload();
     await expect(page.getByLabel('Question 2 of 5')).toBeVisible();
     expect(await page.locator('.quiz__question').innerText()).not.toBe(question);
@@ -106,7 +109,8 @@ test.describe('location problems never use an attempt', () => {
     await page.getByRole('link', { name: 'Start quest' }).click();
     await page.getByRole('button', { name: "I'm ready" }).click();
     await page.getByRole('button', { name: 'I agree' }).click();
-    await expect(page.getByText('Weak signal')).toBeVisible();
+    // A coarse reading waits out the whole measuring window (8 s) before the answer.
+    await expect(page.getByText('Weak signal')).toBeVisible({ timeout: LOCK_ON_TIMEOUT });
     await expect(page.getByText(/No attempt used/)).toBeVisible();
     await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible();
   });
@@ -123,11 +127,11 @@ test.describe('location problems never use an attempt', () => {
 });
 
 test('pages behind the login send a visitor to the login screen', async ({ page }) => {
-  await page.goto('/ranks');
+  await open(page, '/ranks');
   await expect(page.getByRole('heading', { name: /Log in to/ })).toBeVisible();
 });
 
 test('an unknown address shows the out-of-bounds page', async ({ page }) => {
-  await page.goto('/nowhere');
+  await open(page, '/nowhere');
   await expect(page.getByRole('heading', { name: 'Out of bounds' })).toBeVisible();
 });

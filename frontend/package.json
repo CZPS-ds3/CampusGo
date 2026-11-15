@@ -10,12 +10,12 @@
     "preview": "vite preview",
     "test": "vitest run",
     "e2e": "playwright test",
-    "e2e:install": "playwright install chromium",
-    "e2e:fullstack": "playwright test -c playwright.fullstack.config.js"
+    "e2e:install": "playwright install chromium"
   },
   "dependencies": {
     "@fontsource/source-sans-3": "^5.3.1",
     "leaflet": "^1.9.4",
+    "maplibre-gl": "^6.15.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.18.4"

@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { DE } from './de.js';
 import { DE_EXTRA } from './de-extra.js';
+import { isStrongDevice } from './device.js';
 
 // Language, theme and font size live in one small store; the root component subscribes so the whole tree
 // re-renders when one of them changes. Texts are written in English and translated by key (t()).
@@ -12,12 +13,31 @@ const browserLang = () =>
     ? 'de'
     : 'en';
 
+export const MAP_BASES = ['aerial', 'street'];
+// New users start on the street map (VITE_MAP_BASE=aerial starts on the photo instead).
+const DEFAULT_MAP_BASE = import.meta.env.VITE_MAP_BASE === 'aerial' ? 'aerial' : 'street';
+export const MAP_VIEWS = ['2d', '3d'];
+
+/**
+ * The view new users start with: 3D when the device can run it smoothly (checked in the background), 2D otherwise.
+ * VITE_MAP_VIEW=2d or 3d fixes it for every device.
+ */
+function defaultMapView() {
+  const fixed = import.meta.env.VITE_MAP_VIEW;
+  if (MAP_VIEWS.includes(fixed)) return fixed;
+  return isStrongDevice() ? '3d' : '2d';
+}
+
 function load() {
-  const base = { lang: browserLang(), theme: 'light', size: 'm' };
+  const base = { lang: browserLang(), theme: 'light', size: 'm', mapBase: DEFAULT_MAP_BASE };
   try {
-    return { ...base, ...JSON.parse(localStorage.getItem(KEY) || '{}') };
+    const stored = { ...base, ...JSON.parse(localStorage.getItem(KEY) || '{}') };
+    if (!MAP_BASES.includes(stored.mapBase)) stored.mapBase = DEFAULT_MAP_BASE;
+    // Only a device without a saved choice is checked.
+    if (!MAP_VIEWS.includes(stored.mapView)) stored.mapView = defaultMapView();
+    return stored;
   } catch {
-    return base;
+    return { ...base, mapView: defaultMapView() };
   }
 }
 
@@ -43,6 +63,14 @@ export function setSettings(patch) {
   subscribers.forEach((notify) => notify());
 }
 
+/**
+ * A new account starts with the street map, in 3D when this device can run it smoothly and in 2D otherwise. The
+ * student can change both in the preferences and on the map.
+ */
+export function applyNewAccountMapDefaults() {
+  setSettings({ mapBase: DEFAULT_MAP_BASE, mapView: defaultMapView() });
+}
+
 export function useSettings() {
   return useSyncExternalStore(
     (notify) => {
@@ -61,4 +89,8 @@ export function t(key, vars) {
 }
 
 export const getLang = () => state.lang;
+/** The map type a map starts with on this device: 'aerial' or 'street'. */
+export const getMapBase = () => state.mapBase;
+/** The view a map starts with on this device: '2d' (Leaflet) or '3d' (MapLibre, tilted with buildings). */
+export const getMapView = () => state.mapView;
 export const formatNumber = (n) => n.toLocaleString(state.lang === 'de' ? 'de-DE' : 'en-US');

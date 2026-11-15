@@ -316,3 +316,20 @@ def test_br48_one_map_style_is_saved_on_the_account(player):
     again = Player(student.email).sign_in()
     assert again.get("/me/map-style").json()["style"]["base"] == "dark"
     assert again.delete("/me/map-style").json()["style"]["base"] == "follow"
+
+
+def test_br48_the_live_position_ball_colours_are_saved_on_the_account(player):
+    student = player("ball")
+    assert student.get("/me/map-style").json()["style"]["ball"] == {
+        "body": "#ffffff",
+        "lines": "#e2001a",
+    }
+    saved = student.request(
+        "PUT", "/me/map-style", json={"ball": {"body": "rgb(0, 92, 173)", "lines": "#0f0"}}
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["style"]["ball"] == {"body": "#005cad", "lines": "#00ff00"}
+    again = Player(student.email).sign_in()
+    assert again.get("/me/map-style").json()["style"]["ball"]["body"] == "#005cad"
+    bad = again.request("PUT", "/me/map-style", json={"ball": {"body": "url(x)"}})
+    assert bad.status_code == 400 and "ball.body" in bad.json()["error"]["message"]

@@ -16,7 +16,6 @@ Status codes: 400 invalid input · 401 no valid session · 403 not allowed · 40
 | `POST /me/picture` | multipart `file` (png/jpg/webp, ≤ 2 MB) | `200 { pictureUrl }`; `400 INVALID_IMAGE` / `413` |
 | `POST /me/avatar-preset` | `{ preset }` (0 to 5) | `204`; removes the uploaded picture |
 | `POST /me/location-consent` | – | `204` (stores the consent time, R-63) |
-| `GET /dev/last-otp?email=` | – | **Development only** (`NODE_ENV=development`), `404` otherwise |
 
 ## Checkpoints, location and attempts (BR07–BR25)
 
@@ -143,3 +142,17 @@ Other changes: `GET /checkpoints` adds `images: [{ url, alt, credit }]`; `POST /
 ## Quiz changes (BR50)
 
 `GET /checkpoints` adds `description`, `typeMode`, `questionTypes` (`["MCQ"]`, `["MULTI"]` or both) and `timeLimitSeconds`. An attempt view has `timeLimitSeconds`, and every question has `type`, `selectedOptionIds` and, after a wrong answer, `correctOptionIds` (`correctOptionId` stays for the first one). `POST /attempts/:id/answers` takes `{ optionId }` or `{ optionIds: [..] }` (and `questionNumber`); a single-choice question needs exactly one option, a multi-select question at least one; the answer is correct only on an exact match.
+
+## Login codes, settings and team order (2026-11-10: BR52, BR54, BR55)
+
+| Endpoint | Body | Result |
+|---|---|---|
+| `GET /auth/config` | none (no session needed) | `{ otpPreview, mailConfigured }`: whether the login page shows the test inbox |
+| `POST /auth/otp-preview` | `{ email }` | `200 { otp }`: the code that was e-mailed last to this address, only while the code preview is on and the code is still the valid one. `404 PREVIEW_OFF` (switch off) or `404 NO_CODE` (nothing requested, used, replaced or expired). Rate limited like the login |
+| `GET /admin/settings` | none | `{ settings: { otpPreview, mailConfigured, environment } }` |
+| `PUT /admin/settings` | `{ otpPreview: boolean }` | the settings again; logged as `setting_changed` |
+| `POST /teams/me/leave` | none | `200 { team: null }`; `409 NO_TEAM`. A leaving leader hands over to the next member in the team order; the last member deletes the team |
+| `PUT /admin/teams/:id/leader` | `{ studentId }` | `204`; `404 NOT_A_MEMBER`, `409 STUDENT_NOT_ACTIVE`, `404` unknown team |
+| `PUT /admin/teams/:id/order` | `{ studentIds: [...] }` (every member exactly once) | `204`; `400 ORDER_MISMATCH` |
+
+Changed shapes: `GET /teams/me` members carry `position` (team order, 1 = first). `GET /admin/teams` adds `leaderId` and members `{ id, displayName, position, status }` in team order. Admin user objects add `questsTotal` (live quests, so "3/7 quests" stays right when quests are added or archived). A team name has 3 to 30 characters (`400 INVALID_INPUT` below 3).

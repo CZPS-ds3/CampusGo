@@ -13,19 +13,23 @@ test('production refuses to start with the development secrets and without an SM
   assert.ok(problems.length >= 1, 'a production config with default secrets must have problems');
 });
 
-test('the lenient geofence defaults are in place and can be tuned by environment', () => {
+test('BR12 the tight geofence defaults are in place and can be tuned by environment', () => {
   const config = loadConfig({ NODE_ENV: 'development' });
   assert.equal(config.maxAccuracyM, 200);
-  assert.equal(config.geofenceSlackM, 30);
-  assert.equal(config.accuracyCreditM, 50);
+  assert.equal(config.geofenceSlackM, 10);
+  assert.equal(config.accuracyCreditM, 15);
   assert.equal(config.nearerMarginM, 20);
-  assert.equal(loadConfig({ GEOFENCE_SLACK_M: '10' }).geofenceSlackM, 10);
+  assert.equal(loadConfig({ GEOFENCE_SLACK_M: '30' }).geofenceSlackM, 30);
 });
 
-test('the administrator address comes from the configuration, in lower case', () => {
-  assert.equal(
-    loadConfig({ ADMIN_EMAIL: ' Boss@Heilbronn.DHBW.de ' }).adminEmail,
-    'boss@heilbronn.dhbw.de',
+test('BR26 the administrator addresses come from the configuration, in lower case, both by default', () => {
+  assert.deepEqual(loadConfig({}).adminEmails, [
+    'sekretariat.dski@heilbronn.dhbw.de',
+    'dhbw.campusgo@gmail.com',
+  ]);
+  assert.deepEqual(
+    loadConfig({ ADMIN_EMAILS: ' Boss@Heilbronn.DHBW.de , b@gmail.com' }).adminEmails,
+    ['boss@heilbronn.dhbw.de', 'b@gmail.com'],
   );
 });
 
@@ -34,8 +38,8 @@ test('start-up errors are explained in plain words', () => {
   assert.equal(describeListenError(new Error('boom'), 3000), null);
 });
 
-test('in production the development-only OTP route does not exist', async () => {
-  const config = loadConfig({ NODE_ENV: 'production' });
+test('no environment has a route that hands out a login code', async () => {
+  const config = loadConfig({ NODE_ENV: 'development' });
   const { app } = createApp({ pool: {}, config, mailer: quietMailer, clock: systemClock });
   const server = app.listen(0);
   try {
@@ -45,19 +49,43 @@ test('in production the development-only OTP route does not exist', async () => 
     );
     const text = await response.text();
     assert.notEqual(response.status, 200);
-    assert.ok(!/"otp"/.test(text), 'no code may ever be handed out in production');
+    assert.ok(!/"otp"/.test(text), 'no code may ever be handed out');
   } finally {
     server.close();
   }
 });
 
-test('development without SMTP never holds a login code back; production and real SMTP keep the limits', () => {
+test('every environment keeps the login code limits (30 s apart, 5 per hour)', () => {
   const dev = loadConfig({ NODE_ENV: 'development' });
-  assert.equal(dev.otpResendCooldownSeconds, 0);
-  assert.equal(dev.otpResendMaxPerHour, 1000);
+  assert.equal(dev.otpResendCooldownSeconds, 30);
+  assert.equal(dev.otpResendMaxPerHour, 5);
   const withSmtp = loadConfig({ NODE_ENV: 'development', SMTP_HOST: 'smtp.example.org' });
   assert.equal(withSmtp.otpResendCooldownSeconds, 30);
   assert.equal(withSmtp.otpResendMaxPerHour, 5);
   assert.equal(loadConfig({ NODE_ENV: 'production' }).otpResendCooldownSeconds, 30);
   assert.equal(loadConfig({ OTP_RESEND_COOLDOWN_SECONDS: '12' }).otpResendCooldownSeconds, 12);
+});
+
+test('BR52 production starts with the code preview off: the test inbox hands out nothing', async () => {
+  const config = loadConfig({ NODE_ENV: 'production' });
+  // No settings row yet: the start value applies (off outside development).
+  const pool = { query: async () => [[]] };
+  const { app } = createApp({ pool, config, mailer: quietMailer, clock: systemClock });
+  const server = app.listen(0);
+  try {
+    const { port } = server.address();
+    const base = `http://127.0.0.1:${port}/api/auth`;
+    const settings = await (await fetch(`${base}/config`)).json();
+    assert.equal(settings.otpPreview, false);
+    const response = await fetch(`${base}/otp-preview`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'a@heilbronn.dhbw.de' }),
+    });
+    const text = await response.text();
+    assert.equal(response.status, 404);
+    assert.ok(!/"otp"/.test(text), 'no code may be handed out while the preview is off');
+  } finally {
+    server.close();
+  }
 });

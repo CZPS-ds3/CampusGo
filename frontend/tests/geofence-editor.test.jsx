@@ -27,11 +27,12 @@ vi.mock('leaflet', () => {
       map.setView = () => map;
       return map;
     },
-    tileLayer: chain,
-    control: { scale: chain },
+    tileLayer: Object.assign(chain, { wms: chain }),
+    control: { scale: chain, layers: chain },
     layerGroup: chain,
     circleMarker: chain,
     latLng: () => ({ toBounds: () => ({}) }),
+    latLngBounds: () => ({}),
     circle: (_middle, options) => {
       drawn.circles.push(options.radius);
       return chain();
@@ -61,40 +62,46 @@ beforeEach(() => {
 describe('BR12 BR49 the admin sees the circle while changing the radius', () => {
   it('BR49 the number field, the slider and the quick sizes stay in step', async () => {
     const user = userEvent.setup();
-    render(<Harness start="80" />);
+    render(<Harness start="35" />);
     const number = screen.getByLabelText('Radius (metres)', { selector: 'input' });
     const slider = screen.getByLabelText('Drag to change the size');
+    expect(number).toHaveValue(35);
+    expect(slider).toHaveValue('35');
+    // BR12 tight circles (2026-11-14): the quick sizes fit a campus whose checkpoints are 34-127 m apart.
+    expect(
+      screen
+        .getAllByRole('radio')
+        .map((radio) => radio.getAttribute('aria-label') ?? radio.textContent),
+    ).toEqual(['25 m', '35 m', '50 m', '80 m']);
+
+    await user.click(screen.getByRole('radio', { name: '80 m' }));
     expect(number).toHaveValue(80);
     expect(slider).toHaveValue('80');
-
-    await user.click(screen.getByRole('radio', { name: '150 m' }));
-    expect(number).toHaveValue(150);
-    expect(slider).toHaveValue('150');
-    expect(screen.getByRole('radio', { name: '150 m' })).toBeChecked();
+    expect(screen.getByRole('radio', { name: '80 m' })).toBeChecked();
 
     await user.clear(number);
     await user.type(number, '65');
     expect(slider).toHaveValue('65');
-    expect(screen.getByRole('radio', { name: '150 m' })).not.toBeChecked();
+    expect(screen.getByRole('radio', { name: '80 m' })).not.toBeChecked();
   });
 
   it('BR12 the circle and the extra tolerance ring are drawn to the typed radius', async () => {
     const user = userEvent.setup();
-    render(<Harness start="80" />);
-    // Tolerance ring (radius + 30 m) first, then the solid circle.
-    await waitFor(() => expect(drawn.circles).toEqual(expect.arrayContaining([110, 80])));
+    render(<Harness start="35" />);
+    // Tolerance ring (radius + the 10 m grace zone) first, then the solid circle.
+    await waitFor(() => expect(drawn.circles).toEqual(expect.arrayContaining([45, 35])));
     drawn.circles = [];
     const number = screen.getByLabelText('Radius (metres)', { selector: 'input' });
     await user.clear(number);
     await user.type(number, '120');
-    await waitFor(() => expect(drawn.circles).toEqual(expect.arrayContaining([150, 120])));
+    await waitFor(() => expect(drawn.circles).toEqual(expect.arrayContaining([130, 120])));
     expect(drawn.maps).toBe(1); // the map is built once and redrawn, not rebuilt on every key
   });
 
   it('BR12 says in words how big the circle is and how far the zone really reaches', () => {
-    render(<Harness start="80" />);
-    expect(screen.getByText(/about 160 m across/)).toHaveTextContent(
-      'up to 30 m beyond it, so the zone reaches 110 m from the centre',
+    render(<Harness start="35" />);
+    expect(screen.getByText(/about 70 m across/)).toHaveTextContent(
+      'up to 10 m beyond it, so the zone reaches 45 m from the centre',
     );
   });
 

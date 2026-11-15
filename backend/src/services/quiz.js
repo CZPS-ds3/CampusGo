@@ -5,6 +5,7 @@ import { withTransaction } from '../db/pool.js';
 import { AppError, notFound } from '../middleware/errors.js';
 import { evaluateLocation } from './geo.js';
 import { ceilDiv, multiplierFor, remainingWholeSeconds, scoreAttempt } from './scoring.js';
+import { realPlayers } from './demo.js';
 import { teamStandingAround } from './team-ranking.js';
 import { refreshTeamScore } from './teams.js';
 
@@ -31,7 +32,7 @@ function shuffle(list) {
   return out;
 }
 
-export function createQuizService({ pool, config, clock }) {
+export function createQuizService({ pool, config, clock, settings }) {
   // ---------- reference data ----------
   async function loadRules(conn) {
     const [difficulty] = await conn.query('SELECT difficulty, points_awarded FROM difficulty');
@@ -56,6 +57,9 @@ export function createQuizService({ pool, config, clock }) {
     latitude: Number(c.latitude),
     longitude: Number(c.longitude),
     radius: c.radius,
+    // How far away the quest can be unlocked: its radius plus the grace zone (BR12). The map draws the sonar range
+    // ring with it. The reading's accuracy credit is left out, so the map never promises more than the server gives.
+    reachM: c.radius + config.geofenceSlackM,
     isActive: Boolean(c.is_active),
     description: c.description ?? '',
     questionCount: c.question_count,
@@ -135,6 +139,16 @@ export function createQuizService({ pool, config, clock }) {
           [questionIds],
         )
       : [[]];
+    const [imageRows] = questionIds.length
+      ? await conn.query(
+          'SELECT question_id, url, alt_text, credit, shown FROM question_images WHERE question_id IN (?) ORDER BY question_id, position',
+          [questionIds],
+        )
+      : [[]];
+    const imagesOf = (questionId, shown) =>
+      imageRows
+        .filter((i) => i.question_id === questionId && i.shown === shown)
+        .map((i) => ({ url: i.url, alt: i.alt_text, credit: i.credit }));
     const [answerRows] = await conn.query(
       'SELECT question_number, option_id FROM attempt_answers WHERE attempt_id = ? ORDER BY question_number, option_id',
       [attemptId],
@@ -166,6 +180,9 @@ export function createQuizService({ pool, config, clock }) {
         selectedOptionId: s.selected_option_id,
         selectedOptionIds: chosen.get(s.question_number) ?? [],
         answered,
+        // Photos needed to answer come with the question; photos that would give the answer away only after it.
+        images: imagesOf(s.question_id, 'question'),
+        answerImages: answered ? imagesOf(s.question_id, 'answer') : [],
       };
       // BR14: the right answer is revealed only after a wrong pick. Never before the answer, and never how
       // many options are right.
@@ -198,7 +215,8 @@ export function createQuizService({ pool, config, clock }) {
         (attempt.expires_at.getTime() - attempt.start_time.getTime()) / 1000,
       ),
       currentQuestion: attempt.status === 'active' && next ? next.question_number : null,
-      questions,
+      // R-66: during the countdown the questions are not sent yet; the client loads the attempt again at startTime.
+      questions: clock.now() >= attempt.start_time.getTime() ? questions : [],
     };
   }
 
@@ -393,6 +411,13 @@ export function createQuizService({ pool, config, clock }) {
       await conn.query('SELECT student_id FROM students WHERE student_id = ? FOR UPDATE', [
         studentId,
       ]);
+      // BR49: an admin may have erased or archived the quest since the first read. The shared lock makes the check
+      // and the insert below one step, so the student gets a clear 404 instead of a foreign-key error (500).
+      const [[still]] = await conn.query(
+        'SELECT checkpoint_id FROM checkpoints WHERE checkpoint_id = ? AND archived_at IS NULL FOR SHARE',
+        [checkpoint.checkpoint_id],
+      );
+      if (!still) throw new AppError(404, 'NOT_AVAILABLE', 'This checkpoint is not available.');
       // Re-checked under the lock: an attempt may have been passed since the first check (BR23).
       const [[passed]] = await conn.query(
         "SELECT attempt_id FROM attempts WHERE student_id = ? AND checkpoint_id = ? AND status = 'passed'",
@@ -407,14 +432,16 @@ export function createQuizService({ pool, config, clock }) {
       const drawn = await drawQuestions(conn, checkpoint);
       const seconds =
         checkpoint.time_limit_seconds ?? checkpoint.question_count * config.secondsPerQuestion;
-      const expires = now + seconds * 1000;
+      // R-66: the quiz starts after the 3-2-1 countdown, and its time only then, so the countdown costs no seconds.
+      const start = now + Math.max(0, config.quizCountdownSeconds) * 1000;
+      const expires = start + seconds * 1000;
       const [inserted] = await conn.query(
         "INSERT INTO attempts (student_id, checkpoint_id, attempt_number, start_time, expires_at, question_count, pass_threshold, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'active')",
         [
           studentId,
           checkpoint.checkpoint_id,
           Number(used) + 1,
-          at(now),
+          at(start),
           at(expires),
           checkpoint.question_count,
           checkpoint.pass_threshold,
@@ -555,6 +582,9 @@ export function createQuizService({ pool, config, clock }) {
     }
     if (nowMs >= attempt.expires_at.getTime())
       throw new AppError(409, 'ATTEMPT_EXPIRED', 'Time is up.');
+    // R-66, BR22: nothing is accepted during the countdown (server clock).
+    if (nowMs < attempt.start_time.getTime())
+      throw new AppError(409, 'QUIZ_NOT_STARTED', 'The quiz starts in a moment.');
   };
 
   /** Exact match only (BR50): the ticked options must be precisely the right ones of the question. */
@@ -726,7 +756,9 @@ export function createQuizService({ pool, config, clock }) {
   /** Solo rank a student with this total would hold (the student's own row is not counted against itself). */
   async function rankAmong(total, studentId) {
     const [[row]] = await pool.query(
-      "SELECT COUNT(*) AS higher FROM students WHERE total_points > ? AND student_id <> ? AND status = 'active' AND role = 'student'",
+      `SELECT COUNT(*) AS higher FROM students s
+       WHERE total_points > ? AND student_id <> ? AND status = 'active' AND role = 'student'
+         AND ${realPlayers(await settings.showDemo())}`,
       [total, studentId],
     );
     return Number(row.higher) + 1;
@@ -781,7 +813,13 @@ export function createQuizService({ pool, config, clock }) {
       // Administrators are in no ranking (BR41, BR42).
       rankBefore: isAdmin ? null : await rankAmong(totalBefore, studentId),
       rankAfter: isAdmin ? null : await rankAmong(student.total_points, studentId),
-      ...(isAdmin ? {} : { team: await teamStandingAround(pool, studentId, totalBefore) }),
+      ...(isAdmin
+        ? {}
+        : {
+            team: await teamStandingAround(pool, studentId, totalBefore, {
+              showDemo: await settings.showDemo(),
+            }),
+          }),
       nextMultiplierPercent: multiplierFor(rules.multipliers, used + 1),
       checkpointCompleted: passed > 0,
       nextAttemptNumber: used + 1,

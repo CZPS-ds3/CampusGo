@@ -6,9 +6,10 @@ export const CAROUSEL_INTERVAL_MS = 5000;
 
 /**
  * Photo carousel that moves on every 5 seconds. It pauses while the pointer or keyboard focus is
- * on it, while the tab is hidden and when the visitor asked for reduced motion.
+ * on it, while the tab is hidden and when the visitor asked for reduced motion. `whole` shows every photo
+ * uncropped (quiz photos, where the detail at the edge may be the point of the question).
  */
-export function Carousel({ images, label, interval = CAROUSEL_INTERVAL_MS }) {
+export function Carousel({ images, label, interval = CAROUSEL_INTERVAL_MS, whole = false }) {
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const touchStart = useRef(null);
@@ -35,7 +36,7 @@ export function Carousel({ images, label, interval = CAROUSEL_INTERVAL_MS }) {
 
   return (
     <figure
-      className="carousel"
+      className={`carousel${whole ? ' carousel--whole' : ''}`}
       role="group"
       aria-roledescription="carousel"
       aria-label={label}

@@ -5,7 +5,7 @@ import { Button } from '../../components/Button.jsx';
 import { Icon } from '../../components/icons.jsx';
 import { Skeleton } from '../../components/Screen.jsx';
 import { Modal } from '../../components/Sheet.jsx';
-import { Display, EmptyState, Input } from '../../components/ui.jsx';
+import { Chip, Display, EmptyState, Input } from '../../components/ui.jsx';
 import { useAutoRefresh } from '../../hooks/useAutoRefresh.js';
 import { useToast } from '../../hooks/useToast.jsx';
 import { formatNumber, t } from '../../i18n.js';
@@ -108,23 +108,53 @@ function AddMemberModal({ team, onClose, onAdded }) {
   );
 }
 
+/** BR54: the order with one member moved one place up (-1) or down (+1). */
+export function moveMember(ids, index, step) {
+  const target = index + step;
+  if (target < 0 || target >= ids.length) return ids;
+  const next = [...ids];
+  [next[index], next[target]] = [next[target], next[index]];
+  return next;
+}
+
 function TeamCard({ team, onChanged }) {
   const toast = useToast();
   const [name, setName] = useState(team.name);
   const [error, setError] = useState('');
   const [confirm, setConfirm] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [busy, setBusy] = useState('');
 
-  const run = async (work, done) => {
+  // A rename from another tab or an auto-refresh shows up, unless the admin is typing a new name right now.
+  const [shownName, setShownName] = useState(team.name);
+  useEffect(() => {
+    if (team.name !== shownName) {
+      setShownName(team.name);
+      setName((typed) => (typed === shownName ? team.name : typed));
+    }
+  }, [team.name, shownName]);
+
+  const run = async (work, done, key = '') => {
     setError('');
+    setBusy(key);
     try {
       await work();
       if (done) toast.info(done);
       onChanged();
     } catch (failure) {
       setError(errorText(failure));
+    } finally {
+      setBusy('');
     }
   };
+
+  const ids = team.members.map((m) => m.id);
+  const move = (index, step) =>
+    run(
+      () => api.admin.reorderTeam(team.id, moveMember(ids, index, step)),
+      t('Order saved'),
+      `move-${ids[index]}`,
+    );
 
   return (
     <li className="card stack">
@@ -150,7 +180,7 @@ function TeamCard({ team, onChanged }) {
           value={name}
           onChange={(event) => setName(event.target.value)}
         />
-        <Button small type="submit" disabled={name.trim() === team.name || name.trim().length < 2}>
+        <Button small type="submit" disabled={name.trim() === team.name || name.trim().length < 3}>
           {t('Rename')}
         </Button>
       </form>
@@ -160,20 +190,81 @@ function TeamCard({ team, onChanged }) {
           <span>{error}</span>
         </p>
       )}
-      <ul className="admin-log">
-        {team.members.map((m) => (
-          <li key={m.id}>
-            <span>{m.displayName}</span>
+      <p className="small muted">
+        {t('Team order: when the leader leaves, the next member in this order becomes the leader.')}
+      </p>
+      <ol
+        className="team-order"
+        aria-label={t('Members of {team} in team order', { team: team.name })}
+      >
+        {team.members.map((m, index) => (
+          <li key={m.id} className="team-order__row">
+            <span className="mono small team-order__place">{index + 1}</span>
+            <span className="grow truncate">
+              {m.displayName}
+              {m.status && m.status !== 'active' && (
+                <span className="small muted"> · {t(m.status)}</span>
+              )}
+            </span>
+            {m.id === team.leaderId ? (
+              <Chip tone="accent" icon="bolt">
+                {t('Leader')}
+              </Chip>
+            ) : (
+              <button
+                type="button"
+                className="linkbtn"
+                disabled={busy !== '' || (m.status && m.status !== 'active')}
+                aria-label={t('Make leader: {name}', { name: m.displayName })}
+                onClick={() =>
+                  run(
+                    () => api.admin.setTeamLeader(team.id, m.id),
+                    t('{name} now leads the team', { name: m.displayName }),
+                    `lead-${m.id}`,
+                  )
+                }
+              >
+                {t('Make leader')}
+              </button>
+            )}
+            <span className="team-order__moves">
+              <button
+                type="button"
+                className="icon-btn"
+                disabled={index === 0 || busy !== ''}
+                aria-label={t('Move {name} up', { name: m.displayName })}
+                onClick={() => move(index, -1)}
+              >
+                <Icon name="chevron" size={16} className="rot-up" />
+              </button>
+              <button
+                type="button"
+                className="icon-btn"
+                disabled={index === team.members.length - 1 || busy !== ''}
+                aria-label={t('Move {name} down', { name: m.displayName })}
+                onClick={() => move(index, 1)}
+              >
+                <Icon name="chevron" size={16} className="rot-down" />
+              </button>
+            </span>
             <button
               type="button"
               className="linkbtn"
-              onClick={() => run(() => api.admin.removeMember(team.id, m.id), t('Member removed'))}
+              disabled={busy !== ''}
+              aria-label={t('Remove {name} from the team', { name: m.displayName })}
+              onClick={() =>
+                run(
+                  () => api.admin.removeMember(team.id, m.id),
+                  t('Member removed'),
+                  `remove-${m.id}`,
+                )
+              }
             >
               {t('Remove')}
             </button>
           </li>
         ))}
-      </ul>
+      </ol>
       <div className="grid2">
         <Button small variant="sub" disabled={team.size >= 5} onClick={() => setAdding(true)}>
           <Icon name="plus" size={18} /> {t('Add a student')}

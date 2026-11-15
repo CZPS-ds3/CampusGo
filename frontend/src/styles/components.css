@@ -498,6 +498,20 @@ a.card:active {
   border-radius: 999px;
   background: var(--line2);
 }
+/* A sheet's X: a bar of no height that sticks while the sheet scrolls, so the X always shows in the top right
+   corner without pushing the content down. */
+.sheet__closebar {
+  position: sticky;
+  z-index: 2;
+  top: calc(0.375rem + 12px); /* the grip and its gap, so the X stays exactly where it starts */
+  display: flex;
+  justify-content: flex-end;
+  height: 0;
+  overflow: visible;
+}
+.sheet__head {
+  padding-right: calc(var(--close-size) + 8px); /* keeps the status and long names clear of the X */
+}
 .modal-root {
   position: fixed;
   inset: 0;
@@ -830,10 +844,111 @@ a.card:active {
 }
 .mapstyle__body {
   display: grid;
-  gap: 12px;
+  gap: 20px;
   padding: 0 16px 16px;
 }
-.mapstyle__presets,
+/* Each part of Customisation (map theme, light or dark, advanced) is set apart by a thin line. */
+.mapstyle__section {
+  display: grid;
+  gap: 8px;
+}
+.mapstyle__section + .mapstyle__section {
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.mapstyle__heading {
+  margin: 0;
+  font-size: 1rem;
+}
+/* The map themes: the preview between two arrows; the next theme slides in from the side it comes from. */
+.mapstyle__carousel {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 8px;
+}
+.mapstyle__stage {
+  min-width: 0;
+}
+.mapstyle__stage .mapstyle__preview {
+  min-height: 112px;
+}
+.mapstyle__stage[data-slide='next'] {
+  animation: mapstyle-from-right 280ms var(--ease-pop) both;
+}
+.mapstyle__stage[data-slide='prev'] {
+  animation: mapstyle-from-left 280ms var(--ease-pop) both;
+}
+@keyframes mapstyle-from-right {
+  from {
+    transform: translateX(28px);
+    opacity: 0.3;
+  }
+}
+@keyframes mapstyle-from-left {
+  from {
+    transform: translateX(-28px);
+    opacity: 0.3;
+  }
+}
+.mapstyle__arrow {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  color: var(--fg);
+  background: var(--surface);
+  border: 1.5px solid var(--line2);
+  border-radius: 50%;
+  cursor: pointer;
+}
+.mapstyle__arrow:hover {
+  border-color: var(--signal);
+  color: var(--signal);
+}
+.mapstyle__arrow--prev .icon {
+  transform: scaleX(-1);
+}
+.mapstyle__theme-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: 4px 8px;
+  text-align: center;
+}
+.mapstyle__dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+}
+.mapstyle__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--line2);
+  transition: transform 200ms ease;
+}
+.mapstyle__dot[data-on] {
+  background: var(--signal);
+  transform: scale(1.25);
+}
+/* Advanced: the single colours in groups (checkpoints, your position, sonar, map). */
+.mapstyle__advanced-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mapstyle__group {
+  display: grid;
+  gap: 6px;
+}
+.mapstyle__group-name {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
 .mapstyle__chips {
   display: flex;
   flex-wrap: wrap;
@@ -842,7 +957,6 @@ a.card:active {
   padding: 0;
   list-style: none;
 }
-.mapstyle__preset,
 .mapstyle__chip {
   display: flex;
   align-items: center;
@@ -853,15 +967,123 @@ a.card:active {
   background: var(--surface);
   border: 1.5px solid var(--line2);
   border-radius: 999px;
+  cursor: pointer;
+  /* A double tap edits the colour instead of zooming the page. */
+  touch-action: manipulation;
+  user-select: none;
 }
-.mapstyle__preset[aria-pressed='true'],
 .mapstyle__chip[aria-pressed='true'] {
   border-color: var(--signal);
   box-shadow: 0 0 0 2px var(--signal);
 }
-.mapstyle__swatches {
+/* The colour editor's popup: one size for every colour. The close-up and the editing area have fixed heights, so no
+   popup is bigger than another. */
+.dialog.mapstyle__dialog {
+  width: min(440px, 100%);
+}
+.mapstyle__dialog-body {
+  display: grid;
+  gap: 16px;
+}
+.mapstyle__dialog-edit {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  height: 13.5rem;
+  overflow-y: auto;
+}
+/* The close-up of the element being edited, on a small street map (tinted like the real one). */
+.mapstyle__focus {
+  display: grid;
+  place-items: center;
+  height: 160px;
+  min-height: 0;
+}
+.mapstyle__focus > * {
+  grid-area: 1 / 1;
+}
+.mapstyle__streets {
+  width: 100%;
+  height: 100%;
+  opacity: var(--map-tint-opacity, 1);
+}
+.mapstyle__blocks {
+  fill: #e2dfda;
+}
+.mapstyle__roads {
+  fill: none;
+  stroke: #ffffff;
+  stroke-width: 14;
+}
+.mapstyle__focus[data-dark] .mapstyle__blocks {
+  fill: #252c32;
+}
+.mapstyle__focus[data-dark] .mapstyle__roads {
+  stroke: #39424a;
+}
+.mapstyle__focus-pin .pin {
+  transform: scale(1.35);
+}
+.mapstyle__focus-ball {
+  --puck-orb: 56px;
+  --sonar-r: 64px;
+  position: relative;
+  width: 72px;
+  height: 72px;
+}
+.mapstyle__focus-ball > * {
+  position: absolute;
+  inset: 0;
+}
+.mapstyle__focus-ground .puck-ground {
+  position: absolute;
+  inset: -24px;
+  width: auto;
+  height: auto;
+}
+.mapstyle__focus-orb .puck {
+  position: absolute;
+  inset: 0;
+}
+.mapstyle__scene {
+  width: 100%;
+  height: 100%;
+}
+.mapstyle__route-line {
+  fill: none;
+  stroke: var(--route, var(--signal));
+  stroke-width: 7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.mapstyle__route-start {
+  fill: var(--puck-body, #fff);
+  stroke: var(--puck-lines, var(--signal));
+  stroke-width: 3;
+}
+.mapstyle__route-end {
+  fill: var(--pin-open, var(--sub));
+  stroke: var(--fg);
+  stroke-width: 2;
+  transform: rotate(45deg);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.mapstyle__focus-buildings {
   display: flex;
-  gap: 2px;
+  align-items: flex-end;
+  gap: 6px;
+  align-self: end;
+  padding-bottom: 18px;
+}
+.mapstyle__focus-building {
+  width: 34px;
+  border-radius: 3px 3px 0 0;
+  background: var(--buildings, #dcd9d4);
+  box-shadow:
+    inset -9px 0 0 rgb(0 0 0 / 0.14),
+    inset 0 6px 0 rgb(255 255 255 / 0.25),
+    0 2px 4px rgb(0 0 0 / 0.25);
 }
 .mapstyle__swatch {
   width: 18px;
@@ -873,9 +1095,10 @@ a.card:active {
   display: grid;
   gap: 8px;
 }
+/* Picker and colour code on the first row, R, G and B side by side on the second, at every screen width. */
 .mapstyle__editor-row {
   display: grid;
-  grid-template-columns: 56px repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   align-items: end;
 }
@@ -899,14 +1122,6 @@ a.card:active {
   border: 1.5px solid var(--line2);
   border-radius: var(--r-1);
 }
-@media (min-width: 560px) {
-  .mapstyle__editor-row {
-    grid-template-columns: 56px 1.6fr repeat(3, minmax(0, 1fr));
-  }
-  .mapstyle__field--hex {
-    grid-column: auto;
-  }
-}
 .mapstyle__preview {
   position: relative;
   min-height: 72px;
@@ -928,6 +1143,125 @@ a.card:active {
   align-items: center;
   justify-content: space-around;
   padding: 0 12px;
+}
+/* Three blocks in the preview stand for the buildings of the 3D map. */
+.mapstyle__buildings {
+  position: absolute;
+  right: 8px;
+  bottom: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+}
+.mapstyle__building {
+  width: 14px;
+  height: 18px;
+  border-radius: 2px 2px 0 0;
+  background: var(--buildings, #dcd9d4);
+  box-shadow: inset -4px 0 0 rgb(0 0 0 / 0.12);
+}
+.mapstyle__building--tall {
+  height: 30px;
+}
+/* The live-position ball in the preview: its body, its lines (border) and the direction wedge above it. */
+.mapstyle__puck {
+  position: absolute;
+  right: 10%;
+  bottom: 14%;
+  width: 26px;
+  height: 26px;
+}
+/* A small sonar round the preview ball (its look, speed and on/off from the preview's data-sonar-*). */
+.mapstyle__sonar {
+  --sonar-r: 44px;
+}
+/* The sonar range ring in the preferences, below the default map. */
+.sonarpref {
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.sonarpref__switch {
+  gap: 12px;
+}
+
+/* A small "i" whose text shows while it is hovered or focused (a tap focuses it on a phone). */
+.tip {
+  position: relative;
+  display: inline-flex;
+}
+.tip__button {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  color: var(--mute);
+  background: none;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  font:
+    italic 700 0.8rem/1 Georgia,
+    serif;
+  cursor: help;
+}
+/* The touch area is larger than the drawn circle. */
+.tip__button::before {
+  content: '';
+  position: absolute;
+  inset: -10px;
+}
+.tip__text {
+  position: absolute;
+  z-index: 3;
+  top: calc(100% + 8px);
+  left: 50%;
+  width: max-content;
+  max-width: min(260px, 70vw);
+  padding: 8px 10px;
+  color: var(--surface);
+  background: var(--fg);
+  border-radius: 8px;
+  font-size: 0.85rem;
+  line-height: 1.35;
+  box-shadow: var(--shadow);
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, -4px);
+  transition:
+    opacity 150ms ease,
+    transform 150ms ease,
+    visibility 150ms;
+  pointer-events: none;
+}
+.tip:hover .tip__text,
+.tip__button:focus-visible + .tip__text,
+.tip__button:focus + .tip__text {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+}
+.mapstyle__puck-ball {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--puck-body, #fff);
+  border: 2px solid var(--puck-lines, var(--signal));
+  box-shadow:
+    inset -5px -5px 0 rgb(0 0 0 / 0.12),
+    0 1px 3px rgb(0 0 0 / 0.3);
+}
+.mapstyle__puck-beam {
+  position: absolute;
+  left: -9px;
+  right: -9px;
+  bottom: 50%;
+  height: 30px;
+  background: var(
+    --puck-beam,
+    radial-gradient(closest-side, rgb(226 0 26 / 0.5), rgb(255 143 156 / 0.3) 65%, transparent 100%)
+  );
+  clip-path: polygon(50% 100%, 0 0, 100% 0);
 }
 .mapstyle__route {
   position: absolute;
@@ -960,4 +1294,88 @@ a.card:active {
 .mapstyle__pin--selected {
   background: var(--highlight, var(--signal));
   transform: rotate(45deg) scale(1.2);
+}
+
+/* Default map type in the preferences: two previews side by side above the segmented switch. */
+.mappick {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+.mappick__card {
+  display: block;
+  padding: 0;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  border: 2px solid var(--line, transparent);
+  border-radius: 12px;
+  background: var(--surface2);
+  cursor: pointer;
+}
+.mappick__card[data-selected] {
+  border-color: var(--signal);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--signal) 30%, transparent);
+}
+.mappick__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* The live street-map preview (MapLibre, like the 2D map) over its picture; it cannot be moved, a tap picks it. */
+.mappick__stack {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.mappick__live {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* A dialog with its own X (Sheet.jsx Dialog): a centred card on every screen. */
+.dialog-root {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-sheet);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.dialog-root .scrim {
+  z-index: 0;
+}
+.dialog {
+  position: relative;
+  width: min(520px, 100%);
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+  animation: pop 400ms var(--ease-pop) both;
+}
+.dialog:focus {
+  outline: none;
+}
+.dialog__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.dialog__title {
+  margin: 0;
+}
+@media (max-width: 559px) {
+  .dialog-root {
+    padding: 16px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mapstyle__stage[data-slide],
+  .dialog {
+    animation: none;
+  }
 }

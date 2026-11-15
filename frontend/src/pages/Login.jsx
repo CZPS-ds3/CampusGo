@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
-import { Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { api } from '../api/client.js';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Navigate, useNavigate } from 'react-router-dom';
+import { api, USE_MOCKS } from '../api/client.js';
 import { errorText } from '../api/errorText.js';
 import { Avatar, PRESET_COUNT } from '../components/Avatar.jsx';
 import { Button } from '../components/Button.jsx';
@@ -11,30 +11,23 @@ import { Chip, Display, Input, LangSwitch, Logo } from '../components/ui.jsx';
 import { useSession } from '../hooks/useSession.jsx';
 import { formatClock } from '../hooks/useServerTimer.js';
 import { useToast } from '../hooks/useToast.jsx';
-import { t } from '../i18n.js';
+import { applyNewAccountMapDefaults, t } from '../i18n.js';
 
-const DEV_SERVER = import.meta.env.DEV; // the Vite dev server: codes are printed in the backend terminal
-const RESEND_SECONDS = DEV_SERVER ? 0 : 30;
+const RESEND_SECONDS = USE_MOCKS ? 0 : 30;
 const CODE_LIFETIME_SECONDS = 600;
-const SCHOOL_DOMAIN = 'heilbronn.dhbw.de';
-// Development helper: shows the e-mail the server "sent", so nobody needs a mail account to try the app.
-const SHOW_INBOX = import.meta.env.DEV;
-
-const looksLikeSchoolEmail = (value) => {
-  const email = value.trim().toLowerCase();
-  const parts = email.split('@');
-  return (
-    parts.length === 2 &&
-    parts[0].length > 0 &&
-    (parts[1] === SCHOOL_DOMAIN || parts[1].endsWith(`.${SCHOOL_DOMAIN}`))
-  );
+/**
+ * A school address, or at least a well-formed one: the server decides about other domains (the pre-seeded admin
+ * addresses may be outside the school domain, BR26), and the page does not know which they are.
+ */
+const looksLikeEmail = (value) => {
+  const parts = value.trim().toLowerCase().split('@');
+  return parts.length === 2 && parts[0].length > 0 && /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(parts[1]);
 };
 
 export default function Login() {
   const { student, ready, setStudent } = useSession();
   const toast = useToast();
   const navigate = useNavigate();
-  const { state } = useLocation();
   const [step, setStep] = useState('email');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -48,9 +41,25 @@ export default function Login() {
   const [expires, setExpires] = useState(CODE_LIFETIME_SECONDS);
   const [inbox, setInbox] = useState(null);
   const [welcome, setWelcome] = useState(false);
-  const autoResent = useRef(false);
+  // BR52: the admin switch "code preview". While it is on, the test inbox shows the code that was e-mailed.
+  const [previewOn, setPreviewOn] = useState(USE_MOCKS);
   const heading = useRef(null);
   const fileInput = useRef(null);
+  // One preview address per chosen file (a new one on every render would flicker and leak memory).
+  const photoUrl = useMemo(() => (photo ? URL.createObjectURL(photo) : undefined), [photo]);
+  useEffect(() => () => photoUrl && URL.revokeObjectURL(photoUrl), [photoUrl]);
+
+  useEffect(() => {
+    let alive = true;
+    api
+      .authConfig()
+      .then((config) => alive && setPreviewOn(Boolean(config?.otpPreview)))
+      // Without the setting the page simply has no test inbox; logging in by e-mail still works.
+      .catch(() => alive && setPreviewOn(false));
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     heading.current?.focus({ preventScroll: true });
@@ -65,7 +74,8 @@ export default function Login() {
     return () => clearInterval(id);
   }, [step]);
 
-  if (ready && student && !welcome) return <Navigate to={state?.from ?? '/map'} replace />;
+  // Every login opens the map, whatever page the visitor came from.
+  if (ready && student && !welcome) return <Navigate to="/map" replace />;
 
   const run = async (work) => {
     setBusy(true);
@@ -86,14 +96,23 @@ export default function Login() {
       setShake((n) => n + 1);
       return undefined;
     }
-    if (!looksLikeSchoolEmail(email)) {
+    const wrongAddress = () => {
       setError(t('Use your @heilbronn.dhbw.de school email'));
       setShake((n) => n + 1);
+    };
+    if (!looksLikeEmail(email)) {
+      wrongAddress();
       return undefined;
     }
     return run(async () => {
-      await api.requestOtp(email.trim());
-      autoResent.current = false;
+      try {
+        await api.requestOtp(email.trim());
+      } catch (failure) {
+        // The server refused the domain: show the same translated hint as for a typo.
+        if (failure?.code !== 'INVALID_EMAIL') throw failure;
+        wrongAddress();
+        return;
+      }
       setCode('');
       setCooldown(RESEND_SECONDS);
       setExpires(CODE_LIFETIME_SECONDS);
@@ -103,15 +122,24 @@ export default function Login() {
 
   const finish = async (result) => {
     setWelcome(true); // before the session appears, so the guard above does not redirect early
-    setStudent(result.student);
+    let me = result.student;
+    // The picture is saved first and the session gets the new address, so the map header, the profile and the
+    // team page show it at once (it used to appear only after the next refresh of the session).
     if (photo) {
       try {
-        await api.uploadPicture(photo);
-      } catch {
-        // The picture is optional; a failed upload must not block the first login.
+        const { pictureUrl } = await api.uploadPicture(photo);
+        me = { ...me, pictureUrl };
+      } catch (failure) {
+        // The picture is optional: the account exists, so the login goes on and the person is told.
+        toast.error(
+          t('Your account is ready, but the picture was not saved: {reason}', {
+            reason: errorText(failure),
+          }),
+        );
       }
     }
-    setTimeout(() => navigate(state?.from ?? '/map', { replace: true }), 700);
+    setStudent(me);
+    setTimeout(() => navigate('/map', { replace: true }), 700);
   };
 
   const verify = (digits, withProfile) =>
@@ -131,21 +159,13 @@ export default function Login() {
           setStep('profile');
           return;
         }
+        // The account was just created: it starts with the map defaults that suit this device.
+        if (withProfile) applyNewAccountMapDefaults();
         await finish(result);
       } catch (failure) {
         if (failure.code === 'INVALID_CODE') {
           setCode('');
           setShake((n) => n + 1);
-          // In development a refused code (old code after a backend restart, typo) gets one new code at once,
-          // so nobody has to find the resend button.
-          if (DEV_SERVER && !autoResent.current) {
-            autoResent.current = true;
-            await api.requestOtp(email.trim());
-            setExpires(CODE_LIFETIME_SECONDS);
-            toast.info(
-              t('A new code was sent. In development it is printed in the backend terminal.'),
-            );
-          }
           throw Object.assign(failure, { message: t('That code is wrong or has expired.') });
         }
         throw failure;
@@ -159,7 +179,7 @@ export default function Login() {
 
   const openInbox = () =>
     run(async () => {
-      const { otp } = await api.devLastOtp(email.trim());
+      const { otp } = await api.otpPreview(email.trim());
       setInbox(otp);
     });
 
@@ -282,10 +302,15 @@ export default function Login() {
               <Icon name="refresh" />
               {cooldown > 0 && !expired ? t('Resend in {n}s', { n: cooldown }) : t('Resend code')}
             </Button>
-            {SHOW_INBOX && (
-              <Button variant="ghost" onClick={openInbox}>
-                <Icon name="mail" /> {t('Open mock inbox')}
-              </Button>
+            {previewOn && (
+              <>
+                <Button variant="ghost" onClick={openInbox}>
+                  <Icon name="mail" /> {t('Open mock inbox')}
+                </Button>
+                <p className="small muted">
+                  {t('Test mode: the code that was e-mailed is also shown here.')}
+                </p>
+              </>
             )}
           </>
         )}
@@ -306,7 +331,7 @@ export default function Login() {
               <Avatar
                 size={96}
                 avatar={{
-                  url: photo ? URL.createObjectURL(photo) : undefined,
+                  url: photoUrl,
                   preset: avatarPreset,
                 }}
                 label={t('Profile picture preview')}
@@ -396,7 +421,7 @@ export default function Login() {
           </div>
           <div className="card card--flat stack stack--tight">
             <p className="caption muted">{t('From')}</p>
-            <p className="strong">Campus &amp; City Quest</p>
+            <p className="strong">DHBW campusGO</p>
             <p className="caption muted">{t('Subject')}</p>
             <p className="strong">{t('Your login code')}</p>
             <hr className="rule" />

@@ -31,7 +31,7 @@ const emptyForm = {
   name: '',
   description: '',
   mapLink: '',
-  radius: '80',
+  radius: '35',
   questionCount: '3',
   passThreshold: '2',
   timeLimit: '',
@@ -675,6 +675,18 @@ function QuestionsCard({ quest, questions, onChanged }) {
                 </li>
               ))}
             </ul>
+            {question.images?.length > 0 && (
+              <ul className="admin-qphotos" aria-label={t('Photos of this question')}>
+                {question.images.map((image) => (
+                  <li key={image.position}>
+                    <img src={image.url} alt={image.alt} loading="lazy" />
+                    <span className="caption muted">
+                      {image.shown === 'question' ? t('With the question') : t('After answering')}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
             <div className="admin-actions">
               <Button small variant="ghost" onClick={() => setEditing(question)}>
                 {t('Edit')}

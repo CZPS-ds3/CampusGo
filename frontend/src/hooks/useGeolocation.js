@@ -1,11 +1,19 @@
 import { useCallback, useState } from 'react';
+import { distanceM } from '../geo.js';
 
-// A phone often needs a few seconds to settle on a good fix, and a laptop or a phone indoors may only manage a coarse
-// one. So the position is watched for a short while and the most precise reading wins; if the GPS finds nothing,
-// the network position (Wi-Fi, mobile) is tried before giving up.
-const GOOD_ENOUGH_M = 30;
+// A phone needs a few seconds to settle on a good fix, and every single fix jitters by a few metres. So the
+// position is watched for a short while: precise readings are collected and averaged (each weighted by its
+// accuracy), readings the browser kept from earlier and readings far off the others are left out. If the GPS finds
+// nothing, the network position (Wi-Fi, mobile) is tried before giving up.
+const EXCELLENT_M = 5; // one reading this precise ends the wait at once
+const GOOD_M = 20; // readings this precise are worth collecting a few of
+const SETTLE_MS = 2500; // how long to keep collecting after the first good reading
+const ENOUGH_GOOD = 5; // ... unless this many good readings have arrived already
 const GPS_WINDOW_MS = 8000;
 const NETWORK_WINDOW_MS = 6000;
+// A reading taken this long before the watch began was kept by the browser from earlier: used only when it is all
+// there is.
+const CACHED_MS = 2000;
 
 /** Maps the browser's error codes to the names the UI works with. */
 function failureFrom(error) {
@@ -15,57 +23,93 @@ function failureFrom(error) {
 }
 
 /**
+ * One position from the readings of a watch: the accuracy-weighted average of the precise readings that agree
+ * with the most precise one. `accuracy` stays that of the most precise reading (the average is usually better, but
+ * GPS errors are partly shared between readings, so a smaller figure would claim more than is known) and `ageMs`
+ * is that of the oldest reading used. Returns null without readings.
+ */
+export function combineReadings(readings, startedAt, now = Date.now()) {
+  if (!readings.length) return null;
+  const fresh = readings.filter((r) => r.takenAt >= startedAt - CACHED_MS);
+  const pool = fresh.length ? fresh : readings;
+  const best = pool.reduce((a, b) => (b.accuracy < a.accuracy ? b : a));
+  const usable = pool.filter(
+    (r) =>
+      r.accuracy <= Math.max(GOOD_M, best.accuracy * 1.5) &&
+      distanceM([r.latitude, r.longitude], [best.latitude, best.longitude]) <=
+        r.accuracy + best.accuracy,
+  );
+  // A reading of accuracy 0 (a faked or simulated position) is exact: it decides alone.
+  const exact = usable.find((r) => r.accuracy === 0);
+  const used = exact ? [exact] : usable;
+  const weight = (r) => 1 / Math.max(r.accuracy, 0.5) ** 2;
+  const total = used.reduce((sum, r) => sum + weight(r), 0);
+  const mean = (key) => used.reduce((sum, r) => sum + r[key] * weight(r), 0) / total;
+  return {
+    latitude: mean('latitude'),
+    longitude: mean('longitude'),
+    accuracy: best.accuracy,
+    // The age is worked out now, so readings kept for a few seconds are not sent as if they were brand new.
+    ageMs: Math.max(0, now - Math.min(...used.map((r) => r.takenAt))),
+  };
+}
+
+/**
  * One position sample from the Geolocation API. Rejects with 'denied' | 'timeout' | 'unavailable'.
  * `ageMs` is phone clock minus phone clock, so a phone whose clock is off is not blocked by the server.
+ * `onProgress(accuracy)` hears the best accuracy so far (metres), for the "hold still" screen.
  */
-export async function getPosition(fake) {
+export async function getPosition(fake, onProgress) {
   if (fake) return { ageMs: 0, ...fake };
   if (!('geolocation' in navigator)) throw 'unavailable';
   try {
-    return await watchBest(true, GPS_WINDOW_MS);
+    return await watchBest(true, GPS_WINDOW_MS, onProgress);
   } catch (reason) {
     if (reason === 'denied') throw reason;
-    return watchBest(false, NETWORK_WINDOW_MS);
+    return watchBest(false, NETWORK_WINDOW_MS, onProgress);
   }
 }
 
 /**
- * Watches the position for up to `windowMs` and resolves with the most precise reading (at once when one is good
- * enough). Rejects with 'denied' | 'timeout' | 'unavailable' when there was no reading at all.
+ * Watches the position for up to `windowMs` and resolves with the combined readings: at once for an excellent
+ * reading, else a short while after the first good one. Rejects with 'denied' | 'timeout' | 'unavailable' when there
+ * was no reading at all.
  */
-function watchBest(enableHighAccuracy, windowMs) {
+function watchBest(enableHighAccuracy, windowMs, onProgress) {
   return new Promise((resolve, reject) => {
-    let best = null;
+    const startedAt = Date.now();
+    const readings = [];
     let failure = 'timeout';
     let finished = false;
     let watchId = null;
-    let timer = null;
+    let settle = null;
+    let best = Infinity;
     const finish = () => {
       if (finished) return;
       finished = true;
       clearTimeout(timer);
+      clearTimeout(settle);
       if (watchId !== null) navigator.geolocation.clearWatch(watchId);
-      if (!best) return reject(failure);
-      // The age is worked out now, so a reading kept for a few seconds is not sent as if it were brand new.
-      return resolve({
-        latitude: best.latitude,
-        longitude: best.longitude,
-        accuracy: best.accuracy,
-        ageMs: Math.max(0, Date.now() - best.takenAt),
-      });
+      const position = combineReadings(readings, startedAt);
+      return position ? resolve(position) : reject(failure);
     };
-    timer = setTimeout(finish, windowMs);
+    const timer = setTimeout(finish, windowMs);
     watchId = navigator.geolocation.watchPosition(
       ({ coords, timestamp }) => {
-        if (!best || coords.accuracy < best.accuracy) {
-          best = {
-            latitude: coords.latitude,
-            longitude: coords.longitude,
-            accuracy: coords.accuracy,
-            takenAt: timestamp,
-          };
+        if (finished || !Number.isFinite(coords.accuracy)) return;
+        readings.push({
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          accuracy: coords.accuracy,
+          takenAt: timestamp ?? Date.now(),
+        });
+        if (coords.accuracy < best) {
+          best = coords.accuracy;
+          onProgress?.(Math.round(best));
         }
-        if (coords.accuracy <= GOOD_ENOUGH_M) finish();
+        const good = readings.filter((r) => r.accuracy <= GOOD_M).length;
+        if (coords.accuracy <= EXCELLENT_M || good >= ENOUGH_GOOD) finish();
+        else if (good === 1 && settle === null) settle = setTimeout(finish, SETTLE_MS);
       },
       (error) => {
         failure = failureFrom(error);
@@ -80,19 +124,22 @@ function watchBest(enableHighAccuracy, windowMs) {
 
 /**
  * Asks the browser for the position when `locate` is called. Coordinates are handed to the caller and are
- * never stored in state, logged or kept anywhere else (privacy rule: the server stores only yes/no).
+ * never stored in state, logged or kept anywhere else (privacy rule: the server stores only yes/no); only the
+ * accuracy so far (metres) is, for the progress text.
  */
 export function useGeolocation() {
   const [busy, setBusy] = useState(false);
+  const [accuracy, setAccuracy] = useState(null);
   const locate = useCallback(async (fake) => {
     setBusy(true);
+    setAccuracy(null);
     try {
-      return { sample: await getPosition(fake) };
+      return { sample: await getPosition(fake, setAccuracy) };
     } catch (reason) {
       return { failure: typeof reason === 'string' ? reason : 'unavailable' };
     } finally {
       setBusy(false);
     }
   }, []);
-  return { locate, busy };
+  return { locate, busy, accuracy };
 }

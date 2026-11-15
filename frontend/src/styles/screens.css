@@ -148,6 +148,22 @@ ol.stack {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+  padding-right: calc(var(--close-size) + 8px); /* keeps long titles clear of the X */
+}
+/* The X (and the action that sits left of it) is fixed to the top right corner of the window, so it is in the
+   same spot on every page. Its centre is the horizontal midline of a page title: top padding of .page plus half of
+   the .h1 line (1.12 x 2rem / 2). */
+.page-close,
+.page__aside {
+  position: fixed; /* stays on screen while the page scrolls */
+  top: calc(24px + var(--safe-t) + 1.12rem - var(--close-size) / 2);
+  z-index: var(--z-map-ui);
+}
+.page-close {
+  right: var(--close-gutter);
+}
+.page__aside {
+  right: calc(var(--close-gutter) + var(--close-size) + 8px);
 }
 .page__title {
   min-width: 0;
@@ -161,6 +177,9 @@ ol.stack {
   outline: none; /* headings take focus only to announce a new page */
 }
 @media (min-width: 768px) {
+  :root {
+    --close-gutter: 32px;
+  }
   .page {
     padding-inline: 32px;
   }
@@ -329,7 +348,7 @@ ol.stack {
   z-index: 0;
   background: var(--map-tint-ground, var(--map-bg));
 }
-.map--darken .leaflet-tile-pane {
+.map--darken .map-tiles--street {
   filter: var(--map-filter);
 }
 .leaflet-container {
@@ -337,9 +356,10 @@ ol.stack {
   background: var(--map-tint-ground, var(--map-bg));
 }
 /* The map style of the student (BR48): the base follows the app theme, or is always light or dark, and a tint colour
-   shows through the map tiles. */
-.map .leaflet-tile-pane {
-  opacity: var(--map-tint-opacity, 1);
+   shows through the street-map tiles (the aerial photo is never tinted). `!important` because Leaflet writes an
+   inline `opacity: 1` on every tile layer, which would otherwise hide the tint on the flat map. */
+.map .map-tiles--street {
+  opacity: var(--map-tint-opacity, 1) !important;
 }
 :root[data-map-base='light'] .map {
   --map-bg: #eef0f2;
@@ -347,11 +367,17 @@ ol.stack {
 :root[data-map-base='dark'] .map {
   --map-bg: #181d22;
 }
-:root[data-map-base='light'] .map--darken .leaflet-tile-pane {
+:root[data-map-base='light'] .map--darken .map-tiles--street {
   filter: none;
 }
-:root[data-map-base='dark'] .map--darken .leaflet-tile-pane {
+:root[data-map-base='dark'] .map--darken .map-tiles--street {
   filter: var(--map-filter-dark);
+}
+/* The aerial photo after sunset on the campus (daylight.js): the photo of the day, darker, greyer and a little blue,
+   as on the MapLibre map (no open night photo of Heilbronn exists). */
+.map--night .map-tiles--aerial,
+.mappick__img--night {
+  filter: brightness(0.42) saturate(0.55) contrast(1.12) sepia(0.25) hue-rotate(185deg);
 }
 .leaflet-top {
   top: calc(var(--safe-t) + 176px);
@@ -365,6 +391,420 @@ ol.stack {
 .leaflet-control-attribution {
   font-size: 11px;
   margin-bottom: 0;
+}
+/* The MapLibre map (2D and 3D): MapLibre's own CSS makes the map `position: relative`, which would collapse it to
+   no height; it fills the screen like the Leaflet map. Its CSS also sets Helvetica, which the checkpoint names on
+   the pins would inherit; they use the app's DHBW font instead. */
+.map.map3d {
+  position: absolute;
+  font-family: var(--font);
+}
+.map3d-pin {
+  cursor: pointer;
+}
+.map3d .maplibregl-ctrl-attrib {
+  font-size: 11px;
+  text-align: right;
+}
+/* The credits button ("i", 24 px) sits level with Re-center (48 px) and the GO ball (72 px): their middles on one
+   line, mirrored on the right. Opened, the credits wrap upwards in the space right of the GO badge. */
+.map3d .maplibregl-ctrl-bottom-right {
+  left: calc(50% + var(--ball) / 2 + 8px);
+  bottom: calc(24px + (var(--ball) - 24px) / 2 + var(--safe-b));
+}
+.map3d .maplibregl-ctrl-bottom-right .maplibregl-ctrl {
+  margin: 0 16px 0 0;
+}
+/* The credits in the colours of the map buttons, so they turn dark with them. */
+.map3d .maplibregl-ctrl-attrib.maplibregl-compact {
+  background: var(--mapui);
+  color: var(--mapui-on);
+}
+.map3d .maplibregl-ctrl-attrib a {
+  color: inherit;
+  opacity: 0.8;
+}
+
+/* One set of map buttons for the flat and the 3D map, below the player card. Above everything else on the map
+   (cards, banners, markers), so a tap always reaches them; only dialogs, the menu and toasts lie higher. */
+.mapctl {
+  position: absolute;
+  z-index: calc(var(--z-map-ui) + 1);
+  top: calc(var(--map-header, calc(var(--safe-t) + 164px)) + 12px);
+  right: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+.mapctl__group {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--mapui);
+  box-shadow: 0 0 0 2px var(--mapui-edge);
+}
+/* Room for the compass on the flat map, so the buttons below do not move on a 2D/3D switch. */
+.mapctl__slot {
+  width: 48px;
+  height: 48px;
+  visibility: hidden;
+}
+.mapctl__btn {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 0;
+  background: var(--mapui);
+  color: var(--mapui-on);
+  font: 700 1.5rem/1 var(--font);
+  cursor: pointer;
+}
+.mapctl__btn + .mapctl__btn {
+  border-top: 1px solid var(--mapui-line);
+}
+.mapctl__btn:hover {
+  background: var(--mapui-hover);
+}
+/* A press shows at once, so a tap never feels lost. */
+.mapctl__btn:active {
+  background: var(--mapui-line);
+}
+.mapctl__view[aria-checked='true']:active,
+.mapctl__base[aria-checked='true']:active {
+  filter: brightness(0.85);
+}
+.mapctl__view {
+  font-size: 0.95rem;
+}
+/* The 2D/3D switch shows the view that is on; 3D on is marked in the signal colour. */
+.mapctl__view[aria-checked='true'] {
+  background: var(--signal);
+  color: var(--on-signal, #fff);
+}
+.mapctl__needle {
+  transition: transform 80ms linear;
+}
+.mapctl__needle-north {
+  fill: #e2001a;
+}
+.mapctl__needle-south {
+  fill: #8a949c;
+}
+/* The aerial/street switch: on (aerial photo) is a darker grey, so it is not mistaken for the red 3D. */
+.mapctl__layers-icon {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+.mapctl__base[aria-checked='true'] {
+  background: #4d5861;
+  color: #fff;
+}
+.mapctl__base[aria-checked='true']:hover {
+  background: #3d464d;
+}
+
+/* The map buttons (zoom, compass, aerial, 2D/3D), Re-center and the 3D credits follow the map's own light or dark
+   base, like the 3D map's isDark(): white with near-black on a light map, and black and white swapped on a dark one.
+   Red buttons (3D on, Re-center while following) keep their white marks in both. */
+:root {
+  --mapui: #ffffff;
+  --mapui-hover: #f2f3f4;
+  --mapui-on: #14181c;
+  --mapui-line: #dddddd;
+  --mapui-edge: rgb(0 0 0 / 0.1);
+}
+:root[data-map-base='dark'],
+:root[data-map-base='follow'][data-theme='dark'] {
+  --mapui: #1e252b;
+  --mapui-hover: #2a333a;
+  --mapui-on: #ffffff;
+  --mapui-line: #3a454d;
+  --mapui-edge: rgb(0 0 0 / 0.45);
+}
+:root[data-map-base='dark'] .map3d .maplibregl-ctrl-attrib-button,
+:root[data-map-base='follow'][data-theme='dark'] .map3d .maplibregl-ctrl-attrib-button {
+  background-color: transparent;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' fill-rule='evenodd' viewBox='0 0 20 20' fill='%23fff'%3E %3Cpath d='M4 10a6 6 0 1 0 12 0 6 6 0 1 0-12 0m5-3a1 1 0 1 0 2 0 1 1 0 1 0-2 0m0 3a1 1 0 1 1 2 0v3a1 1 0 1 1-2 0'/%3E %3C/svg%3E");
+}
+
+/* Re-center, bottom left, in the app's own look: the map-button colour with the puck's red chevron and the app's
+   button radius (not a navigation app's white pill). Its middle is level with the middle of the centre ball
+   (72 px from 24 px up, so 60 px up). */
+.recenter {
+  position: absolute;
+  z-index: calc(var(--z-map-ui) + 1);
+  left: 16px;
+  bottom: calc(24px + (var(--ball) - 48px) / 2 + var(--safe-b));
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 48px;
+  /* Never as wide as the GO ball in the middle (a narrow phone, large text or a longer word), which lies above it
+     and would take the taps on its right end. */
+  max-width: min(200px, calc(50% - var(--ball) / 2 - 16px - 8px));
+  padding: 0 18px 0 13px;
+  border: 0;
+  border-radius: var(--r-1);
+  background: var(--mapui);
+  color: var(--mapui-on);
+  font: 600 0.95rem/1 var(--font);
+  box-shadow:
+    0 0 0 1px var(--mapui-edge),
+    0 1px 3px rgb(0 0 0 / 0.3),
+    0 4px 8px rgb(0 0 0 / 0.15);
+  cursor: pointer;
+  overflow: hidden;
+  white-space: nowrap;
+  transition:
+    max-width 260ms var(--ease-pop, ease),
+    padding 260ms ease,
+    background-color 200ms ease,
+    transform 120ms ease;
+}
+.recenter:hover {
+  background: var(--mapui-hover);
+}
+.recenter:active {
+  transform: scale(0.95);
+}
+.recenter:focus-visible {
+  outline: 2px solid var(--mapui-on);
+  outline-offset: 2px;
+  box-shadow:
+    0 0 0 6px var(--signal),
+    0 4px 8px rgb(0 0 0 / 0.15);
+}
+.recenter__icon {
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  color: var(--signal);
+  transition: color 200ms ease;
+}
+/* While following, it shrinks to a red square with a white chevron, like the 3D switch when it is on. */
+.recenter.is-following {
+  max-width: 48px;
+  padding: 0 13px;
+  background: var(--signal);
+}
+.recenter.is-following:hover {
+  background: var(--accent);
+}
+.recenter.is-following .recenter__icon {
+  color: var(--on-signal, #fff);
+}
+.recenter.is-following .recenter__text {
+  opacity: 0;
+}
+.recenter__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: opacity 160ms ease;
+}
+
+/* The size of the live-position ball on screen, on every device and at every zoom. */
+:root {
+  --puck-orb: 42px;
+}
+
+/* The live position: a white low-poly ball (--puck-orb) with red lines between its facets, sitting on the
+   position on the flat and the 3D map alike. Under it lies the ground marker (.puck-ground). */
+.puck-wrap {
+  background: none;
+  border: 0;
+}
+.puck {
+  --orb: var(--puck-orb);
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+/* --puck-scale (1 to 0.3, set on the map by zoom in map-pins.js): smaller and fainter when zoomed out. */
+.puck__body {
+  position: absolute;
+  top: calc(50% - var(--orb) / 2);
+  left: 50%;
+  width: var(--orb);
+  height: var(--orb);
+  margin-left: calc(var(--orb) / -2);
+  opacity: calc(0.4 + 0.6 * var(--puck-scale, 1));
+  transform: scale(var(--puck-scale, 1));
+}
+.puck__ball {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+/* Facets (shaded towards the far edge in map-pins.js) on a backing of the same colour, no animation: white, or
+   the ball colour of the student's map style (--puck-body, BR48). */
+.puck__hull,
+.puck__facet {
+  fill: var(--puck-body, #fff);
+}
+/* Lines between the facets, in the GO button's red or the student's line colour (--puck-lines); none round the
+   outline (map-pins.js). */
+.puck__edges {
+  fill: none;
+  stroke: var(--puck-lines, var(--signal));
+  stroke-width: 0.3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+/* The thin red outline round the whole ball, so its edge always shows, even against a light map. */
+.puck__outline {
+  fill: none;
+  stroke: var(--puck-lines, var(--signal));
+  stroke-width: 0.4;
+  stroke-linejoin: round;
+}
+
+/* The ground under the ball (GROUND_SIZE box): the sonar range ring and the soft red wedge to the walking or compass
+   direction, turned round the position. */
+.puck-ground {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+/* Longer on a phone, so it shows past the bigger ball. */
+.puck-ground__beam {
+  position: absolute;
+  inset: calc((28px - var(--puck-orb)) * 0.9);
+  scale: var(--puck-scale, 1);
+  background: var(
+    --puck-beam,
+    radial-gradient(closest-side, rgb(226 0 26 / 0.5), rgb(255 143 156 / 0.3) 65%, transparent 100%)
+  );
+  /* 128 degrees wide: from the middle out to the top corners and down the sides. */
+  clip-path: polygon(50% 50%, 0 25.6%, 0 0, 100% 0, 100% 25.6%);
+  /* Quick and soft, so small compass turns read as one fluid movement (map-pins.js turns it the short way round). */
+  transition: transform 180ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .recenter,
+  .puck-ground__beam {
+    transition: none;
+  }
+}
+/* The sonar range ring (BR48, display only; the server decides on unlocking, BR12): waves run from the ball out to the
+   real unlock range, to scale (--sonar-r from map-pins.js), and a faint dashed edge marks the range. Look, speed and
+   on/off come from the map style (data-sonar-* on the page). Default look "soft": a filled pulse fading at the edge;
+   "sova": a thin bright line with a glow, like a recon dart's scan. The speeds match SONAR_WAVE_MS in map-pins.js. */
+.puck-sonar {
+  --sonar-wave: 4.5s;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: calc(var(--sonar-r, 0px) * 2);
+  height: calc(var(--sonar-r, 0px) * 2);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+/* On the map the saved style decides (on the page); the settings preview shows the draft (on the preview). */
+:root[data-sonar='off'] .puck-ground .puck-sonar,
+.mapstyle__preview[data-sonar='off'] .puck-sonar {
+  display: none;
+}
+:root[data-sonar-speed='slow'] .puck-ground .puck-sonar,
+.mapstyle__preview[data-sonar-speed='slow'] .puck-sonar {
+  --sonar-wave: 6.75s;
+}
+:root[data-sonar-speed='fast'] .puck-ground .puck-sonar,
+.mapstyle__preview[data-sonar-speed='fast'] .puck-sonar {
+  --sonar-wave: 3s;
+}
+.puck-sonar__wave,
+.puck-sonar__edge {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+}
+.puck-sonar__wave {
+  opacity: 0;
+  background: radial-gradient(
+    circle,
+    transparent 45%,
+    color-mix(in srgb, var(--sonar, #e2001a) 32%, transparent) 100%
+  );
+  animation: sonar-soft var(--sonar-wave) ease-out infinite;
+  will-change: transform, opacity;
+}
+:root[data-sonar-look='sova'] .puck-ground .puck-sonar__wave,
+.mapstyle__preview[data-sonar-look='sova'] .puck-sonar__wave {
+  border: 2px solid var(--sonar, #e2001a);
+  background: none;
+  box-shadow:
+    0 0 14px 2px color-mix(in srgb, var(--sonar, #e2001a) 55%, transparent),
+    inset 0 0 28px 6px color-mix(in srgb, var(--sonar, #e2001a) 28%, transparent);
+  animation-name: sonar-sova;
+  animation-timing-function: cubic-bezier(0.15, 0.55, 0.3, 1);
+}
+.puck-sonar__edge {
+  border: 1.5px dashed color-mix(in srgb, var(--sonar, #e2001a) 60%, transparent);
+  background: color-mix(in srgb, var(--sonar, #e2001a) 5%, transparent);
+}
+@keyframes sonar-sova {
+  from {
+    transform: scale(0.03);
+    opacity: 1;
+  }
+  75% {
+    opacity: 0.75;
+  }
+  to {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+@keyframes sonar-soft {
+  from {
+    transform: scale(0.03);
+    opacity: 0.8;
+  }
+  to {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+/* A quest that comes into range flashes once, when the wave reaches it (map-pins.js pingPin). */
+.pin--ping .pin__shape {
+  animation: pin-ping 900ms ease-out var(--ping-delay, 0ms) 1 both;
+}
+@keyframes pin-ping {
+  from {
+    transform: none;
+    filter: none;
+  }
+  25% {
+    transform: scale(1.3);
+    filter: drop-shadow(0 0 10px var(--sonar, #e2001a)) drop-shadow(0 0 4px var(--sonar, #e2001a));
+  }
+  to {
+    transform: none;
+    filter: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Only the still dashed edge shows the range. */
+  .puck-sonar__wave {
+    display: none;
+  }
+  .pin--ping .pin__shape {
+    animation: none;
+  }
 }
 .mapscreen__top {
   position: absolute;
@@ -436,6 +876,7 @@ ol.stack {
   flex-direction: column;
   align-items: center;
   width: 140px;
+  font-family: var(--font);
 }
 .pin__shape {
   position: relative;
@@ -949,6 +1390,27 @@ ol.stack {
   font-weight: 500;
   overflow-wrap: anywhere;
 }
+.board-scroll {
+  max-height: min(28rem, 55vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 2px; /* room for the focus ring and the row borders */
+}
+.board-scroll__end {
+  min-height: 1px;
+  display: grid;
+  justify-items: center;
+  padding-top: 8px;
+}
+.ranks__locked {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  margin: 0;
+}
+.ranks__locked .link {
+  margin-left: 11px; /* the chip's border and padding: the "G" of "Go to team" sits right below the lock icon */
+}
 .ranks__you {
   display: flex;
   align-items: center;
@@ -1147,6 +1609,36 @@ ol.stack {
 .carousel__img.is-current {
   opacity: 1;
 }
+/* Quiz photos: the whole photo on a calm background, never cropped. */
+.carousel--whole .carousel__stage {
+  aspect-ratio: 4 / 3;
+}
+.carousel--whole .carousel__img {
+  object-fit: contain;
+}
+.quiz__photos {
+  margin-top: 12px;
+}
+.admin-qphotos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.admin-qphotos li {
+  display: grid;
+  gap: 2px;
+  width: 96px;
+}
+.admin-qphotos img {
+  width: 96px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: var(--r-1);
+  background: var(--surface2);
+}
 .carousel__nav {
   position: absolute;
   top: 50%;
@@ -1246,17 +1738,22 @@ ol.stack {
 }
 .admin-filters {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
 }
 .admin-list {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
-.admin-user {
+/* Two classes so this beats `a.card { display: flex }`: as a flex row the name and the stats line sat side by side
+   and a long name pushed the page wider than a phone. */
+.admin-list .admin-user {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
 }
 .admin-user__chips {
@@ -1368,6 +1865,11 @@ ol.stack {
 }
 .admin-card h2 {
   margin: 0;
+}
+.admin-card--warn {
+  grid-column: 1 / -1;
+  border-color: var(--warn);
+  border-left-width: 6px;
 }
 .admin-stack {
   display: grid;
@@ -1625,4 +2127,67 @@ ol.stack {
     grid-template-columns: minmax(140px, 200px) 1fr;
     align-items: end;
   }
+}
+
+/* ---------- team order (BR54): admin Teams page ---------- */
+.team-order {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.team-order__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.team-order__place {
+  min-width: 1.5rem;
+  color: var(--mute);
+}
+.team-order__moves {
+  display: inline-flex;
+  gap: 6px;
+}
+.rot-up {
+  transform: rotate(-90deg);
+}
+.rot-down {
+  transform: rotate(90deg);
+}
+.linkbtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.team__leave {
+  width: 100%;
+}
+@media (max-width: 420px) {
+  .team-order__row > .grow {
+    flex-basis: calc(100% - 2.5rem);
+  }
+}
+
+/* R-66: the 3-2-1 countdown between the location check and the first question. */
+.countdown {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 70dvh;
+  text-align: center;
+}
+
+.countdown__number {
+  margin: 16px 0;
+  font-size: clamp(6rem, 32vw, 10rem);
+  line-height: 1;
+}
+
+.countdown__number > span {
+  display: inline-block;
 }

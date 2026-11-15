@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { login } from '../../frontend/e2e/helpers.js';
+import { answerRight, login, open } from '../../frontend/e2e/helpers.js';
 
 test('the app starts, a player signs in and sees the map with the checkpoints', async ({
   page,
@@ -10,7 +10,8 @@ test('the app starts, a player signs in and sees the map with the checkpoints', 
   await expect(page.getByRole('heading', { name: /Campus/ })).toBeVisible();
   await login(page);
   await expect(page.getByRole('region', { name: 'Campus map' })).toBeVisible();
-  await expect(page.locator('.leaflet-marker-icon').first()).toBeVisible();
+  // The pins of the MapLibre map, or of the Leaflet map where WebGL is missing.
+  await expect(page.locator('.pin-wrap').first()).toBeVisible({ timeout: 25_000 });
   expect(problems).toEqual([]);
 });
 
@@ -23,16 +24,16 @@ test('the round menu opens, navigates and closes in every browser', async ({ pag
 
 test('a quiz can be played to the end and shows the result', async ({ page }) => {
   await login(page);
-  await page.goto('/quests');
+  await open(page, '/quests');
   await page.getByRole('link', { name: /Campus Garden/ }).click();
   await page.getByRole('link', { name: 'Start quest' }).click();
   await page.getByRole('button', { name: "I'm ready" }).click();
   await page.getByRole('button', { name: 'I agree' }).click();
   await expect(page.getByRole('timer')).toBeVisible();
   for (let i = 0; i < 3; i += 1) {
-    await page.getByRole('button', { name: /placeholder answer/ }).click();
+    await answerRight(page);
     await expect(page.getByText('Correct!')).toBeVisible();
-    await page.getByRole('button', { name: i === 2 ? 'Finish' : 'Next' }).click();
+    await page.getByRole('button', { name: i === 2 ? 'Finish' : 'Next', exact: true }).click();
   }
   await expect(page.getByText('Checkpoint cleared')).toBeVisible();
 });

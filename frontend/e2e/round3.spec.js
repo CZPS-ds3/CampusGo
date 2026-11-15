@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { expectNoHorizontalScroll, login, shot } from './helpers.js';
+import { expectNoHorizontalScroll, login, open, shot } from './helpers.js';
 
 const ADMIN = { first: 'Study', last: 'Office', email: 'sekretariat.dski@heilbronn.dhbw.de' };
 
@@ -8,7 +8,7 @@ test.describe('invitations', () => {
     page,
   }, testInfo) => {
     await login(page);
-    await page.goto('/team');
+    await open(page, '/team');
     await page.getByLabel('Team name *').fill('Night Owls');
     await page.getByRole('button', { name: 'Create team' }).click();
     await expect(page.getByRole('heading', { name: 'Night Owls' })).toBeVisible();
@@ -37,14 +37,18 @@ test.describe('place photos', () => {
   test('the carousel moves on after 5 seconds and can be stepped by hand', async ({ page }) => {
     await page.clock.install();
     await login(page);
-    await page.goto('/quests');
-    await page.getByRole('link', { name: /Mensa/ }).click();
+    await open(page, '/quests');
+    // The Library has several of the team's photos (the Mensa now has one, which does not move).
+    await page.getByRole('link', { name: /Library/ }).click();
     const dialog = page.getByRole('dialog');
-    await expect(dialog.getByRole('group', { name: /Photos of Mensa/ })).toBeVisible();
-    const dot = (n) => dialog.getByRole('button', { name: `Photo ${n} of 2` });
-    await expect(dot(1)).toHaveAttribute('aria-current', 'true');
-    // The carousel pauses while the pointer rests on it, so move the pointer away first.
+    await expect(dialog.getByRole('group', { name: /Photos of Library/ })).toBeVisible();
+    const dot = (n) => dialog.getByRole('button', { name: `Photo ${n} of 9` });
+    // A known start: the first photo, then pointer and focus off the carousel (both pause it). The 5 s timer starts
+    // again only now, so time that passed while the page loaded on a busy machine cannot move it on twice.
+    await dot(1).click();
     await page.mouse.move(0, 0);
+    await page.evaluate(() => document.activeElement?.blur());
+    await expect(dot(1)).toHaveAttribute('aria-current', 'true');
     await page.clock.fastForward(5200);
     await expect(dot(2)).toHaveAttribute('aria-current', 'true');
     await dialog.getByRole('button', { name: 'Previous photo' }).click();
@@ -57,13 +61,13 @@ test.describe('admin area', () => {
     page,
   }, testInfo) => {
     await login(page);
-    await page.goto('/admin');
+    await open(page, '/admin');
     await expect(page).toHaveURL(/\/map/);
     await page.goto('/');
     await page.evaluate(() => sessionStorage.clear());
 
     await login(page, ADMIN);
-    await page.goto('/admin');
+    await open(page, '/admin');
     await expect(page.getByRole('heading', { name: 'Admin' })).toBeVisible();
     await expect(page.getByText('Active players')).toBeVisible();
     await expectNoHorizontalScroll(page);
@@ -100,7 +104,7 @@ test.describe('admin area', () => {
 test.describe('delete my account', () => {
   test('BR30 the profile can delete the account after a confirmation', async ({ page }) => {
     await login(page);
-    await page.goto('/profile');
+    await open(page, '/profile');
     await page.getByRole('button', { name: 'Delete my account' }).click();
     await expect(page.getByRole('alertdialog')).toBeVisible();
     await page.getByRole('button', { name: 'Keep my account' }).click();
