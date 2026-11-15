@@ -6,7 +6,9 @@ ALTER TABLE students
   ADD COLUMN status_reason VARCHAR(200) NULL,
   ADD COLUMN reported_at   DATETIME(3) NULL,
   ADD COLUMN report_reason VARCHAR(200) NULL,
-  ADD COLUMN deleted_at    DATETIME(3) NULL,
+  ADD COLUMN deleted_at    DATETIME(3) NULL;
+
+ALTER TABLE students
   ADD KEY idx_student_status (status);
 
 -- Who did what and when: logins, logouts, admin actions, account changes. No coordinates, codes or tokens.
