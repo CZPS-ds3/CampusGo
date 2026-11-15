@@ -13,10 +13,11 @@ export function requireAuth(authService) {
 }
 
 export function sessionCookieOptions(config) {
+  const isProd = config.nodeEnv === 'production';
   return {
     httpOnly: true,
-    sameSite: 'lax',
-    secure: config.nodeEnv === 'production',
+    sameSite: isProd ? 'none' : 'lax',
+    secure: isProd,
     path: '/',
     maxAge: config.sessionInactivityMinutes * 60 * 1000,
   };
