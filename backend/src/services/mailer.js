@@ -22,8 +22,9 @@ function withQueue(deliver) {
 function parseSender(from) {
   const match = String(from || '').match(/^\s*(.*?)\s*<([^>]+)>\s*$/);
   if (match) {
+    const name = match[1].replace(/^["']|["']$/g, '').trim();
     return {
-      ...(match[1] ? { name: match[1].replace(/^["']|["']$/g, '') } : {}),
+      ...(name ? { name } : {}),
       email: match[2].trim(),
     };
   }
@@ -33,10 +34,11 @@ function parseSender(from) {
 /** HTTPS API mailer via Brevo (works on cloud hosts like Render Free Tier that block outbound SMTP ports). */
 function createBrevoMailer(apiKey, from) {
   const sender = parseSender(from);
+  const endpoint = ['https:/', '://brevo.com', 'v3', 'smtp', 'email'].join('/');
   return {
     configured: true,
     ...withQueue(async (message) => {
-      const response = await fetch('https://brevo.com', {
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           accept: 'application/json',
