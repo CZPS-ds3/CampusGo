@@ -18,6 +18,52 @@ function withQueue(deliver) {
   };
 }
 
+/** Parses "Display Name <email@example.com>" or plain "email@example.com" into Brevo's sender object. */
+function parseSender(from) {
+  const match = String(from || '').match(/^\s*(.*?)\s*<([^>]+)>\s*$/);
+  if (match) {
+    return {
+      ...(match[1] ? { name: match[1].replace(/^["']|["']$/g, '') } : {}),
+      email: match[2].trim(),
+    };
+  }
+  return { email: String(from || '').trim() };
+}
+
+/** HTTPS API mailer via Brevo (works on cloud hosts like Render Free Tier that block outbound SMTP ports). */
+function createBrevoMailer(apiKey, from) {
+  const sender = parseSender(from);
+  return {
+    configured: true,
+    ...withQueue(async (message) => {
+      const response = await fetch('https://brevo.com', {
+        method: 'POST',
+        headers: {
+          accept: 'application/json',
+          'api-key': apiKey,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          sender,
+          to: [{ email: message.to }],
+          subject: message.subject,
+          textContent: message.text,
+          ...(message.html ? { htmlContent: message.html } : {}),
+        }),
+      });
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Brevo API ${response.status}: ${errText}`);
+      }
+      console.log('[mail] sent (accepted: 1, rejected: 0)');
+    }),
+    verify: async () => ({
+      ok: true,
+      detail: `Brevo HTTPS API ready (sender: ${sender.email})`,
+    }),
+  };
+}
+
 /** SMTP transport. Credentials only ever travel encrypted: implicit TLS on 465, STARTTLS required otherwise. */
 export function createSmtpTransport(smtp) {
   return nodemailer.createTransport({
@@ -34,10 +80,14 @@ export function createSmtpTransport(smtp) {
 }
 
 /**
- * Sends through SMTP. Without SMTP_HOST nothing is e-mailed. `configured` tells the auth service whether a real
- * e-mail goes out; the code preview of BR52 (admin switch) is handled there, not here.
+ * Sends through Brevo HTTPS API when BREVO_API_KEY is set, otherwise SMTP. Without SMTP_HOST nothing is e-mailed.
  */
 export function createMailer(config, { transport } = {}) {
+  const brevoApiKey = process.env.BREVO_API_KEY?.trim();
+  if (brevoApiKey && !transport) {
+    return createBrevoMailer(brevoApiKey, config.smtp.from || config.smtp.user);
+  }
+
   if (!config.smtp.host) {
     return {
       configured: false,
